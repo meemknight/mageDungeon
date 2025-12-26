@@ -10,25 +10,86 @@ namespace Blocks
 		none = 0,
 		floor1,
 		floor2,
-		wall_front_down,
+		dungeonWall,
+		grass,
+		dirt,
+
 		BLOCKS_COUNT
 
 	};
 }
 
-using Block = int;
+
+using BlockType = unsigned short;
+
+struct Block
+{
+	BlockType type = 0;
+
+
+};
+
 
 namespace TileSets
 {
-	enum
+	enum TileSets
 	{
 		none = 0,
 		dungeonTileSet,
+		grass,
+		dirt,
+		grassDecals,
 		TILE_SETS_COUNT
 	};
 }
 
 
-glm::ivec2 getBlockUV(Block block);
-int getTileSetIndex(Block block);
-int isBlockColidable(Block block);
+struct BlockSettings
+{
+
+
+	bool collidable = 0;
+	glm::ivec2 atlasPos = {};
+	int tileSet = 0;
+	bool canHaveGrassDecals = 0; //todo remove
+	bool isGrass = 0;
+
+	BlockSettings &setCollidable()
+	{
+		collidable = true;
+		return *this;
+	}
+
+	BlockSettings &setTileSet(int tileSet)
+	{
+		this->tileSet = tileSet;
+		return *this;
+	}
+
+	BlockSettings &setAtlasPos(glm::ivec2 pos)
+	{
+		this->atlasPos = pos;
+		return *this;
+	}
+
+	BlockSettings &setCanHaveGrassDecals()
+	{
+		this->canHaveGrassDecals = true;
+		return *this;
+	}
+
+	BlockSettings &setIsGrass()
+	{
+		this->isGrass = true;
+		return *this;
+	}
+};
+
+
+
+glm::ivec2 getBlockAtlasPos(BlockType block);
+int getTileSetIndex(BlockType block);
+int isBlockColidable(BlockType block);
+
+bool canHaveGrassDecals(BlockType block);
+bool isGrass(BlockType block);

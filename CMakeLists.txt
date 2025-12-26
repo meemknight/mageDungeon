@@ -34,6 +34,7 @@ add_subdirectory(thirdparty/stb_truetype)           # loading ttf files
 add_subdirectory(thirdparty/glm)                    # math
 add_subdirectory(thirdparty/imgui-docking)          # ui
 add_subdirectory(thirdparty/raudio)					#audio
+add_subdirectory(thirdparty/magic_enum-0.9.3)
 
 # MY_SOURCES is defined to be a list of all the source files for my game
 # DON'T ADD THE SOURCES BY HAND, they are already added with this macro
@@ -75,4 +76,5 @@ target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE
   imgui
   SDL3::SDL3
   raudio
+  magic_enum
 )

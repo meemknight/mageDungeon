@@ -1,29 +1,23 @@
 #include <gameplay/assetsManager.h>
 #include <logs.h>
-
+#include <magic_enum.hpp>
 
 
 void AssetsManager::loadAllAssets()
 {
 
 	font.createFromFile(RESOURCES_PATH "font/roboto_black.TTF");
-	//todo check for errors (the texture id is 0 if error)
 
-	static const char *tileSetsPaths[] =
-	{
-		"",
-		RESOURCES_PATH "map/Damp Dungeon Tileset.png"
-	};
+	//RESOURCES_PATH "map/Damp Dungeon Tileset.png"
 
-	//if you see an error that means you added a sprite but forgot to add
-	//a name to it! ^^^^
-	static_assert(sizeof(tileSetsPaths) / sizeof(tileSetsPaths[0])
-		== TileSets::TILE_SETS_COUNT);
 
 	//this represents the size of one block
 	static const int blockSize[] =
 	{
 		0,
+		16,
+		16,
+		16,
 		16,
 	};
 
@@ -38,6 +32,9 @@ void AssetsManager::loadAllAssets()
 	{
 		{},
 		{7, 8},
+		{2, 1},
+		{2, 1},
+		{6, 4},
 	};
 
 	//if you see an error that means you added a sprite but forgot to add
@@ -46,15 +43,17 @@ void AssetsManager::loadAllAssets()
 		== TileSets::TILE_SETS_COUNT);
 
 
-	for (int i = 0; i < TileSets::TILE_SETS_COUNT; i++)
+	for (int i = 1; i < TileSets::TILE_SETS_COUNT; i++)
 	{
 
-		const char *name = tileSetsPaths[i];
+		std::string name = RESOURCES_PATH;
+		name += "map/";
+		name += magic_enum::enum_name((TileSets::TileSets)i);
+		name += ".png";
 
-		if (name[0] != 0)
 		{
 
-			tileSets[i].texture.loadFromFileWithPixelPadding(name,
+			tileSets[i].texture.loadFromFileWithPixelPadding(name.c_str(),
 				blockSize[i], true, true
 			);
 

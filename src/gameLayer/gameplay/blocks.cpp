@@ -1,66 +1,66 @@
 #include "blocks.h"
 
-glm::ivec2 getBlockUV(Block block)
+
+BlockSettings blockSettings[]
+
 {
 
+	BlockSettings{}, //none
+	BlockSettings{}.setTileSet(TileSets::dungeonTileSet).setAtlasPos({2,3}), //floor
+	BlockSettings{}.setTileSet(TileSets::dungeonTileSet).setAtlasPos({2,4}), //floor
+	BlockSettings{}.setTileSet(TileSets::dungeonTileSet).setAtlasPos({1,1}).setCollidable(), //dungeonWall
+	
+	BlockSettings{}.setTileSet(TileSets::grass).setAtlasPos({0,0}).setIsGrass(), //grass
+	BlockSettings{}.setTileSet(TileSets::dirt).setAtlasPos({0,0}).setCanHaveGrassDecals(), //dirt
+
+
+
+};
+
+
+static_assert(sizeof(blockSettings) / sizeof(blockSettings[0]) ==
+	Blocks::BLOCKS_COUNT);
+
+
+glm::ivec2 getBlockAtlasPos(BlockType block)
+{
 	permaAssert(block < Blocks::BLOCKS_COUNT);
 	permaAssert(block >= 0);
 
-	//we will create a computed goto here
-
-	static glm::ivec2 UVs[] = {
-		glm::ivec2{7,7}, // none (an empty portion of the tile set)
-		glm::ivec2{0,4}, // floor1
-		glm::ivec2{1,4}, // floor2
-		glm::ivec2{1,1}, // wall
-	};
-
-	//if you see an error that means you added a block but forgot to add
-	//an uv to it! ^^^^
-	static_assert(sizeof(UVs) / sizeof(UVs[0]) == Blocks::BLOCKS_COUNT);
-
-	return UVs[block];
+	return blockSettings[block].atlasPos;
 }
 
-int getTileSetIndex(Block block)
+int getTileSetIndex(BlockType block)
 {
 	permaAssert(block < Blocks::BLOCKS_COUNT);
 	permaAssert(block >= 0);
 
-	//we will create a computed goto here
-
-	static int tileSetsIndexes[] = {
-		TileSets::none,
-		TileSets::dungeonTileSet,
-		TileSets::dungeonTileSet,
-		TileSets::dungeonTileSet,
-	};
-
-	//if you see an error that means you added a block but forgot to add
-	//a tile set for it! ^^^^
-	static_assert(sizeof(tileSetsIndexes) / sizeof(tileSetsIndexes[0]) 
-		== Blocks::BLOCKS_COUNT);
-
-	return tileSetsIndexes[block];
+	return blockSettings[block].tileSet;
 }
 
-int isBlockColidable(Block block)
+int isBlockColidable(BlockType block)
 {
 	permaAssert(block < Blocks::BLOCKS_COUNT);
 	permaAssert(block >= 0);
 
-	//we will create a computed goto here
-	static bool colidable[] = {
-		0,
-		0,
-		0,
-		1,
-	};
+	return blockSettings[block].collidable;
+}
 
-	//if you see an error that means you added a block but forgot to add
-	//a tile set colidable flag for it! ^^^^
-	static_assert(sizeof(colidable) / sizeof(colidable[0])
-		== Blocks::BLOCKS_COUNT);
+//TODO is wall
+bool canHaveGrassDecals(BlockType block)
+{
+	permaAssert(block < Blocks::BLOCKS_COUNT);
+	permaAssert(block >= 0);
 
-	return colidable[block];
+	return (!blockSettings[block].collidable &&
+		!blockSettings[block].isGrass
+		);
+}
+
+bool isGrass(BlockType block)
+{
+	permaAssert(block < Blocks::BLOCKS_COUNT);
+	permaAssert(block >= 0);
+
+	return blockSettings[block].isGrass;
 }
