@@ -9,6 +9,8 @@ bool GameLogic::init()
 	
 	map.create();
 
+	player.getPos() = {1, 1};
+
 
 	inGame = true;
 	return true;
@@ -24,7 +26,7 @@ bool GameLogic::update(float deltaTime,
 	//ImGui::ShowDemoWindow();
 	ImGui::Begin("Game Debug");
 
-	ImGui::DragFloat2("Position", &player.pos[0]);
+	ImGui::DragFloat2("Position", &player.getPos()[0], 0.01);
 	ImGui::DragFloat("zoom", &zoom);
 
 	if (ImGui::Button("Exit"))
@@ -60,24 +62,24 @@ bool GameLogic::update(float deltaTime,
 		move *= deltaTime * 6.f; //player speed
 	}
 
-	player.pos += move;
+	player.getPos() += move;
 
 #pragma endregion
 
 
 	player.resolveConstrains(map);
 
-	//this function should be called last, it is important for collisions to work!
 	player.updateMove();
 
 
 	renderer.currentCamera.zoom = zoom;
-	renderer.currentCamera.follow(player.getCenter(),
+	renderer.currentCamera.follow(player.transform.getCenter(),
 		deltaTime * 4.f, 0.01, 0.5,
 		renderer.windowW, renderer.windowH);
 
 
 	map.renderMap(renderer, assetsManager);
+
 
 	renderer.renderRectangle(player.getAABB(), Colors_Red);
 

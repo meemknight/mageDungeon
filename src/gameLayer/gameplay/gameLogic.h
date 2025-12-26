@@ -1,6 +1,6 @@
 #pragma once
 #include <gameplay/map.h>
-#include <gameplay/Entity.h>
+#include <gameplay/Physics.h>
 
 //this is an instance of the game.
 //This shouldn't load things like textures, those should be load outside
@@ -9,7 +9,7 @@ struct GameLogic
 
 
 	Map map;
-	Entity player;
+	PhysicalEntity player{glm::vec2{0.9, 0.9}};
 
 	//returns false on fail
 	bool init();
