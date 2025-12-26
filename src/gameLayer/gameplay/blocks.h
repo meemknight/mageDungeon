@@ -39,6 +39,8 @@ namespace TileSets
 		grass,
 		dirt,
 		grassDecals,
+		dungeonWall,
+		dungeonWall3D,
 		TILE_SETS_COUNT
 	};
 }
@@ -53,6 +55,7 @@ struct BlockSettings
 	int tileSet = 0;
 	bool canHaveGrassDecals = 0; //todo remove
 	bool isGrass = 0;
+	bool isWall = 0;
 
 	BlockSettings &setCollidable()
 	{
@@ -83,6 +86,12 @@ struct BlockSettings
 		this->isGrass = true;
 		return *this;
 	}
+
+	BlockSettings &setIsWall()
+	{
+		this->isWall = true;
+		return *this;
+	}
 };
 
 
@@ -93,3 +102,4 @@ int isBlockColidable(BlockType block);
 
 bool canHaveGrassDecals(BlockType block);
 bool isGrass(BlockType block);
+bool isWall(BlockType block);

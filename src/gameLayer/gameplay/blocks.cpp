@@ -8,7 +8,7 @@ BlockSettings blockSettings[]
 	BlockSettings{}, //none
 	BlockSettings{}.setTileSet(TileSets::dungeonTileSet).setAtlasPos({2,3}), //floor
 	BlockSettings{}.setTileSet(TileSets::dungeonTileSet).setAtlasPos({2,4}), //floor
-	BlockSettings{}.setTileSet(TileSets::dungeonTileSet).setAtlasPos({1,1}).setCollidable(), //dungeonWall
+	BlockSettings{}.setTileSet(TileSets::dungeonWall).setAtlasPos({0,0}).setCollidable().setIsWall(), //dungeonWall
 	
 	BlockSettings{}.setTileSet(TileSets::grass).setAtlasPos({0,0}).setIsGrass(), //grass
 	BlockSettings{}.setTileSet(TileSets::dirt).setAtlasPos({0,0}).setCanHaveGrassDecals(), //dirt
@@ -63,4 +63,12 @@ bool isGrass(BlockType block)
 	permaAssert(block >= 0);
 
 	return blockSettings[block].isGrass;
+}
+
+bool isWall(BlockType block)
+{
+	permaAssert(block < Blocks::BLOCKS_COUNT);
+	permaAssert(block >= 0);
+
+	return blockSettings[block].isWall;
 }

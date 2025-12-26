@@ -24,5 +24,9 @@ struct Map
 	void renderMap(gl2d::Renderer2D &renderer,
 		AssetsManager &assetManager);
 
+	//for rendering tall walls and stuff
+	void renderMapAfterEntities(gl2d::Renderer2D &renderer,
+		AssetsManager &assetManager);
+
 
 };

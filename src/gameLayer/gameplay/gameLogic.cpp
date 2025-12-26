@@ -84,6 +84,8 @@ bool GameLogic::update(float deltaTime,
 	renderer.renderRectangle(player.getAABB(), Colors_Red);
 
 
+	map.renderMapAfterEntities(renderer, assetsManager);
+
 
 	renderer.flush();
 	return !exitDungeon;
