@@ -2,6 +2,8 @@
 #include <gameplay/map.h>
 #include <imgui.h>
 #include <platformInput.h>
+#include <gameLayer.h>
+#include <glui/glui.h>
 
 
 bool GameLogic::init()
@@ -65,7 +67,14 @@ bool GameLogic::update(float deltaTime,
 	player.physical.getPos() += move;
 	player.animator.setAnimationBasedOnMovement(move);
 
+
+
 #pragma endregion
+
+
+
+
+
 
 
 	player.physical.resolveConstrains(map);
@@ -75,7 +84,7 @@ bool GameLogic::update(float deltaTime,
 
 	renderer.currentCamera.zoom = zoom;
 	renderer.currentCamera.follow(player.physical.transform.getCenter(),
-		deltaTime * 4.f, 0.01, 0.5,
+		deltaTime * 4.f, 0.00001, 0.05,
 		renderer.windowW, renderer.windowH);
 
 
@@ -86,8 +95,316 @@ bool GameLogic::update(float deltaTime,
 	player.update(deltaTime);
 	player.render(renderer, assetsManager);
 
-
 	map.renderMapAfterEntities(renderer, assetsManager);
+
+	// magic ui
+	{
+
+		enum Elements
+		{
+			Fire,
+			Water,
+			Earth,
+			Ice,
+		};
+
+		auto elementToColor = [](int element)
+		{
+			glm::vec4 colors[] = {Colors_Red, Colors_Blue, Colors_Green, {0,1,1,1}};
+			return colors[element];
+		};
+
+		static std::vector<int> elementsLoaded;
+		auto tryAddElement = [&](int element)
+		{
+			if(elementsLoaded.size() < 4)
+				elementsLoaded.push_back(element);
+		};
+
+		if (platform::isRMousePressed())
+		{
+			//cast spell
+			elementsLoaded.clear();
+		}
+
+		float cameraZoom = renderer.currentCamera.zoom;
+		renderer.pushCamera();
+
+		glm::vec2 cursorPos = platform::getRelMousePosition();
+		glm::vec4 viewRect = renderer.getViewRect();
+		glm::vec2 screenCenter = {renderer.windowW / 2.f, renderer.windowH / 2.f};
+
+		bool startSelectionButton = platform::isButtonHeld(platform::Button::Q);
+		bool startDraw = platform::isLMouseHeld();
+
+		static bool executedFirstFrame = 0;
+
+		static bool isDrawing = 0;
+		static bool isClickSelection = 0;
+		static glm::vec2 mouseStart = {};
+
+		{
+
+
+			glui::Frame screenFrame({0,0,renderer.windowW, renderer.windowH});
+			float selectorSize = PIXEL_SIZE * 96 * cameraZoom;
+
+			//float selectorSize = std::min(renderer.windowW, renderer.windowH);
+			//selectorSize /= 2;
+
+			auto mainBox = glui::Box().xCenter().yCenter()
+				.xDimensionPixels(selectorSize).yDimensionPixels(selectorSize)();
+
+
+			//end drawing
+			if (isDrawing && !startDraw)
+			{
+
+				glm::vec2 mouseEnd = platform::getRelMousePosition();
+
+				glm::vec2 cursorVector = mouseEnd - mouseStart;
+				
+				float selectLength = 150;
+				
+				glm::vec2 upVector = glm::vec2(0, -1) * selectLength;
+				glm::vec2 downVector = glm::vec2(0, +1) * selectLength;
+				glm::vec2 leftVector = glm::vec2(-1, 0) * selectLength;
+				glm::vec2 rightVector = glm::vec2(1, 0) * selectLength;
+				
+				
+				if (glm::dot(cursorVector, upVector) > selectLength * selectLength)
+				{
+					tryAddElement(Fire);
+
+				}else if (glm::dot(cursorVector, downVector) > selectLength * selectLength)
+				{
+					tryAddElement(Earth);
+				}
+				else if (glm::dot(cursorVector, leftVector) > selectLength * selectLength)
+				{
+					tryAddElement(Ice);
+				}
+				else if (glm::dot(cursorVector, rightVector) > selectLength * selectLength)
+				{
+					tryAddElement(Water);
+				}
+
+
+			}
+
+
+			if (startSelectionButton || startDraw)
+			{
+
+				if (!executedFirstFrame)
+				{
+					executedFirstFrame = true;
+
+					isDrawing = 0;
+					isClickSelection = 0;
+
+					if (startSelectionButton)
+					{
+						isClickSelection = true;
+					}
+					else if(startDraw)
+					{
+						isDrawing = true;
+						mouseStart = platform::getRelMousePosition();
+					}
+
+					//platform::setRelMousePosition(screenCenter.x, screenCenter.y);
+
+				}
+
+
+			#pragma region detect selections
+				bool selectedUp = 0;
+				bool selectedDown = 0;
+				bool selectedLeft = 0;
+				bool selectedRight = 0;
+
+				bool hoveredUp = 0;
+				bool hoveredDown = 0;
+				bool hoveredLeft = 0;
+				bool hoveredRight = 0;
+
+				if(isClickSelection)
+				{
+					//v1
+					//glm::vec2 cursorVector = cursorPos - screenCenter;
+					//
+					//float selectLength = 200;
+					//
+					//glm::vec2 upVector = glm::vec2(0, -1) * selectLength;
+					//glm::vec2 downVector = glm::vec2(0, +1) * selectLength;
+					//glm::vec2 leftVector = glm::vec2(-1, 0) * selectLength;
+					//glm::vec2 rightVector = glm::vec2(1, 0) * selectLength;
+					//
+					//
+					//if (glm::dot(cursorVector, upVector) > selectLength * selectLength)
+					//{
+					//	platform::setRelMousePosition(screenCenter.x, screenCenter.y);
+					//	selectedUp = true;
+					//}else if (glm::dot(cursorVector, downVector) > selectLength * selectLength)
+					//{
+					//	platform::setRelMousePosition(screenCenter.x, screenCenter.y);
+					//	selectedDown = true;
+					//}
+					//else if (glm::dot(cursorVector, leftVector) > selectLength * selectLength)
+					//{
+					//	platform::setRelMousePosition(screenCenter.x, screenCenter.y);
+					//	selectedLeft = true;
+					//}
+					//else if (glm::dot(cursorVector, rightVector) > selectLength * selectLength)
+					//{
+					//	platform::setRelMousePosition(screenCenter.x, screenCenter.y);
+					//	selectedRight = true;
+					//}
+
+					//v2
+					float selectLength = (selectorSize / 6.f) * 1.5;
+					glm::vec2 cursorVector = cursorPos - screenCenter;
+
+					glm::vec2 upVector = glm::vec2(0, -1) * selectLength;
+					glm::vec2 downVector = glm::vec2(0, +1) * selectLength;
+					glm::vec2 leftVector = glm::vec2(-1, 0) * selectLength;
+					glm::vec2 rightVector = glm::vec2(1, 0) * selectLength;
+
+					if (glm::length(cursorVector) < selectorSize * 0.55)
+					{
+						if (glm::dot(cursorVector, upVector) > selectLength * selectLength)
+						{
+							hoveredUp = true;
+
+							if (platform::isLMousePressed())
+							{
+								selectedUp = true;
+							}
+
+						}
+						else if (glm::dot(cursorVector, downVector) > selectLength * selectLength)
+						{
+							hoveredDown = true;
+
+							if (platform::isLMousePressed())
+							{
+								selectedDown = true;
+							}
+						}
+						else if (glm::dot(cursorVector, leftVector) > selectLength * selectLength)
+						{
+							hoveredLeft = true;
+
+							if (platform::isLMousePressed())
+							{
+								selectedLeft = true;
+							}
+						}
+						else if (glm::dot(cursorVector, rightVector) > selectLength * selectLength)
+						{
+							hoveredRight = true;
+
+							if (platform::isLMousePressed())
+							{
+								selectedRight = true;
+							}
+						}
+					}
+
+				}
+
+			#pragma endregion
+
+
+				//renderer.renderRectangle(mainBox, {1,0,0,0.1});
+
+				{
+					float opacity = 0.8;
+
+					//glui::Frame mainBoxFrame(mainBox);
+
+					struct CirclePiece
+					{
+						float animationTime = 0;
+
+
+					};
+
+					auto updateCirclePiece = [&](
+						CirclePiece &c,
+						gl2d::Texture t, int element, float opacity, bool selected, bool hovered)
+					{
+						glm::vec3 color = elementToColor(element);
+
+						c.animationTime -= deltaTime * 2;
+						c.animationTime = glm::clamp(c.animationTime, 0.f, 1.f);
+
+						if (selected)
+						{
+							c.animationTime = 1.f;
+							tryAddElement(element);
+						}
+
+						if (hovered) { c.animationTime = std::max(c.animationTime, 0.5f); }
+
+
+						glm::vec3 finalColor = glm::mix(color, glm::vec3{1,1,1}, glm::vec3(c.animationTime));
+
+						renderer.renderRectangle(mainBox, t, {finalColor, opacity});
+
+					};
+
+					static CirclePiece up;
+					static CirclePiece down;
+					static CirclePiece left;
+					static CirclePiece right;
+
+					updateCirclePiece(up, assetsManager.upCircle, Fire, opacity, selectedUp, hoveredUp);
+					updateCirclePiece(down, assetsManager.downCircle, Earth, opacity, selectedDown, hoveredDown);
+					updateCirclePiece(left, assetsManager.leftCircle, Ice, opacity, selectedLeft, hoveredLeft);
+					updateCirclePiece(right, assetsManager.rightCircle, Water, opacity, selectedRight, hoveredRight);
+
+
+				}
+
+
+
+			}
+			else
+			{
+				executedFirstFrame = false;
+				isClickSelection = false;
+				isDrawing = false;
+				mouseStart = {};
+			}
+
+
+			//render loaded elements
+			{
+				glui::Frame inCircle(mainBox);
+
+				float elementSize = PIXEL_SIZE * 4 * cameraZoom;
+
+				auto elementBox = glui::Box().xCenter().yCenter().xDimensionPixels(elementSize).
+					yDimensionPixels(elementSize)();
+
+				elementBox.y -= PIXEL_SIZE * 16 * cameraZoom;
+				elementBox.x -= PIXEL_SIZE * 8 * cameraZoom;
+
+				for (auto e : elementsLoaded)
+				{
+					renderer.renderRectangle(elementBox, elementToColor(e));
+					elementBox.x += elementSize * 1.5;
+				}
+			}
+
+
+		}
+
+		renderer.popCamera();
+	}
+
 
 
 	renderer.flush();

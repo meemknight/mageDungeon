@@ -216,6 +216,8 @@ int main(int, char **)
 	
 	permaAssertComment(sdlRenderer, "SDL renderer creation failed");
 
+	SDL_SetRenderDrawBlendMode(sdlRenderer, SDL_BLENDMODE_BLEND);
+
 	SDL_StartTextInput(window);
 
 #pragma region audio

@@ -88,4 +88,16 @@ void AssetsManager::loadAllAssets()
 	auto s = player.texture.GetSize();
 	player.atlas = gl2d::TextureAtlasPadding(6, 10, s.x, s.y);
 
+
+	elements.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "characters/elements.png", 16);
+	s = elements.texture.GetSize();
+	elements.atlas = gl2d::TextureAtlasPadding(4, 1, s.x, s.y);
+
+
+	upCircle.loadFromFile(RESOURCES_PATH "ui/upCircle.png");
+	downCircle.loadFromFile(RESOURCES_PATH "ui/downCircle.png");
+	leftCircle.loadFromFile(RESOURCES_PATH "ui/leftCircle.png");
+	rightCircle.loadFromFile(RESOURCES_PATH "ui/rightCircle.png");
+
+
 }

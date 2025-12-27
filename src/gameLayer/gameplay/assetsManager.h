@@ -18,6 +18,13 @@ struct AssetsManager
 
 	TileSet player;
 
+	TileSet elements;
+
+	gl2d::Texture upCircle;
+	gl2d::Texture downCircle;
+	gl2d::Texture leftCircle;
+	gl2d::Texture rightCircle;
+
 	void loadAllAssets();
 
 
