@@ -4,7 +4,9 @@
 #include <platformInput.h>
 #include <gameLayer.h>
 #include <glui/glui.h>
-
+#include <unordered_set>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/hash.hpp>
 
 bool GameLogic::init()
 {
@@ -84,7 +86,7 @@ bool GameLogic::update(float deltaTime,
 
 	renderer.currentCamera.zoom = zoom;
 	renderer.currentCamera.follow(player.physical.transform.getCenter(),
-		deltaTime * 4.f, 0.00001, 0.05,
+		deltaTime * 4.f, 0.00001, 0,
 		renderer.windowW, renderer.windowH);
 
 
@@ -143,6 +145,8 @@ bool GameLogic::update(float deltaTime,
 		static bool isClickSelection = 0;
 		static glm::vec2 mouseStart = {};
 
+		static std::unordered_set<glm::ivec2> trail;
+
 		{
 
 
@@ -156,39 +160,53 @@ bool GameLogic::update(float deltaTime,
 				.xDimensionPixels(selectorSize).yDimensionPixels(selectorSize)();
 
 
-			//end drawing
-			if (isDrawing && !startDraw)
+			//0 1 2 3 4 -> none, up down left right
+			auto detectTrailDirection = [&]()
 			{
-
 				glm::vec2 mouseEnd = platform::getRelMousePosition();
 
 				glm::vec2 cursorVector = mouseEnd - mouseStart;
-				
+
 				float selectLength = 150;
-				
+
 				glm::vec2 upVector = glm::vec2(0, -1) * selectLength;
 				glm::vec2 downVector = glm::vec2(0, +1) * selectLength;
 				glm::vec2 leftVector = glm::vec2(-1, 0) * selectLength;
 				glm::vec2 rightVector = glm::vec2(1, 0) * selectLength;
-				
-				
+
+
 				if (glm::dot(cursorVector, upVector) > selectLength * selectLength)
 				{
-					tryAddElement(Fire);
-
-				}else if (glm::dot(cursorVector, downVector) > selectLength * selectLength)
+					return 1;
+				}
+				else if (glm::dot(cursorVector, downVector) > selectLength * selectLength)
 				{
-					tryAddElement(Earth);
+					return 2;
 				}
 				else if (glm::dot(cursorVector, leftVector) > selectLength * selectLength)
 				{
-					tryAddElement(Ice);
+					return 3;
 				}
 				else if (glm::dot(cursorVector, rightVector) > selectLength * selectLength)
 				{
-					tryAddElement(Water);
+					return 4;
 				}
 
+				return 0;
+			};
+
+			//end drawing
+			if (isDrawing && !startDraw)
+			{
+				int dir = detectTrailDirection();
+
+				switch (dir)
+				{
+					case 1: tryAddElement(Fire); break;
+					case 2: tryAddElement(Earth); break;
+					case 3: tryAddElement(Ice); break;
+					case 4: tryAddElement(Water); break;
+				}
 
 			}
 
@@ -214,9 +232,13 @@ bool GameLogic::update(float deltaTime,
 					}
 
 					//platform::setRelMousePosition(screenCenter.x, screenCenter.y);
-
+					trail = {};
 				}
 
+				if (isDrawing)
+				{
+					trail.insert(platform::getRelMousePosition());
+				}
 
 			#pragma region detect selections
 				bool selectedUp = 0;
@@ -319,6 +341,7 @@ bool GameLogic::update(float deltaTime,
 
 				//renderer.renderRectangle(mainBox, {1,0,0,0.1});
 
+
 				{
 					float opacity = 0.8;
 
@@ -368,6 +391,40 @@ bool GameLogic::update(float deltaTime,
 
 				}
 
+				//trail
+				{
+					int trailDir = detectTrailDirection();
+
+					glm::vec4 color = {0.5,0.5,0.5,1};
+
+					switch (trailDir)
+					{
+						case 1: color = elementToColor(Fire); break;
+						case 2: color = elementToColor(Earth); break;
+						case 3: color = elementToColor(Ice); break;
+						case 4: color = elementToColor(Water); break;
+					}
+
+					color.a = 0.7;
+
+
+
+					int sizeInt = 4;
+					float trailSize = PIXEL_SIZE * sizeInt * cameraZoom;
+
+					for (auto e : trail)
+					{
+						//if (e.x % sizeInt != 0 || e.y % sizeInt != 0) { continue; }
+
+						glm::vec4 pos = {e, trailSize, trailSize};
+
+						//pos.x -= trailSize / 2.f;
+						//pos.y -= trailSize / 2.f;
+
+						renderer.renderRectangle(pos, color);
+					}
+
+				}
 
 
 			}
@@ -377,6 +434,7 @@ bool GameLogic::update(float deltaTime,
 				isClickSelection = false;
 				isDrawing = false;
 				mouseStart = {};
+				trail = {};
 			}
 
 

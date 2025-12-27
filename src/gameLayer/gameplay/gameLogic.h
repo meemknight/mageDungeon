@@ -21,7 +21,7 @@ struct GameLogic
 
 	void close();
 
-	float zoom = 60;
+	float zoom = 100;
 	bool inGame = 0;
 
 };
