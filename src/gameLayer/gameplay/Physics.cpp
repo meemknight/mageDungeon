@@ -154,8 +154,7 @@ glm::vec2 PhysicalEntity::performCollision(Map &mapData, glm::vec2 pos, glm::vec
 	for (int y = minY; y < maxY; y++)
 		for (int x = minX; x < maxX; x++)
 		{
-			
-			if (isBlockColidable(mapData.getBlockUnsafe(x, y).type))
+			if (mapData.isCollidableAtPosUnsafe(x, y))
 			{
 				Transform2D entity;
 				entity.pos = pos;

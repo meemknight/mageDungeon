@@ -13,6 +13,10 @@ namespace Blocks
 		dungeonWall,
 		grass,
 		dirt,
+		grassDecoration,
+		dirtDecoration,
+		fence,
+		hill,
 
 		BLOCKS_COUNT
 
@@ -41,6 +45,9 @@ namespace TileSets
 		grassDecals,
 		dungeonWall,
 		dungeonWall3D,
+		fence,
+		hill,
+		hillWall3D,
 		TILE_SETS_COUNT
 	};
 }
@@ -56,6 +63,7 @@ struct BlockSettings
 	bool canHaveGrassDecals = 0; //todo remove
 	bool isGrass = 0;
 	bool isWall = 0;
+	bool isSmallWall = 0;
 
 	BlockSettings &setCollidable()
 	{
@@ -90,6 +98,12 @@ struct BlockSettings
 	BlockSettings &setIsWall()
 	{
 		this->isWall = true;
+		return *this;
+	}
+
+	BlockSettings &setIsSmallWall()
+	{
+		this->isSmallWall = true;
 		return *this;
 	}
 };

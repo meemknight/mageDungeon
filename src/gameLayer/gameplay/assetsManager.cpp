@@ -21,6 +21,9 @@ void AssetsManager::loadAllAssets()
 		16,
 		16, //dungeon wall
 		16, //dungeon wall 3D
+		16, //fence
+		16, //hill
+		16, //hill3D
 	};
 
 	//if you see an error that means you added a sprite but forgot to add
@@ -39,6 +42,10 @@ void AssetsManager::loadAllAssets()
 		{6, 4},
 		{2, 1}, //dungeon wall
 		{6, 4}, //dungeon wall 3D
+		{4, 4}, //fence
+		{1, 1}, //hill
+		{6, 4}, //hill3D
+
 	};
 
 	//if you see an error that means you added a sprite but forgot to add

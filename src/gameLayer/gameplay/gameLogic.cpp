@@ -10,13 +10,20 @@
 
 #include <gameplay/elements.h>
 
+#include <worldGen/roomGen.h>
+
 bool GameLogic::init()
 {
 	
-	map.create();
+	RoomGenerator roomGenerator;
+	roomGenerator.init();
+	
+	roomGenerator.generatePlainsRoom(70, 70, map, 1234);
 
-	player.physical.getPos() = {1, 1};
+	roomGenerator.clear();
 
+
+	player.physical.getPos() = {35, 35};
 
 
 	inGame = true;

@@ -13,7 +13,11 @@ BlockSettings blockSettings[]
 	BlockSettings{}.setTileSet(TileSets::grass).setAtlasPos({0,0}).setIsGrass(), //grass
 	BlockSettings{}.setTileSet(TileSets::dirt).setAtlasPos({0,0}).setCanHaveGrassDecals(), //dirt
 
+	BlockSettings{}.setTileSet(TileSets::grass).setAtlasPos({1,0}).setIsGrass(), //grass decoration
+	BlockSettings{}.setTileSet(TileSets::dirt).setAtlasPos({1,0}).setCanHaveGrassDecals(), //dirt decoration
 
+	BlockSettings{}.setTileSet(TileSets::fence).setAtlasPos({0,3}).setCollidable().setIsSmallWall() , //fence
+	BlockSettings{}.setTileSet(TileSets::hill).setAtlasPos({0,3}).setCollidable().setIsWall(), //hill
 
 };
 
