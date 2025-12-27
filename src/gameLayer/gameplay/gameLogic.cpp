@@ -18,6 +18,7 @@ bool GameLogic::init()
 	player.physical.getPos() = {1, 1};
 
 
+
 	inGame = true;
 	return true;
 }
@@ -82,7 +83,10 @@ bool GameLogic::update(float deltaTime,
 	player.physical.updateMove();
 
 
-	projectiles.update(deltaTime, map);
+	projectiles.update(deltaTime, map, particleSystem, rng);
+
+
+	particleSystem.update(deltaTime);
 
 #pragma endregion
 
@@ -101,6 +105,8 @@ bool GameLogic::update(float deltaTime,
 	player.render(renderer, assetsManager);
 
 	projectiles.render(renderer, assetsManager);
+
+	particleSystem.render(renderer, {});
 
 
 	map.renderMapAfterEntities(renderer, assetsManager);
