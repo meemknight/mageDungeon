@@ -154,10 +154,10 @@ struct RoomGenerator
 		placeRandomDirtSpots(map, seed + 10, 0.4f);
 
 
-		map.firstLayer.getBlockUnsafe(32, 30).type = Blocks::dungeonWall;
-		map.firstLayer.getBlockUnsafe(34, 30).type = Blocks::dungeonWall;
-		map.firstLayer.getBlockUnsafe(35, 30).type = Blocks::dungeonWall;
-		map.firstLayer.getBlockUnsafe(36, 30).type = Blocks::dungeonWall;
+		map.secondLayer.getBlockUnsafe(32, 30).type = Blocks::smallTree;
+		map.secondLayer.getBlockUnsafe(34, 30).type = Blocks::smallTree;
+		map.secondLayer.getBlockUnsafe(35, 30).type = Blocks::smallTree;
+		map.secondLayer.getBlockUnsafe(36, 30).type = Blocks::smallTree;
 
 		map.firstLayer.getBlockUnsafe(5, 3).type = Blocks::dungeonWall;
 		map.firstLayer.getBlockUnsafe(5, 7).type = Blocks::dungeonWall;

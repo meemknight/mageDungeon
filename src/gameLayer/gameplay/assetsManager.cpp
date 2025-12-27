@@ -24,6 +24,7 @@ void AssetsManager::loadAllAssets()
 		16, //fence
 		16, //hill
 		16, //hill3D
+		0, //smallTree   0 for no texture atlas
 	};
 
 	//if you see an error that means you added a sprite but forgot to add
@@ -45,6 +46,7 @@ void AssetsManager::loadAllAssets()
 		{4, 4}, //fence
 		{1, 1}, //hill
 		{6, 4}, //hill3D
+		{1, 1}, //smallTree
 
 	};
 
@@ -62,6 +64,29 @@ void AssetsManager::loadAllAssets()
 		name += magic_enum::enum_name((TileSets::TileSets)i);
 		name += ".png";
 
+		if (blockSize[i] == 0)
+		{
+
+			tileSets[i].texture.loadFromFile(name.c_str(), true, true);
+
+			if (!tileSets[i].texture.isValid())
+			{
+				std::string err = "Error couldn't load texture: ";
+				err += name;
+				platform::log(err.c_str(), LogManager::logError);
+			}
+			else
+			{
+				auto size = tileSets[i].texture.GetSize();
+
+				tileSets[i].atlas =
+					gl2d::TextureAtlasPadding(
+					textureAtlasSizes[i].x, textureAtlasSizes[i].y,
+					1, 1);
+			}
+
+		}
+		else
 		{
 
 			tileSets[i].texture.loadFromFileWithPixelPadding(name.c_str(),

@@ -19,6 +19,9 @@ BlockSettings blockSettings[]
 	BlockSettings{}.setTileSet(TileSets::fence).setAtlasPos({0,3}).setCollidable().setIsSmallWall() , //fence
 	BlockSettings{}.setTileSet(TileSets::hill).setAtlasPos({0,3}).setCollidable().setIsWall(), //hill
 
+	BlockSettings{}.setTileSet(TileSets::smallTree).setAtlasPos({0,3}).setCollidable().setChunkyTile(), //smallTree
+
+
 };
 
 
@@ -75,4 +78,12 @@ bool isWall(BlockType block)
 	permaAssert(block >= 0);
 
 	return blockSettings[block].isWall;
+}
+
+bool isChunkyTile(BlockType block)
+{
+	permaAssert(block < Blocks::BLOCKS_COUNT);
+	permaAssert(block >= 0);
+
+	return blockSettings[block].chunkyTile;
 }

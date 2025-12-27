@@ -138,13 +138,31 @@ void MapLayer::renderMap(gl2d::Renderer2D &renderer,
 
 				if (tile.texture.isValid())
 				{
-					renderer.renderRectangle({x,y,1,1},
-						 tile.texture,
-						 Colors_White,
-						{},
-						0,
-						 tile.atlas.get(uv.x, uv.y)
+
+					if (isChunkyTile(b.type))
+					{
+
+						glm::vec4 aabb{x,y,2,1};
+						aabb.x -= 0.5;
+
+						renderer.renderRectangle(aabb,
+							tile.texture,
+							Colors_White,
+							{},
+							0,
+							{0,0.5,1,0}
 						);
+					}
+					else
+					{
+						renderer.renderRectangle({x,y,1,1},
+							tile.texture,
+							Colors_White,
+							{},
+							0,
+							tile.atlas.get(uv.x, uv.y)
+						);
+					}
 				}
 
 			};

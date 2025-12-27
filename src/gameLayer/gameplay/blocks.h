@@ -17,6 +17,7 @@ namespace Blocks
 		dirtDecoration,
 		fence,
 		hill,
+		smallTree,
 
 		BLOCKS_COUNT
 
@@ -48,6 +49,7 @@ namespace TileSets
 		fence,
 		hill,
 		hillWall3D,
+		smallTree,
 		TILE_SETS_COUNT
 	};
 }
@@ -64,6 +66,7 @@ struct BlockSettings
 	bool isGrass = 0;
 	bool isWall = 0;
 	bool isSmallWall = 0;
+	bool chunkyTile = 0;
 
 	BlockSettings &setCollidable()
 	{
@@ -106,6 +109,13 @@ struct BlockSettings
 		this->isSmallWall = true;
 		return *this;
 	}
+
+	BlockSettings &setChunkyTile()
+	{
+		chunkyTile = true;
+		return *this;
+	}
+
 };
 
 
@@ -117,3 +127,4 @@ int isBlockColidable(BlockType block);
 bool canHaveGrassDecals(BlockType block);
 bool isGrass(BlockType block);
 bool isWall(BlockType block);
+bool isChunkyTile(BlockType block);
