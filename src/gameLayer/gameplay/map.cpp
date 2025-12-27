@@ -413,7 +413,7 @@ void Map::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 	auto dungeonWall = assetManager.tileSets[TileSets::dungeonWall3D];
 
 
-	static float opacity = 0.5;
+	static float opacity = 1;
 
 	ImGui::Begin("Game Debug");
 	ImGui::SliderFloat("Opacity", &opacity, 0, 1);

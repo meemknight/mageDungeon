@@ -84,5 +84,8 @@ void AssetsManager::loadAllAssets()
 	}
 
 
+	player.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "characters/player.png",	48);
+	auto s = player.texture.GetSize();
+	player.atlas = gl2d::TextureAtlasPadding(6, 10, s.x, s.y);
 
 }

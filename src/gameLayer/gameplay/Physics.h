@@ -9,6 +9,8 @@ bool checkCollisionPointRec(glm::vec2 point, glm::vec4 rec);
 //from raylib
 bool checkCollisionRecs(glm::vec4 rec1, glm::vec4 rec2);
 
+constexpr static float PIXEL_SIZE = (1.f / 16.f);
+
 struct Transform2D
 {
 

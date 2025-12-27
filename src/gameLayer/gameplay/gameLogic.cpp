@@ -9,7 +9,7 @@ bool GameLogic::init()
 	
 	map.create();
 
-	player.getPos() = {1, 1};
+	player.physical.getPos() = {1, 1};
 
 
 	inGame = true;
@@ -26,7 +26,7 @@ bool GameLogic::update(float deltaTime,
 	//ImGui::ShowDemoWindow();
 	ImGui::Begin("Game Debug");
 
-	ImGui::DragFloat2("Position", &player.getPos()[0], 0.01);
+	ImGui::DragFloat2("Position", &player.physical.getPos()[0], 0.01);
 	ImGui::DragFloat("zoom", &zoom);
 
 	if (ImGui::Button("Exit"))
@@ -62,18 +62,19 @@ bool GameLogic::update(float deltaTime,
 		move *= deltaTime * 6.f; //player speed
 	}
 
-	player.getPos() += move;
+	player.physical.getPos() += move;
+	player.animator.setAnimationBasedOnMovement(move);
 
 #pragma endregion
 
 
-	player.resolveConstrains(map);
+	player.physical.resolveConstrains(map);
 
-	player.updateMove();
+	player.physical.updateMove();
 
 
 	renderer.currentCamera.zoom = zoom;
-	renderer.currentCamera.follow(player.transform.getCenter(),
+	renderer.currentCamera.follow(player.physical.transform.getCenter(),
 		deltaTime * 4.f, 0.01, 0.5,
 		renderer.windowW, renderer.windowH);
 
@@ -81,7 +82,9 @@ bool GameLogic::update(float deltaTime,
 	map.renderMap(renderer, assetsManager);
 
 
-	renderer.renderRectangle(player.getAABB(), Colors_Red);
+	//renderer.renderRectangle(player.physical.getAABB(), Colors_Red);
+	player.update(deltaTime);
+	player.render(renderer, assetsManager);
 
 
 	map.renderMapAfterEntities(renderer, assetsManager);

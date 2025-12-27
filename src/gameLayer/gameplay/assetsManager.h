@@ -16,6 +16,8 @@ struct AssetsManager
 	TileSet tileSets[TileSets::TILE_SETS_COUNT];
 	gl2d::Font font;
 
+	TileSet player;
+
 	void loadAllAssets();
 
 
