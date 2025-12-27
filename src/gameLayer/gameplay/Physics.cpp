@@ -105,11 +105,11 @@ void PhysicalEntity::resolveConstrains(Map &mapData)
 end:
 
 	//don't get out of the world on x y
-	if (pos.x - transform.size.x / 2 < 0) { pos.x = transform.size.x / 2; }
-	if (pos.x + transform.size.x / 2 > (mapData.size.x)) { pos.x = mapData.size.x - transform.size.x / 2; }
+	if (pos.x - transform.size.x / 2 < 0) { pos.x = transform.size.x / 2; leftTouch = true; }
+	if (pos.x + transform.size.x / 2 > (mapData.size.x)) { pos.x = mapData.size.x - transform.size.x / 2; rightTouch = true; }
 
-	if (pos.y - transform.size.y / 2 < 0) { pos.y = transform.size.y / 2; }
-	if (pos.y + transform.size.y / 2 > (mapData.size.y)) { pos.y = mapData.size.y - transform.size.y / 2; }
+	if (pos.y - transform.size.y / 2 < 0) { pos.y = transform.size.y / 2; upTouch = true; }
+	if (pos.y + transform.size.y / 2 > (mapData.size.y)) { pos.y = mapData.size.y - transform.size.y / 2; downTouch = true; }
 
 	if (leftTouch && velocity.x < 0) { velocity.x = 0; }
 	if (rightTouch && velocity.x > 0) { velocity.x = 0; }

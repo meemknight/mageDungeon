@@ -109,13 +109,12 @@ struct PhysicalEntity
 		lastPos = pos;
 	}
 
-	void updateForces(float deltaTime)
+	void updateForces(float deltaTime, float drag = 0.04)
 	{
 		velocity += acceleration * deltaTime;
 		transform.pos += velocity * deltaTime;
 
 		// Universal drag (air resistance / friction)
-		float drag = 0.04f; // tweak this for your needs
 		velocity -= glm::vec2{velocity.x * std::abs(velocity.x),
 			velocity.y * std::abs(velocity.y)} *drag * deltaTime;
 

@@ -8,6 +8,8 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 
+#include <gameplay/elements.h>
+
 bool GameLogic::init()
 {
 	
@@ -73,15 +75,16 @@ bool GameLogic::update(float deltaTime,
 
 #pragma endregion
 
-
-
-
-
-
+#pragma region updates
 
 	player.physical.resolveConstrains(map);
 
 	player.physical.updateMove();
+
+
+	projectiles.update(deltaTime, map);
+
+#pragma endregion
 
 
 	renderer.currentCamera.zoom = zoom;
@@ -97,24 +100,36 @@ bool GameLogic::update(float deltaTime,
 	player.update(deltaTime);
 	player.render(renderer, assetsManager);
 
+	projectiles.render(renderer, assetsManager);
+
+
 	map.renderMapAfterEntities(renderer, assetsManager);
 
-	// magic ui
+
+
+	// magic ui, todo move
 	{
 
-		enum Elements
+		auto fireProjectile = [&](glm::vec2 dir)
 		{
-			Fire,
-			Water,
-			Earth,
-			Ice,
+			float l = glm::length(dir);
+			if (l <= 0.000000001)
+			{
+				dir = {1,0};
+			}
+			else
+			{
+				dir /= l;
+			}
+
+			Projectile p;
+			p.physics.teleport(player.physical.getPos());
+			p.physics.velocity = dir * 10.f;
+
+			projectiles.projectiles.push_back(p);
+
 		};
 
-		auto elementToColor = [](int element)
-		{
-			glm::vec4 colors[] = {Colors_Red, Colors_Blue, Colors_Green, {0,1,1,1}};
-			return colors[element];
-		};
 
 		static std::vector<int> elementsLoaded;
 		auto tryAddElement = [&](int element)
@@ -123,18 +138,22 @@ bool GameLogic::update(float deltaTime,
 				elementsLoaded.push_back(element);
 		};
 
+		glm::vec2 cursorPos = platform::getRelMousePosition();
+		glm::vec4 viewRect = renderer.getViewRect();
+		glm::vec2 screenCenter = {renderer.windowW / 2.f, renderer.windowH / 2.f};
+
 		if (platform::isRMousePressed())
 		{
 			//cast spell
+			fireProjectile(cursorPos - screenCenter);
+
 			elementsLoaded.clear();
 		}
 
 		float cameraZoom = renderer.currentCamera.zoom;
 		renderer.pushCamera();
 
-		glm::vec2 cursorPos = platform::getRelMousePosition();
-		glm::vec4 viewRect = renderer.getViewRect();
-		glm::vec2 screenCenter = {renderer.windowW / 2.f, renderer.windowH / 2.f};
+	
 
 		bool startSelectionButton = platform::isButtonHeld(platform::Button::Q);
 		bool startDraw = platform::isLMouseHeld();

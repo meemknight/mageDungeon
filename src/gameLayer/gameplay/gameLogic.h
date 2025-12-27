@@ -2,6 +2,7 @@
 #include <gameplay/map.h>
 #include <gameplay/Physics.h>
 #include <gameplay/player.h>
+#include <gameplay/projectiles.h>
 
 //this is an instance of the game.
 //This shouldn't load things like textures, those should be load outside
@@ -11,6 +12,7 @@ struct GameLogic
 
 	Map map;
 	Player player;
+	ProjectileHolder projectiles;
 
 	//returns false on fail
 	bool init();
