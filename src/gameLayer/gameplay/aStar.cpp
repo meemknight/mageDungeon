@@ -2,6 +2,49 @@
 
 
 
+// Bresenham LOS over tiles (8-dir “ray” through grid)
+bool HasLineOfSightTiles(Map &map, glm::ivec2 a, glm::ivec2 b)
+{
+	int x0 = a.x, y0 = a.y;
+	int x1 = b.x, y1 = b.y;
+
+	int dx = std::abs(x1 - x0);
+	int dy = std::abs(y1 - y0);
+	int sx = (x0 < x1) ? 1 : -1;
+	int sy = (y0 < y1) ? 1 : -1;
+
+	int err = dx - dy;
+
+	// If you want walls to block even when standing "inside" them, check start too.
+	// Usually you skip start tile and check everything after it.
+	while (!(x0 == x1 && y0 == y1))
+	{
+		int e2 = err * 2;
+
+		if (e2 > -dy) { err -= dy; x0 += sx; }
+		if (e2 < dx) { err += dx; y0 += sy; }
+
+		// Don’t block on the destination tile if you want “seeing the player”
+		if (x0 == x1 && y0 == y1) break;
+
+		if (IsBlockedTileLineOfSight(map, x0, y0))
+			return false;
+	}
+	return true;
+}
+
+// “Direct chase” just means LOS is clear between current tile and player tile.
+// If you want stricter collision safety, you can also do a couple map.isCollidableAtPosSafe
+// probes along the segment, but usually Bresenham LOS is enough for grid worlds.
+bool CanChaseDirectSight(Map &map, const glm::vec2 &enemyPos, const glm::vec2 &playerPos)
+{
+	glm::ivec2 eT = WorldToTile(enemyPos);
+	glm::ivec2 pT = WorldToTile(playerPos);
+	return HasLineOfSightTiles(map, eT, pT);
+}
+
+
+
 // Supercover Bresenham: marks all cells touched by the segment from a->b.
 bool HasLineOfSightGrid(Map &map, glm::ivec2 a, glm::ivec2 b)
 {
