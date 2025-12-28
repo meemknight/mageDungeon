@@ -17,6 +17,7 @@ struct AssetsManager
 	gl2d::Font font;
 
 	TileSet player;
+	TileSet skeleton;
 
 	TileSet elements;
 

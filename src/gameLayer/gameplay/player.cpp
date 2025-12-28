@@ -5,14 +5,14 @@
 void Player::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager)
 {
 
-	glm::vec4 aabb = physical.getAABB();
+	glm::vec4 aabb = physics.getAABB();
 
 	auto renderPos = aabb;
 	renderPos.z = animator.textureSize.x;
 	renderPos.w = animator.textureSize.y;
 
-	renderPos.y -= (renderPos.w - physical.transform.size.y);
-	renderPos.x -= (renderPos.z - physical.transform.size.x) / 2;
+	renderPos.y -= (renderPos.w - physics.transform.size.y);
+	renderPos.x -= (renderPos.z - physics.transform.size.x) / 2;
 
 	renderPos.y += PIXEL_SIZE * 2;
 

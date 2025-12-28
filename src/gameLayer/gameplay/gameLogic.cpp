@@ -6,6 +6,7 @@
 #include <glui/glui.h>
 #include <unordered_set>
 #include <iostream>
+#include <gameplay/enemy.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 
@@ -25,7 +26,7 @@ bool GameLogic::init()
 
 	particlePostProcessRenderer.init();
 
-	player.physical.getPos() = {35, 35};
+	player.physics.getPos() = {35, 35};
 
 
 	inGame = true;
@@ -43,7 +44,7 @@ bool GameLogic::update(float deltaTime,
 	//ImGui::ShowDemoWindow();
 	ImGui::Begin("Game Debug");
 
-	ImGui::DragFloat2("Position", &player.physical.getPos()[0], 0.01);
+	ImGui::DragFloat2("Position", &player.physics.getPos()[0], 0.01);
 	ImGui::DragFloat("zoom", &zoom);
 
 	if (ImGui::Button("Exit"))
@@ -102,7 +103,7 @@ bool GameLogic::update(float deltaTime,
 			move *= deltaTime * 6.f; //player speed
 		}
 
-		player.physical.getPos() += move;
+		player.physics.getPos() += move;
 		player.animator.setAnimationBasedOnMovement(move);
 
 		//fire dirrection
@@ -139,9 +140,9 @@ bool GameLogic::update(float deltaTime,
 
 #pragma region updates
 
-	player.physical.resolveConstrains(map);
+	player.physics.resolveConstrains(map);
 
-	player.physical.updateMove();
+	player.physics.updateMove();
 
 
 	projectiles.update(deltaTime, map, particleSystem, rng);
@@ -153,7 +154,7 @@ bool GameLogic::update(float deltaTime,
 
 
 	renderer.currentCamera.zoom = zoom;
-	renderer.currentCamera.follow(player.physical.transform.getCenter(),
+	renderer.currentCamera.follow(player.physics.transform.getCenter(),
 		deltaTime * 4.f, 0.00001, 0,
 		renderer.windowW, renderer.windowH);
 
@@ -163,6 +164,11 @@ bool GameLogic::update(float deltaTime,
 
 	map.renderMap(renderer, assetsManager);
 
+
+	static auto enemy = getSkeletonEnemy({20,20});
+
+	enemy.update(deltaTime, map, particleSystem, rng, player);
+	enemy.render(renderer, particlePostProcessRenderer);
 
 	//renderer.renderRectangle(player.physical.getAABB(), Colors_Red);
 	player.update(deltaTime);
@@ -189,7 +195,7 @@ bool GameLogic::update(float deltaTime,
 
 
 			auto p = std::make_unique<BasicMagicMissle>();
-			p->physics.teleport(player.physical.getPos());
+			p->physics.teleport(player.physics.getPos());
 			p->physics.velocity = dir * 10.f; //TODO MOVE, the spell should tell this details
 			
 			if(elementsLoaded.size())

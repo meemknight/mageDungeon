@@ -123,6 +123,10 @@ void AssetsManager::loadAllAssets()
 	player.atlas = gl2d::TextureAtlasPadding(6, 10, s.x, s.y);
 
 
+	skeleton.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "characters/skeleton.png", 48);
+	s = skeleton.texture.GetSize();
+	skeleton.atlas = gl2d::TextureAtlasPadding(6, 13, s.x, s.y);
+
 	elements.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "characters/elements.png", 16);
 	s = elements.texture.GetSize();
 	elements.atlas = gl2d::TextureAtlasPadding(4, 1, s.x, s.y);
