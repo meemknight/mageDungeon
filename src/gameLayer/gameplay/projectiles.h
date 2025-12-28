@@ -52,20 +52,82 @@ struct Projectile
 		return 1;
 	}
 
+
+	virtual bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng) = 0;
+
+	virtual void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager, ParticlePostProcessRenderer &particlePostProcessRenderer) = 0;
+
+
+};
+
+struct ProjectileHolder
+{
+
+	std::vector<std::unique_ptr<Projectile>> projectiles;
+
+	void update(float deltaTime,
+		Map &map,
+		ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng)
+	{
+		for (auto it = projectiles.begin(); it != projectiles.end(); )
+		{
+			Projectile &p = **it;
+
+			if (!p.runTimer(deltaTime))
+			{
+				mainParticleSystem.copyParticles(
+					p.particleSystem, rng, p.physics.getPos());
+				it = projectiles.erase(it);
+				continue;
+			}
+
+			if (!p.update(deltaTime, map, mainParticleSystem, rng))
+			{
+				mainParticleSystem.copyParticles(
+					p.particleSystem, rng, p.physics.getPos());
+				it = projectiles.erase(it);
+				continue;
+			}
+
+			++it;
+		}
+	}
+
+	void render(gl2d::Renderer2D &renderer,
+		AssetsManager &assetManager,
+		ParticlePostProcessRenderer &particlePostProcessRenderer)
+	{
+		for (auto &p : projectiles)
+		{
+			p->render(renderer, assetManager, particlePostProcessRenderer);
+		}
+	}
+
+};
+
+
+
+struct BasicMagicMissle: Projectile
+{
+
+
 	float particleTimer = 0.0;
 	bool firstTime = 1;
 
-	virtual bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
-		std::ranlux24_base &rng)
+	ParticleEmissionSettings fireEmision;
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng) override
 	{
-		static ParticleEmissionSettings fireEmision = getBasicMagicMissleParticleEmision(Elements::Earth);
 
 		if (firstTime)
 		{
 			firstTime = 0;
+			fireEmision = getBasicMagicMissleParticleEmision(element);
 
 			particleSystem.emitParticles(fireEmision.create, physics.getPos(), rng, physics.getPos());
-
 		}
 
 
@@ -79,10 +141,10 @@ struct Projectile
 		}
 
 		//have chance to emit one particle at least so we keep this last
-		if (!basicPhysicsAndCollisionsCheck(deltaTime, map)) 
+		if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
 		{
 			particleSystem.emitParticles(fireEmision.release, physics.getPos(), rng, physics.getPos());
-			return 0; 
+			return 0;
 		}
 
 
@@ -92,7 +154,7 @@ struct Projectile
 		return 1;
 	}
 
-	virtual void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager, ParticlePostProcessRenderer &particlePostProcessRenderer)
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager, ParticlePostProcessRenderer &particlePostProcessRenderer) override
 	{
 		glm::vec4 aabb = physics.getAABB();
 
@@ -101,58 +163,6 @@ struct Projectile
 		renderer.renderRectangleOutline(aabb, {0,0,1,0.8}, 0.02);
 
 	}
-
-
-};
-
-struct ProjectileHolder
-{
-
-	std::vector<Projectile> projectiles;
-
-	void update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem, std::ranlux24_base &rng)
-	{
-
-		for (auto it = projectiles.begin(); it != projectiles.end(); )
-		{
-			if (!it->runTimer(deltaTime))
-			{
-				mainParticleSystem.copyParticles(it->particleSystem, rng, it->physics.getPos());
-				it = projectiles.erase(it);
-				break;
-			}
-
-			if (!it->update(deltaTime, map, mainParticleSystem, rng))
-			{
-				mainParticleSystem.copyParticles(it->particleSystem, rng, it->physics.getPos());
-				it = projectiles.erase(it);
-				break;
-			}
-
-			++it;
-		}
-
-	}
-
-	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager, ParticlePostProcessRenderer &particlePostProcessRenderer)
-	{
-
-		for (auto &el : projectiles)
-		{
-			el.render(renderer, assetManager, particlePostProcessRenderer);
-		}
-
-	}
-
-
-};
-
-
-
-struct BasicMagicMissle: Projectile
-{
-
-	TileSet tileSet;
 
 
 

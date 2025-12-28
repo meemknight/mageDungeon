@@ -23,6 +23,10 @@ static GameLogic game;
 static AssetsManager assetsManager;
 static glui::RendererUi uirenderer;
 
+AssetsManager &getAssetManager()
+{
+	return assetsManager;
+}
 
 
 bool initGame(SDL_Renderer *sdlRenderer)

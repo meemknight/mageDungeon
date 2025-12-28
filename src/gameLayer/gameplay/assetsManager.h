@@ -25,7 +25,13 @@ struct AssetsManager
 	gl2d::Texture leftCircle;
 	gl2d::Texture rightCircle;
 
+	gl2d::Texture particleCircle;
+	gl2d::Texture target;
+
+
 	void loadAllAssets();
 
 
 };
+
+AssetsManager &getAssetManager();

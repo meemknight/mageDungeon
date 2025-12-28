@@ -2,7 +2,6 @@
 #include <gameplay/Physics.h>
 #include <gameplay/elements.h>
 
-
 glm::vec3 RGBtoHSV(glm::vec3 c)
 {
 	c = glm::clamp(c, glm::vec3(0), glm::vec3(1));
@@ -100,6 +99,9 @@ ParticleSettings getBasicMagicMissleParticle(glm::vec4 startColor, glm::vec4 end
 	fireParticle.tranzitionType = ParticleSettings::TRANZITION_TYPES::abruptCurbe;
 	fireParticle.positionX = glm::vec2{-2,2} *PIXEL_SIZE;
 	fireParticle.positionY = glm::vec2{-2,2} *PIXEL_SIZE;
+
+	fireParticle.texture = getAssetManager().particleCircle;
+	
 
 	return fireParticle;
 }
@@ -399,18 +401,18 @@ ParticleEmissionSettings getBasicMagicMissleParticleEmision(int element)
 	ParticleEmissionSettings ret;
 
 	glm::vec4 color1 = elementToColor(element); color1.a = 0.3;
-	glm::vec4 color2 = RGBtoHSV(color1); color2.a = 0.3;
+	glm::vec4 color2 = elementToSecondaryColor(element); color2.a = 0.3;
 
-	color2.x += 0.15;
-	color2.y -= 0.1;
-	color2.z += 0.25;
-
-	color2 = HSVtoRGB(color2);
-
+	//color2.x += 0.15;
+	//color2.y -= 0.1;
+	//color2.z += 0.25;
+	//
+	//color2 = HSVtoRGB(color2);
+	
+	//flip colors
 	auto x = color1;
 	color1 = color2;
 	color2 = x;
-
 
 	//glm::vec4 color1Create = RGBtoHSV(color1);
 	//glm::vec4 color2Create = RGBtoHSV(color2);
@@ -436,7 +438,7 @@ ParticleEmissionSettings getBasicMagicMissleParticleEmision(int element)
 
 	//fire
 	ret.sustain = getBasicMagicMissleParticle(color1, color2);
-
+	ret.emitTimer = 0.01;
 	//ret.create = getBasicMagicMissleParticle(color1Create, color2Create);
 	//ret.create.folowParent = false;
 	//

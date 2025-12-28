@@ -18,6 +18,8 @@ struct GameLogic
 	ParticleSystem particleSystem;
 	ParticlePostProcessRenderer particlePostProcessRenderer;
 
+	glm::vec2 fireDirection = {1,0};
+
 	//returns false on fail
 	bool init();
 

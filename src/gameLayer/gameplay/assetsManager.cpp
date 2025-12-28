@@ -133,5 +133,8 @@ void AssetsManager::loadAllAssets()
 	leftCircle.loadFromFile(RESOURCES_PATH "ui/leftCircle.png");
 	rightCircle.loadFromFile(RESOURCES_PATH "ui/rightCircle.png");
 
+	particleCircle.loadFromFile(RESOURCES_PATH "circle.png");
+	target.loadFromFile(RESOURCES_PATH "target.png");
+
 
 }

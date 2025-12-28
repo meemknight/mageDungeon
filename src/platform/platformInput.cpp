@@ -283,6 +283,21 @@ static void MergeIntoAggregate(platform::Controller &agg, const platform::Contro
 		if (src.buttons[i].released) agg.buttons[i].released = true;
 	}
 
+	auto oneButton = [&](auto &src, auto &agg)
+	{
+		if (src.held) agg.held = true;
+		if (src.pressed) agg.pressed = true;
+		if (src.released) agg.released = true;
+	};
+
+	oneButton(src.LTButton, agg.LTButton);
+	oneButton(src.RTButton, agg.RTButton);
+
+	oneButton(src.RStickButtonUp, agg.RStickButtonUp);
+	oneButton(src.RStickButtonDown, agg.RStickButtonDown);
+	oneButton(src.RStickButtonLeft, agg.RStickButtonLeft);
+	oneButton(src.RStickButtonRight, agg.RStickButtonRight);
+
 	// Analog: take max magnitude (common & feels right)
 	agg.LT = (src.LT > agg.LT) ? src.LT : agg.LT;
 	agg.RT = (src.RT > agg.RT) ? src.RT : agg.RT;
@@ -298,9 +313,6 @@ static void MergeIntoAggregate(platform::Controller &agg, const platform::Contro
 
 void platform::internal::UpdateControllersSDL3(float deltaTime)
 {
-	// reset outputs
-	controller.setAllToZero();
-	for (int i = 0; i < 4; i++) controllers[i].setAllToZero();
 
 	int count = 0;
 	SDL_JoystickID *ids = SDL_GetGamepads(&count);  // free with SDL_free :contentReference[oaicite:4]{index=4}
@@ -326,6 +338,11 @@ void platform::internal::UpdateControllersSDL3(float deltaTime)
 			const SDL_GamepadButton sb = ToSDLButton((Controller::Buttons)b);
 			const bool down = (sb != SDL_GAMEPAD_BUTTON_INVALID) && SDL_GetGamepadButton(pad, sb);
 
+			if (b == Controller::Up)
+			{
+				int a = 0;
+			}
+
 			// mirror your old logic:
 			processEventButton(c.buttons[b], down ? 1 : 0);
 			updateButton(c.buttons[b], deltaTime);
@@ -345,10 +362,29 @@ void platform::internal::UpdateControllersSDL3(float deltaTime)
 		c.LT = (lt < 0.f) ? 0.f : ((lt > 1.f) ? 1.f : lt);
 		c.RT = (rt < 0.f) ? 0.f : ((rt > 1.f) ? 1.f : rt);
 
-		// merge into amalgamation
+		if (c.LT > 0.5) { processEventButton(c.LTButton, 1); } else {processEventButton(c.LTButton, 0); }
+		if (c.RT > 0.5) { processEventButton(c.RTButton, 1); } else {processEventButton(c.RTButton, 0); }
+		
+		const float TRESSHOLD = 0.7;
+		if (c.RStick.y > TRESSHOLD) { processEventButton(c.RStickButtonUp, 1); } else {processEventButton(c.RStickButtonUp, 0); }
+		if (c.RStick.y < -TRESSHOLD) { processEventButton(c.RStickButtonDown, 1); } else {processEventButton(c.RStickButtonDown, 0); }
+		if (c.RStick.x > TRESSHOLD) { processEventButton(c.RStickButtonRight, 1); } else {processEventButton(c.RStickButtonRight, 0); }
+		if (c.RStick.x < -TRESSHOLD) { processEventButton(c.RStickButtonLeft, 1); } else {processEventButton(c.RStickButtonLeft, 0); }
+
+		updateButton(c.LTButton, deltaTime);
+		updateButton(c.RTButton, deltaTime);
+
+		updateButton(c.RStickButtonUp, deltaTime);
+		updateButton(c.RStickButtonDown, deltaTime);
+		updateButton(c.RStickButtonLeft, deltaTime);
+		updateButton(c.RStickButtonRight, deltaTime);
+
+
+		// merge into agregate
+		controller.setAllToZero();
 		MergeIntoAggregate(controller, c);
 
-		SDL_CloseGamepad(pad); // :contentReference[oaicite:6]{index=6}
+		SDL_CloseGamepad(pad); //
 	}
 
 }
@@ -379,8 +415,8 @@ void platform::internal::resetInputsToZero()
 	resetButtonToZero(leftMouse);
 	resetButtonToZero(rightMouse);
 	
-	//TODO SDL3
-	//controllerButtons.setAllToZero();
+	// reset outputs
+	for (int i = 0; i < 4; i++) controllers[i].setAllToZero();
 }
 
 void platform::internal::addToTypedInput(char c)

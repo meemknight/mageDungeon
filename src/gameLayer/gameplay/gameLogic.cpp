@@ -5,6 +5,7 @@
 #include <gameLayer.h>
 #include <glui/glui.h>
 #include <unordered_set>
+#include <iostream>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 
@@ -53,36 +54,87 @@ bool GameLogic::update(float deltaTime,
 	ImGui::End();
 #pragma endregion
 
+	glm::vec2 cursorPos = platform::getRelMousePosition();
+	glm::vec4 viewRect = renderer.getViewRect();
+	glm::vec2 screenCenter = {renderer.windowW / 2.f, renderer.windowH / 2.f};
+	static bool usesController = 0;
+
 #pragma region input
-	glm::vec2 move = {};
-	if (platform::isButtonHeld(platform::Button::A))
 	{
-		move.x -= 1;
-	}
-	if (platform::isButtonHeld(platform::Button::D))
-	{
-		move.x += 1;
-	}
-	if (platform::isButtonHeld(platform::Button::W))
-	{
-		move.y -= 1;
-	}
-	if (platform::isButtonHeld(platform::Button::S))
-	{
-		move.y += 1;
-	}
 
-	if (glm::length(move) != 0)
-	{
-		move = glm::normalize(move);
-		move *= deltaTime * 6.f; //player speed
+		glm::vec2 move = {};
+		if (platform::isButtonHeld(platform::Button::A))
+		{
+			move.x -= 1;
+			usesController = false;
+		}
+		if (platform::isButtonHeld(platform::Button::D))
+		{
+			move.x += 1;
+			usesController = false;
+		}
+		if (platform::isButtonHeld(platform::Button::W))
+		{
+			move.y -= 1;
+			usesController = false;
+		}
+		if (platform::isButtonHeld(platform::Button::S))
+		{
+			move.y += 1;
+			usesController = false;
+		}
+
+		if (glm::length(platform::getControllerButtons().LStick) > 0.1 || glm::length(platform::getControllerButtons().RStick) > 0.1)
+		{
+			usesController = true;
+		}
+
+		if (platform::isLMouseHeld() || platform::isRMouseHeld() || platform::mouseMoved())
+		{
+			usesController = false;
+		}
+
+		move += platform::getControllerButtons().LStick * glm::vec2(1, -1);
+
+		if (glm::length(move) != 0)
+		{
+			move = glm::normalize(move);
+			move *= deltaTime * 6.f; //player speed
+		}
+
+		player.physical.getPos() += move;
+		player.animator.setAnimationBasedOnMovement(move);
+
+		//fire dirrection
+		{
+			if (!usesController)
+			{
+				fireDirection = cursorPos - screenCenter;
+			}
+			else
+			{
+				auto c = platform::getControllerButtons().RStick;
+				float l = glm::length(c);
+				if (l > 0.4)
+				{
+					fireDirection = c * glm::vec2(1,-1);
+				}
+			}
+
+			float l = glm::length(fireDirection);
+			if (l <= 0.000000001)
+			{
+				fireDirection = {1,0};
+			}
+			else
+			{
+				fireDirection /= l;
+			}
+		}
+
+		platform::showMouse(!usesController);
+
 	}
-
-	player.physical.getPos() += move;
-	player.animator.setAnimationBasedOnMovement(move);
-
-
-
 #pragma endregion
 
 #pragma region updates
@@ -129,53 +181,67 @@ bool GameLogic::update(float deltaTime,
 
 	// magic ui, todo move
 	{
+		static std::vector<int> elementsLoaded;
 
-		auto fireProjectile = [&](glm::vec2 dir)
+		auto fireProjectile = [&]()
 		{
-			float l = glm::length(dir);
-			if (l <= 0.000000001)
-			{
-				dir = {1,0};
-			}
-			else
-			{
-				dir /= l;
-			}
+			glm::vec2 dir = fireDirection;
 
-			Projectile p;
-			p.physics.teleport(player.physical.getPos());
-			p.physics.velocity = dir * 10.f; //TODO should be selected by the projectile creator
 
-			projectiles.projectiles.push_back(p);
+			auto p = std::make_unique<BasicMagicMissle>();
+			p->physics.teleport(player.physical.getPos());
+			p->physics.velocity = dir * 10.f; //TODO MOVE, the spell should tell this details
+			
+			if(elementsLoaded.size())
+				{p->element = elementsLoaded[0];}
+
+			projectiles.projectiles.push_back(std::move(p));
 
 		};
 
-
-		static std::vector<int> elementsLoaded;
 		auto tryAddElement = [&](int element)
 		{
 			if(elementsLoaded.size() < 4)
 				elementsLoaded.push_back(element);
 		};
 
-		glm::vec2 cursorPos = platform::getRelMousePosition();
-		glm::vec4 viewRect = renderer.getViewRect();
-		glm::vec2 screenCenter = {renderer.windowW / 2.f, renderer.windowH / 2.f};
 
-		if (platform::isRMousePressed())
+		if (platform::isRMousePressed() || platform::getControllerButtons().RTButton.pressed)
 		{
-			//cast spell
-			fireProjectile(cursorPos - screenCenter);
 
-			elementsLoaded.clear();
+			//if (elementsLoaded.size())
+			{
+				//cast spell
+				fireProjectile();
+
+				elementsLoaded.clear();
+			}
+
+
 		}
 
 		float cameraZoom = renderer.currentCamera.zoom;
 		renderer.pushCamera();
 
-	
 
-		bool startSelectionButton = platform::isButtonHeld(platform::Button::Q);
+		if(usesController)
+		{
+			float size = 15 * PIXEL_SIZE * cameraZoom;
+
+			glm::vec2 pos = glm::vec2{renderer.windowW, renderer.windowH} / 2.f;
+			pos += PIXEL_SIZE * cameraZoom * 30 * fireDirection;
+			pos -= size / 2.f;
+
+			glm::vec4 transform(pos,size,size);
+			
+			renderer.renderRectangle(transform, assetsManager.target, {1,1,1,0.5});
+		}
+
+
+		bool startSelectionButton = platform::isButtonHeld(platform::Button::Q) || platform::getControllerButtons().LTButton.held
+			|| platform::getControllerButtons().buttons[platform::Controller::RThumb].held
+			
+			;
 		bool startDraw = platform::isLMouseHeld();
 
 		static bool executedFirstFrame = 0;
@@ -371,6 +437,17 @@ bool GameLogic::update(float deltaTime,
 								selectedRight = true;
 							}
 						}
+					}
+
+					if (!selectedUp && !selectedDown && !selectedLeft && !selectedRight)
+					{
+						auto &c = platform::getControllerButtons();
+						
+						if (c.RStickButtonUp.pressed) { selectedUp = true; } else
+						if (c.RStickButtonDown.pressed) { selectedDown = true; } else
+						if (c.RStickButtonLeft.pressed) { selectedLeft = true; } else
+						if (c.RStickButtonRight.pressed) { selectedRight = true; }
+
 					}
 
 				}

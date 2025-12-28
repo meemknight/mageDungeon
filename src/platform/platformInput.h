@@ -76,6 +76,16 @@ namespace platform
 
 		Button buttons[ButtonCount] = {};
 
+		Button LTButton = {};
+		Button RTButton = {};
+
+
+		Button RStickButtonUp = {};
+		Button RStickButtonDown = {};
+		Button RStickButtonLeft = {};
+		Button RStickButtonRight = {};
+
+
 		float LT = 0.f;
 		float RT = 0.f;
 
