@@ -1,5 +1,117 @@
 #include "aStar.h"
 
+
+
+// Supercover Bresenham: marks all cells touched by the segment from a->b.
+bool HasLineOfSightGrid(Map &map, glm::ivec2 a, glm::ivec2 b)
+{
+	int x0 = a.x, y0 = a.y;
+	int x1 = b.x, y1 = b.y;
+
+	int dx = std::abs(x1 - x0);
+	int dy = std::abs(y1 - y0);
+
+	int sx = (x0 < x1) ? 1 : -1;
+	int sy = (y0 < y1) ? 1 : -1;
+
+	int err = dx - dy;
+
+	// Check start
+	if (IsBlockedTile(map, x0, y0)) return false;
+
+	while (!(x0 == x1 && y0 == y1))
+	{
+		int e2 = err * 2;
+
+		int xPrev = x0;
+		int yPrev = y0;
+
+		if (e2 > -dy) { err -= dy; x0 += sx; }
+		if (e2 < dx) { err += dx; y0 += sy; }
+
+		// Supercover: if we moved diagonally, also cover the “side” tiles
+		// to avoid cutting corners through blocked cells.
+		if (x0 != xPrev && y0 != yPrev)
+		{
+			// moved diagonally => ensure both adjacent orthogonal tiles aren't blocked
+			if (IsBlockedTile(map, xPrev, y0)) return false;
+			if (IsBlockedTile(map, x0, yPrev)) return false;
+		}
+
+		if (IsBlockedTile(map, x0, y0)) return false;
+	}
+
+	return true;
+}
+
+std::vector<glm::ivec2> SmoothPathLOS(Map &map, const std::vector<glm::ivec2> &path)
+{
+	if (path.size() <= 2) return path;
+
+	std::vector<glm::ivec2> out;
+	out.reserve(path.size());
+
+	std::size_t i = 0;
+	out.push_back(path[i]);
+
+	while (i + 1 < path.size())
+	{
+		// take the farthest j we can see from i
+		std::size_t bestJ = i + 1;
+
+		// Greedy farthest-visible search
+		for (std::size_t j = i + 2; j < path.size(); ++j)
+		{
+			if (HasLineOfSightGrid(map, path[i], path[j]))
+				bestJ = j;
+			else
+				break; // path is contiguous; once blocked, farther j is very likely blocked too
+		}
+
+		out.push_back(path[bestJ]);
+		i = bestJ;
+	}
+
+	return out;
+}
+
+glm::ivec2 WorldToCell(glm::vec2 p)
+{
+	return glm::ivec2((int)std::floor(p.x), (int)std::floor(p.y));
+}
+
+bool CanChaseDirect(Map &map, glm::vec2 enemyPos, glm::vec2 playerPos)
+{
+	glm::ivec2 e = WorldToCell(enemyPos);
+	glm::ivec2 p = WorldToCell(playerPos);
+	return HasLineOfSightGrid(map, e, p);
+}
+
+std::size_t PickLookaheadIndex(Map &map,
+	glm::vec2 enemyPos,
+	const std::vector<glm::ivec2> &path,
+	std::size_t currentIndex)
+{
+	glm::ivec2 eCell = WorldToCell(enemyPos);
+
+	std::size_t best = currentIndex;
+	for (std::size_t i = currentIndex; i < path.size(); ++i)
+	{
+		if (HasLineOfSightGrid(map, eCell, path[i]))
+			best = i;
+		else
+			break;
+	}
+	return best;
+}
+
+glm::vec2 CellCenter(glm::ivec2 c)
+{
+	return glm::vec2(c) + glm::vec2(0.5f, 0.5f);
+}
+
+
+
 float octileHeuristic(const glm::ivec2 &a, const glm::ivec2 &b)
 {
 	// For 8-way movement with costs: D=1, D2=sqrt(2)

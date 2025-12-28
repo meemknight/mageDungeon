@@ -1,8 +1,6 @@
 #pragma once
 
 
-
-
 #include "Physics.h"
 #include "elements.h"
 #include <map>
@@ -60,182 +58,235 @@ struct BasicMeleEnemy : public Enemy
 	float forgetTimer = 0.0f;
 	float wanderTimer = 0.0f;
 
+	bool wanderWhenIdle = false;          // option requested
+	bool chasing = false;
+	float timeSinceSeen = 0.0f;
+	glm::ivec2 lastGoalTile = {-9999,-9999};
+	std::vector<glm::ivec2> path;
+	glm::vec2 moveDir = glm::vec2(1,0);
+
+
 	glm::vec2 wanderTargetWorld = glm::vec2(0.0f);
 
 	// Tuning
-	float moveSpeed = 2.2f;
+	float speed = 2.2f;
+	float chaseAcquireRange = 9.0f;      // start chasing if within this distance
+	float chaseLoseRange    = 11.0f;     // keep chasing until beyond this distance
+	float forgetAfterSec    = 2.5f;      // forget if far for this long
+	float repathEverySec    = 0.25f;
+	float turnRate          = 14.0f;     // higher = snappier steering
 
-	float aggroRange = 9.0f;      // start chasing if within this
-	float attackRange = 0.2f;      // “close enough” (no attack yet; just stop)
-	float loseRange = 14.0f;      // if beyond this, start forgetting
-	float forgetTime = 2.5f;       // seconds beyond loseRange before giving up
+	static inline glm::ivec2 worldToTile(glm::vec2 p) { return glm::ivec2((int)std::floor(p.x), (int)std::floor(p.y)); }
+	static inline glm::vec2  tileCenter(glm::ivec2 t) { return glm::vec2(t) + glm::vec2(0.5f, 0.5f); }
 
-	float repathInterval = 0.25f;  // how often to recompute path during chase
-	float arriveEps = 0.08f;       // waypoint arrival threshold
+	static inline bool isCornerCutBlocked(Map &map, glm::ivec2 from, glm::ivec2 to)
+	{
+		glm::ivec2 d = to - from;
+		if (std::abs(d.x) == 1 && std::abs(d.y) == 1)
+		{
+			// If moving diagonally, disallow squeezing through a corner:
+			// both adjacent orthogonal tiles must be free.
+			if (IsBlockedTile(map, from.x + d.x, from.y) || IsBlockedTile(map, from.x, from.y + d.y))
+				return true;
+		}
+		return false;
+	}
 
+	// Supercover line walk on grid (good for "direct chase" feel). Returns false if any tile along the line is blocked.
+	// Also checks the "no corner cutting" rule for diagonal steps.
+	static bool hasClearGridLine8(Map &map, glm::ivec2 start, glm::ivec2 goal)
+	{
+		int x0 = start.x, y0 = start.y;
+		int x1 = goal.x, y1 = goal.y;
+
+		int dx = std::abs(x1 - x0);
+		int dy = std::abs(y1 - y0);
+		int sx = (x0 < x1) ? 1 : -1;
+		int sy = (y0 < y1) ? 1 : -1;
+
+		int err = dx - dy;
+
+		glm::ivec2 prev(x0, y0);
+
+		// Check start (optional)
+		if (IsBlockedTile(map, prev.x, prev.y)) return false;
+
+		while (!(x0 == x1 && y0 == y1))
+		{
+			int e2 = err * 2;
+
+			int nx = x0;
+			int ny = y0;
+
+			if (e2 > -dy) { err -= dy; nx += sx; }
+			if (e2 < dx) { err += dx; ny += sy; }
+
+			glm::ivec2 curr(nx, ny);
+
+			if (IsBlockedTile(map, curr.x, curr.y)) return false;
+			if (isCornerCutBlocked(map, prev, curr)) return false;
+
+			prev = curr;
+			x0 = nx; y0 = ny;
+		}
+		return true;
+	}
+
+	static inline glm::vec2 safeNormalize(glm::vec2 v)
+	{
+		float len2 = glm::dot(v, v);
+		if (len2 <= 1e-8f) return glm::vec2(0, 0);
+		return v * (1.0f / std::sqrt(len2));
+	}
 
 	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		std::ranlux24_base &rng, Player &player) override
 	{
 		animator.update(deltaTime, 0.12, 6);
 
-		const glm::vec2 myPos = physics.getPos();
-		const glm::vec2 plPos = player.physics.getPos();
+		const glm::vec2 enemyPos = physics.getPos();   // center
+		const glm::vec2 playerPos = player.physics.getPos();
 
-		const float distToPlayer = glm::length(plPos - myPos);
+		const float dist = glm::length(playerPos - enemyPos);
 
-		// --- State transitions ---
-		if (aiState != AIState::Chase)
+		// --- Chase state machine (acquire/lose + forget timer) ---
+		if (!chasing)
 		{
-			// acquire aggro
-			if (distToPlayer <= aggroRange)
+			if (dist <= chaseAcquireRange)
 			{
-				aiState = AIState::Chase;
-				forgetTimer = 0.0f;
+				chasing = true;
+				timeSinceSeen = 0.0f;
 				repathTimer = 0.0f;
-				pathTiles.clear();
+				path.clear();
 				pathIndex = 0;
+				lastGoalTile = {-9999,-9999};
 			}
 		}
 		else
 		{
-			// already chasing: forget logic
-			if (distToPlayer > loseRange)
+			// keep chasing while reasonably close
+			if (dist <= chaseLoseRange)
 			{
-				forgetTimer += deltaTime;
-				if (forgetTimer >= forgetTime)
-				{
-					aiState = AIState::Wander;
-					pathTiles.clear();
-					pathIndex = 0;
-					wanderTimer = 0.0f;
-				}
+				timeSinceSeen = 0.0f;
 			}
 			else
 			{
-				forgetTimer = 0.0f;
+				timeSinceSeen += deltaTime;
+				if (timeSinceSeen >= forgetAfterSec)
+				{
+					chasing = false;
+					path.clear();
+					pathIndex = 0;
+					lastGoalTile = {-9999,-9999};
+				}
 			}
 		}
 
-		// --- Behaviour ---
 		glm::vec2 desiredMove(0.0f);
 
-		auto worldToTile = [](const glm::vec2 &p) -> glm::ivec2
+		// --- Movement when chasing ---
+		if (chasing)
 		{
-			return glm::ivec2(int(std::floor(p.x)), int(std::floor(p.y)));
-		};
-		auto tileToWorldCenter = [](const glm::ivec2 &t) -> glm::vec2
-		{
-			return glm::vec2(float(t.x) + 0.5f, float(t.y) + 0.5f);
-		};
+			glm::ivec2 eTile = worldToTile(enemyPos);
+			glm::ivec2 pTile = worldToTile(playerPos);
 
-		if (aiState == AIState::Chase)
-		{
-			// If close enough: stop (this is where you'd attack later)
-			if (distToPlayer <= attackRange)
+			// 1) "Go directly" if the grid line is clear (this removes the rigid A* “stair step” feel).
+			bool directOk = hasClearGridLine8(map, eTile, pTile);
+
+			glm::vec2 targetPos = playerPos;
+
+			if (!directOk)
 			{
-				desiredMove = glm::vec2(0.0f);
-				pathTiles.clear();
-				pathIndex = 0;
-			}
-			else
-			{
-				// Repath periodically (or if we have no path)
+				// 2) Otherwise fall back to your old A* (unchanged) and follow path.
 				repathTimer -= deltaTime;
-				if (repathTimer <= 0.0f || pathTiles.empty() || pathIndex >= (int)pathTiles.size())
+
+				// Repath if timer elapsed OR goal tile changed OR path finished.
+				if (repathTimer <= 0.0f || pTile != lastGoalTile || pathIndex >= (int)path.size())
 				{
-					repathTimer = repathInterval;
+					repathTimer = repathEverySec;
+					lastGoalTile = pTile;
 
-					const glm::ivec2 start = worldToTile(myPos);
-					const glm::ivec2 goal = worldToTile(plPos);
-
-					pathTiles = findPathAStar8(map, start, goal);
+					path = findPathAStar8(map, eTile, pTile);
 					pathIndex = 0;
 				}
 
-				// Follow path
-				if (!pathTiles.empty() && pathIndex < (int)pathTiles.size())
+				// If we have a path, target the next step center.
+				if (!path.empty() && pathIndex < (int)path.size())
 				{
-					glm::vec2 waypoint = tileToWorldCenter(pathTiles[pathIndex]);
-					glm::vec2 toWp = waypoint - myPos;
-					float d = glm::length(toWp);
-
-					if (d <= arriveEps)
+					// Skip nodes we already reached (prevents tiny left-then-diagonal jitters near tile borders)
+					while (pathIndex < (int)path.size())
 					{
-						pathIndex++;
-						if (pathIndex < (int)pathTiles.size())
-						{
-							waypoint = tileToWorldCenter(pathTiles[pathIndex]);
-							toWp = waypoint - myPos;
-							d = glm::length(toWp);
-						}
+						glm::vec2 c = tileCenter(path[pathIndex]);
+						if (glm::length(c - enemyPos) > 0.15f) break;
+						++pathIndex;
 					}
 
-					if (d > 1e-5f)
-						desiredMove = toWp / d; // normalized
+					if (pathIndex < (int)path.size())
+					{
+						// Also skip a diagonal node if it would corner-cut in practice.
+						// (If blocked, just wait for repath to resolve.)
+						if (pathIndex > 0)
+						{
+							glm::ivec2 from = (pathIndex == 0) ? eTile : path[pathIndex - 1];
+							glm::ivec2 to = path[pathIndex];
+							if (!isCornerCutBlocked(map, from, to))
+								targetPos = tileCenter(to);
+						}
+						else
+						{
+							targetPos = tileCenter(path[pathIndex]);
+						}
+					}
 				}
+			}
+
+			// Steering (smooth turns so it feels less robotic even when path corners)
+			glm::vec2 wantDir = safeNormalize(targetPos - enemyPos);
+			float blend = 1.0f - std::exp(-turnRate * deltaTime); // framerate-independent
+			glm::vec2 blended = safeNormalize(glm::mix(moveDir, wantDir, blend));
+			if (glm::dot(blended, blended) > 0.0f) moveDir = blended;
+
+			desiredMove = moveDir * speed;
+		}
+		else
+		{
+			// --- Not chasing: wander OR stay put (requested bool option) ---
+			if (wanderWhenIdle)
+			{
+				wanderTimer -= deltaTime;
+				if (wanderTimer <= 0.0f)
+				{
+					wanderTimer = getRandomFloat(rng, 0.6f, 1.6f);
+
+					// pick one of 8 directions
+					static const glm::vec2 dirs[8] = {
+						{ 1, 0}, {-1, 0}, {0, 1}, {0,-1},
+						{ 1, 1}, { 1,-1}, {-1, 1}, {-1,-1}
+					};
+					moveDir = safeNormalize(dirs[getRandomInt(rng, 0, 7)]);
+				}
+
+				// simple “don’t walk into walls” check using next tile
+				glm::vec2 probe = enemyPos + moveDir * 0.35f;
+				glm::ivec2 t = worldToTile(probe);
+				if (!IsBlockedTile(map, t.x, t.y))
+					desiredMove = moveDir * (speed * 0.35f); // slower wander
 				else
-				{
-					// Fallback: no path -> simple direct move (still obeys your collision step)
-					glm::vec2 dir = plPos - myPos;
-					float d = glm::length(dir);
-					if (d > 1e-5f) desiredMove = dir / d;
-				}
+					desiredMove = glm::vec2(0.0f);
 			}
-		}
-		else // Wander / random behaviour
-		{
-			wanderTimer -= deltaTime;
-
-			// Pick a new wander target sometimes (or if reached)
-			const float reached = glm::length(wanderTargetWorld - myPos);
-			if (wanderTimer <= 0.0f || reached < 0.3f)
+			else
 			{
-				wanderTimer = getRandomFloat(rng, 0.8f, 2.2f);
-
-				// Choose a random nearby tile that isn't collidable
-				const glm::ivec2 base = worldToTile(myPos);
-				const int r = getRandomInt(rng, 2, 6);
-
-				for (int tries = 0; tries < 12; ++tries)
-				{
-					const int ox = getRandomInt(rng, -r, r);
-					const int oy = getRandomInt(rng, -r, r);
-					glm::ivec2 t = base + glm::ivec2(ox, oy);
-
-					if (t.x < 0 || t.y < 0 || t.x >= map.size.x || t.y >= map.size.y) continue;
-					if (map.isCollidableAtPosSafe(t.x, t.y)) continue;
-
-					wanderTargetWorld = tileToWorldCenter(t);
-					break;
-				}
-			}
-
-			glm::vec2 dir = wanderTargetWorld - myPos;
-			float d = glm::length(dir);
-			if (d > 1e-5f)
-			{
-				desiredMove = dir / d;
-
-				// Add a little “messiness” sometimes
-				if (getRandomChance(rng, 0.06f))
-				{
-					desiredMove += glm::vec2(getRandomFloat(rng, -0.6f, 0.6f),
-						getRandomFloat(rng, -0.6f, 0.6f));
-					float m = glm::length(desiredMove);
-					if (m > 1e-5f) desiredMove /= m;
-				}
+				desiredMove = glm::vec2(0.0f);
 			}
 		}
 
-		// --- Apply movement (simple) ---
-		// You said: "just add to the position to move * deltaTime * speed"
-		// If your collision helper expects velocity instead, swap this to set velocity.
-		if (glm::length(desiredMove) > 1e-5f)
+		// Apply desired movement (you said “just add to the position to move * deltaTime * speed”)
+		if (glm::dot(desiredMove, desiredMove) > 0.0f)
 		{
-			glm::vec2 newPos = myPos + desiredMove * (deltaTime * moveSpeed);
-			physics.getPos() = newPos;
+			physics.getPos() += desiredMove * deltaTime;
 		}
+
+		animator.setAnimationBasedOnMovement(desiredMove);
 
 		basicPhysicsAndCollisionsCheck(deltaTime, map);
 		return true;
