@@ -401,16 +401,19 @@ namespace gl2d
 	{
 		FrameBuffer() {};
 		explicit FrameBuffer(int w, int h) { create(w, h); };
-		explicit FrameBuffer(unsigned int fbo):fbo(fbo) {};
 
-		unsigned int fbo = 0;
+		//unsigned int fbo = 0; anything SDL related
+
+		//texture is just 
+		//struct Texture
+		//{ SDL_Texture *tex = nullptr;
+		//I want to use it to render the result frame buffer to screen
 		Texture texture = {};
-		Texture depthTexture = {};
 
 		int w = 0;
 		int h = 0;
 
-		void create(int w, int h, bool hasDepth = 0, bool nearestFilter = 0);
+		void create(int w, int h, bool nearestFilter = 1);
 		void resize(int w, int h);
 
 		//clears resources
@@ -418,6 +421,10 @@ namespace gl2d
 
 		//clears colors
 		void clear();
+
+		void bind();
+
+		void unbind();
 	};
 
 

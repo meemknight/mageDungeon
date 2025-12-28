@@ -81,6 +81,11 @@ struct ParticleInstance
 
 struct ParticleSystem
 {
+	
+	void clear();  //todo
+
+
+	gl2d::FrameBuffer fbo;
 
 	int maxCount = 50;
 
@@ -92,7 +97,6 @@ struct ParticleSystem
 
 	void emitParticles(const ParticleSettings &particle, glm::vec2 pos, 
 		std::ranlux24_base &rng, glm::vec2 parentPos);
-
 
 	void copyParticles(ParticleSystem &other, std::ranlux24_base &rng, glm::vec2 parentPos)
 	{
@@ -117,3 +121,4 @@ struct ParticleSystem
 	}
 
 };
+

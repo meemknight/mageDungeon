@@ -206,7 +206,7 @@ int main(int, char **)
 
 	window = SDL_CreateWindow(
 		"geam",
-		500, 500,
+		800, 800,
 		SDL_WINDOW_RESIZABLE
 	);
 

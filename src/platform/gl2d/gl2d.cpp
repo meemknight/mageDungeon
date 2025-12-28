@@ -537,29 +537,31 @@ namespace gl2d
 		FrameBuffer frameBuffer, bool clearDrawData)
 	{
 
+		//todo SDL3
+
 		//if (frameBuffer.fbo == 0)
 		//{
 		//	frameBuffer.fbo = defaultFBO;
 		//}
 
-		if (postProcesses.empty())
-		{
-			if (clearDrawData)
-			{
-				this->clearDrawData();
-				return;
-			}
-		}
-
-		if (!postProcessFbo1.fbo) { postProcessFbo1.create(windowW, windowH); }
-
-		postProcessFbo1.resize(windowW, windowH);
-		postProcessFbo1.clear();
-
-		flushFBO(postProcessFbo1, clearDrawData);
-
-		internalPostProcessFlip = 1;
-		postProcessOverATexture(postProcesses, postProcessFbo1.texture, frameBuffer);
+		//if (postProcesses.empty())
+		//{
+		//	if (clearDrawData)
+		//	{
+		//		this->clearDrawData();
+		//		return;
+		//	}
+		//}
+		//
+		//if (!postProcessFbo1.fbo) { postProcessFbo1.create(windowW, windowH); }
+		//
+		//postProcessFbo1.resize(windowW, windowH);
+		//postProcessFbo1.clear();
+		//
+		//flushFBO(postProcessFbo1, clearDrawData);
+		//
+		//internalPostProcessFlip = 1;
+		//postProcessOverATexture(postProcesses, postProcessFbo1.texture, frameBuffer);
 
 	}
 
@@ -567,65 +569,67 @@ namespace gl2d
 		gl2d::Texture in,
 		FrameBuffer frameBuffer)
 	{
-		if (postProcesses.empty())
-		{
-			return;
-		}
+		//todo SDL3
 
-
-		if (!postProcessFbo1.fbo) { postProcessFbo1.create(0, 0); }
-		if (!postProcessFbo2.fbo && postProcesses.size() > 1)
-		{
-			postProcessFbo2.create(0, 0);
-		}
-
-		if (internalPostProcessFlip == 0)
-		{
-			postProcessFbo1.resize(windowW, windowH);
-			postProcessFbo1.clear();
-			postProcessFbo2.resize(windowW, windowH);
-			postProcessFbo2.clear();
-		}
-		else if (postProcessFbo2.fbo)
-		{
-			//postProcessFbo1 has already been resized
-			postProcessFbo2.resize(windowW, windowH);
-			postProcessFbo2.clear();
-		}
-
-		for (int i = 0; i < postProcesses.size(); i++)
-		{
-			gl2d::FrameBuffer output;
-			gl2d::Texture input;
-
-			if (internalPostProcessFlip == 0)
-			{
-				input = postProcessFbo2.texture;
-				output = postProcessFbo1;
-			}
-			else
-			{
-				input = postProcessFbo1.texture;
-				output = postProcessFbo2;
-			}
-
-			if (i == 0)
-			{
-				input = in;
-			}
-
-			if (i == postProcesses.size() - 1)
-			{
-				output = frameBuffer;
-			}
-			output.clear();
-
-			renderPostProcess(postProcesses[i], input, output);
-			internalPostProcessFlip = !internalPostProcessFlip;
-		}
-
-
-		internalPostProcessFlip = 0;
+		//if (postProcesses.empty())
+		//{
+		//	return;
+		//}
+		//
+		//
+		//if (!postProcessFbo1.fbo) { postProcessFbo1.create(0, 0); }
+		//if (!postProcessFbo2.fbo && postProcesses.size() > 1)
+		//{
+		//	postProcessFbo2.create(0, 0);
+		//}
+		//
+		//if (internalPostProcessFlip == 0)
+		//{
+		//	postProcessFbo1.resize(windowW, windowH);
+		//	postProcessFbo1.clear();
+		//	postProcessFbo2.resize(windowW, windowH);
+		//	postProcessFbo2.clear();
+		//}
+		//else if (postProcessFbo2.fbo)
+		//{
+		//	//postProcessFbo1 has already been resized
+		//	postProcessFbo2.resize(windowW, windowH);
+		//	postProcessFbo2.clear();
+		//}
+		//
+		//for (int i = 0; i < postProcesses.size(); i++)
+		//{
+		//	gl2d::FrameBuffer output;
+		//	gl2d::Texture input;
+		//
+		//	if (internalPostProcessFlip == 0)
+		//	{
+		//		input = postProcessFbo2.texture;
+		//		output = postProcessFbo1;
+		//	}
+		//	else
+		//	{
+		//		input = postProcessFbo1.texture;
+		//		output = postProcessFbo2;
+		//	}
+		//
+		//	if (i == 0)
+		//	{
+		//		input = in;
+		//	}
+		//
+		//	if (i == postProcesses.size() - 1)
+		//	{
+		//		output = frameBuffer;
+		//	}
+		//	output.clear();
+		//
+		//	renderPostProcess(postProcesses[i], input, output);
+		//	internalPostProcessFlip = !internalPostProcessFlip;
+		//}
+		//
+		//
+		//internalPostProcessFlip = 0;
 	}
 
 
@@ -2211,16 +2215,32 @@ namespace gl2d
 		return r;
 	}
 
-	void FrameBuffer::create(int w, int h, bool hasDepth, bool nearestFilter)
+
+	void FrameBuffer::create(int w, int h, bool nearestFilter)
 	{
-		if (w < 0) { w = 0; }
-		if (h < 0) { h = 0; }
+		*this = {};
 
 		this->w = w;
 		this->h = h;
 
-		//TODO SDL3
+		texture.tex = SDL_CreateTexture(
+			platform::getSdlRenderer(),
+			SDL_PIXELFORMAT_RGBA8888,
+			SDL_TEXTUREACCESS_TARGET,
+			w, h
+		);
 
+		if (!texture.tex)
+		{
+			w = h = 0;
+			return;
+		}
+
+		SDL_SetTextureBlendMode(texture.tex, SDL_BLENDMODE_BLEND);
+		SDL_SetTextureScaleMode(
+			texture.tex,
+			nearestFilter ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR
+		);
 	}
 
 	void FrameBuffer::resize(int w, int h)
@@ -2228,23 +2248,43 @@ namespace gl2d
 		if (w < 0) { w = 0; }
 		if (h < 0) { h = 0; }
 
-		//TODO SDL3
+		if (this->w == w && this->h == h) return;
+		create(w, h);
 
 	}
 
 	void FrameBuffer::cleanup()
 	{
-		//TODO SDL3
-
-		*this = {};
+		if (texture.tex)
+		{
+			SDL_DestroyTexture(texture.tex);
+			texture.tex = nullptr;
+		}
+		w = h = 0;
 	}
 
 	void FrameBuffer::clear()
 	{
-		//TODO SDL3
+		// Bind this framebuffer
+		SDL_SetRenderTarget(platform::getSdlRenderer(), texture.tex);
+
+		// Clear using current draw color
+		SDL_RenderClear(platform::getSdlRenderer());
+
+		// Unbind back to main framebuffer
+		SDL_SetRenderTarget(platform::getSdlRenderer(), nullptr);
 
 	}
 
+	void FrameBuffer::bind()
+	{
+		SDL_SetRenderTarget(platform::getSdlRenderer(), texture.tex);
+	}
+
+	void FrameBuffer::unbind()
+	{
+		SDL_SetRenderTarget(platform::getSdlRenderer(), nullptr);
+	}
 
 	glm::vec4 computeTextureAtlas(int xCount, int yCount, int x, int y, bool flip)
 	{

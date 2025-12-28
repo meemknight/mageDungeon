@@ -67,24 +67,24 @@ struct Projectile
 
 			ParticleSettings fireParticle;
 
-			fireParticle.onCreateCount = 5;
-			fireParticle.particleLifeTime = {0.4, 0.7};
+			fireParticle.onCreateCount = 1;
+			fireParticle.particleLifeTime = {0.3, 0.6};
 			fireParticle.velocityX = glm::vec2{-8,8} * PIXEL_SIZE;
-			fireParticle.velocityY = glm::vec2{-4,-6} * PIXEL_SIZE;
-			fireParticle.createApearence.size = glm::vec2{3, 6} *PIXEL_SIZE;
-			fireParticle.endApearence.size = glm::vec2{1, 2} *PIXEL_SIZE;
+			fireParticle.velocityY = glm::vec2{-8,-12} * PIXEL_SIZE;
+			fireParticle.createApearence.size = glm::vec2{5, 7} *PIXEL_SIZE;
+			fireParticle.endApearence.size = glm::vec2{3, 5} *PIXEL_SIZE;
 
 			fireParticle.dragX = glm::vec2{-5,5} * PIXEL_SIZE;
 			fireParticle.dragY = glm::vec2{-50,-80} *PIXEL_SIZE;
 			fireParticle.rotation = {0, 360};
 			fireParticle.rotationSpeed = {0, 10};
 			fireParticle.rotationDrag = {0, 100};
-			fireParticle.createApearence.color1 = {0.8, 0.1, 0.1, 0.5};
-			fireParticle.createApearence.color2 = {0.9, 0.2, 0.2, 0.5};
-			fireParticle.endApearence.color1 = {0.7, 0.6,0.1,1};
-			fireParticle.endApearence.color2 = {0.7, 0.6,0.1,1};
+			fireParticle.createApearence.color1 = glm::vec4{255, 223, 135, 80} / 255.f;
+			fireParticle.createApearence.color2 = glm::vec4{255, 205, 69, 100} / 255.f; 
+			fireParticle.endApearence.color1 = {0.8, 0.1, 0.1, 0.4};
+			fireParticle.endApearence.color2 = {0.9, 0.2, 0.2, 0.5};
 
-			fireParticle.tranzitionType = ParticleSettings::TRANZITION_TYPES::wave;
+			fireParticle.tranzitionType = ParticleSettings::TRANZITION_TYPES::abruptCurbe;
 			fireParticle.positionX = glm::vec2{-2,2} * PIXEL_SIZE;
 			fireParticle.positionY = glm::vec2{-2,2} * PIXEL_SIZE;
 

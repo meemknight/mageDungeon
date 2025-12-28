@@ -1,5 +1,6 @@
 #include "particleSystem.h"
-
+#include <gameplay/Physics.h>
+#include <iostream>
 
 
 void ParticleSystem::emitParticles(const ParticleSettings &particle, glm::vec2 pos, std::ranlux24_base &rng
@@ -62,12 +63,12 @@ void ParticleSystem::emitParticles(const ParticleSettings &particle, glm::vec2 p
 
 float interpolate(float a, float b, float perc)
 {
-	return a * perc + b * (1 - perc);
+	return a * (1-perc) + b * perc;
 }
 
 glm::vec4 interpolate(glm::vec4 a, glm::vec4 b, float perc)
 {
-	return a * perc + b * (1.f - perc);
+	return a * (1-perc) + b * perc;
 }
 
 float calculateLifePercent(ParticleInstance &particleInstance)
@@ -174,6 +175,48 @@ void ParticleSystem::update(float deltaTime)
 void ParticleSystem::render(gl2d::Renderer2D &renderer, glm::vec2 parentPos)
 {
 
+#pragma region post process stuff
+	const bool postProcessEffec = 1;
+	//int pixelateFactor = 5;	
+
+	int pixelateFactor = (PIXEL_SIZE * renderer.currentCamera.zoom);
+	pixelateFactor = std::max(pixelateFactor, 2);
+
+	if (postProcessEffec)
+	{
+		if (!fbo.texture.isValid())
+		{
+			fbo.create(1, 1);
+		}
+	};
+
+	glm::ivec2 oldSize = {renderer.windowW, renderer.windowH};
+
+	// --- FIX (use actual FBO size + real scale) ---
+	int fbW = 1, fbH = 1;
+	float scaleX = 1.0f, scaleY = 1.0f;
+	// ---------------------------------------------
+
+	if (postProcessEffec)
+	{
+		// --- FIX ---
+		fbW = std::max(1, (oldSize.x + pixelateFactor - 1) / pixelateFactor); // ceil div
+		fbH = std::max(1, (oldSize.y + pixelateFactor - 1) / pixelateFactor); // ceil div
+		scaleX = (float)oldSize.x / (float)fbW;
+		scaleY = (float)oldSize.y / (float)fbH;
+		// -----------
+
+		fbo.resize(fbW, fbH);
+		fbo.clear();
+
+		fbo.bind();
+		// --- FIX ---
+		renderer.updateWindowMetrics(fbW, fbH);
+		// -----------
+	};
+	auto cam = renderer.currentCamera;
+#pragma endregion
+
 
 	for (auto &p : particles)
 	{
@@ -184,7 +227,22 @@ void ParticleSystem::render(gl2d::Renderer2D &renderer, glm::vec2 parentPos)
 		glm::vec4 finalColor = interpolate(p.colorEnd, p.colorStart, perc);
 		float finalSize = interpolate(p.sizeEnd, p.sizeStart, perc);
 
-		glm::vec4 aabb = {p.pos - glm::vec2(finalSize/2.f) - p.parentPos + parentPos, finalSize, finalSize};
+		glm::vec4 aabb = {p.pos - glm::vec2(finalSize / 2.f) - p.parentPos + parentPos, finalSize, finalSize};
+
+		if (postProcessEffec)
+		{
+			renderer.currentCamera = cam;
+
+			// --- FIX (divide by real scale, not pixelateFactor) ---
+			aabb.x /= scaleX; aabb.y /= scaleY;
+			aabb.z /= scaleX; aabb.w /= scaleY;
+
+			aabb.x -= renderer.currentCamera.position.x / scaleX;
+			aabb.y -= renderer.currentCamera.position.y / scaleY;
+			// ------------------------------------------------------
+
+			renderer.currentCamera.position = {};
+		}
 
 		if (p.texture.isValid())
 		{
@@ -197,6 +255,20 @@ void ParticleSystem::render(gl2d::Renderer2D &renderer, glm::vec2 parentPos)
 
 	}
 
+	if (postProcessEffec)
+	{
+
+		renderer.currentCamera = cam;
+		renderer.updateWindowMetrics(oldSize.x, oldSize.y);
+		fbo.unbind();
+
+		//SDL_SetTextureAlphaMod(fbo.texture.tex, 255);
+		//SDL_SetTextureBlendMode(fbo.texture.tex, SDL_BLENDMODE_ADD);
+
+		renderer.pushCamera();
+		renderer.renderRectangle({0,0,oldSize.x, oldSize.y}, fbo.texture, Colors_White, {}, {}, {0,0,1,1});
+		renderer.popCamera();
+	};
 
 
 }
