@@ -8,7 +8,7 @@ BlockSettings blockSettings[]
 	BlockSettings{}, //none
 	BlockSettings{}.setTileSet(TileSets::dungeonTileSet).setAtlasPos({2,3}), //floor
 	BlockSettings{}.setTileSet(TileSets::dungeonTileSet).setAtlasPos({2,4}), //floor
-	BlockSettings{}.setTileSet(TileSets::dungeonWall).setAtlasPos({0,0}).setCollidable().setIsWall(), //dungeonWall
+	BlockSettings{}.setTileSet(TileSets::dungeonWall).setAtlasPos({0,0}).setCollidable().setIsWall().setWall3DTileSet(TileSets::dungeonWall3D), //dungeonWall
 	
 	BlockSettings{}.setTileSet(TileSets::grass).setAtlasPos({0,0}).setIsGrass(), //grass
 	BlockSettings{}.setTileSet(TileSets::dirt).setAtlasPos({0,0}).setCanHaveGrassDecals(), //dirt
@@ -17,9 +17,10 @@ BlockSettings blockSettings[]
 	BlockSettings{}.setTileSet(TileSets::dirt).setAtlasPos({1,0}).setCanHaveGrassDecals(), //dirt decoration
 
 	BlockSettings{}.setTileSet(TileSets::fence).setAtlasPos({0,3}).setCollidable().setIsSmallWall() , //fence
-	BlockSettings{}.setTileSet(TileSets::hill).setAtlasPos({0,3}).setCollidable().setIsWall(), //hill
+	BlockSettings{}.setTileSet(TileSets::hill).setAtlasPos({0,3}).setCollidable().setIsWall().setWall3DTileSet(TileSets::hillWall3D), //hill
 
 	BlockSettings{}.setTileSet(TileSets::smallTree).setAtlasPos({0,3}).setCollidable().setChunkyTile(), //smallTree
+	BlockSettings{}.setTileSet(TileSets::stoneWall3D).setAtlasPos({5,3}).setCollidable().setIsWall().setWall3DTileSet(TileSets::stoneWall3D), //cobble stone
 
 
 };
@@ -31,24 +32,32 @@ static_assert(sizeof(blockSettings) / sizeof(blockSettings[0]) ==
 
 glm::ivec2 getBlockAtlasPos(BlockType block)
 {
-	permaAssert(block < Blocks::BLOCKS_COUNT);
-	permaAssert(block >= 0);
+	permaAssertDevelopement(block < Blocks::BLOCKS_COUNT);
+	permaAssertDevelopement(block >= 0);
 
 	return blockSettings[block].atlasPos;
 }
 
 int getTileSetIndex(BlockType block)
 {
-	permaAssert(block < Blocks::BLOCKS_COUNT);
-	permaAssert(block >= 0);
+	permaAssertDevelopement(block < Blocks::BLOCKS_COUNT);
+	permaAssertDevelopement(block >= 0);
 
 	return blockSettings[block].tileSet;
 }
 
+int getWall3DTileSetIndex(BlockType block)
+{
+	permaAssertDevelopement(block < Blocks::BLOCKS_COUNT);
+	permaAssertDevelopement(block >= 0);
+
+	return blockSettings[block].wall3DTileSet;
+}
+
 int isBlockColidable(BlockType block)
 {
-	permaAssert(block < Blocks::BLOCKS_COUNT);
-	permaAssert(block >= 0);
+	permaAssertDevelopement(block < Blocks::BLOCKS_COUNT);
+	permaAssertDevelopement(block >= 0);
 
 	return blockSettings[block].collidable;
 }
@@ -56,8 +65,8 @@ int isBlockColidable(BlockType block)
 //TODO is wall
 bool canHaveGrassDecals(BlockType block)
 {
-	permaAssert(block < Blocks::BLOCKS_COUNT);
-	permaAssert(block >= 0);
+	permaAssertDevelopement(block < Blocks::BLOCKS_COUNT);
+	permaAssertDevelopement(block >= 0);
 
 	return (!blockSettings[block].collidable &&
 		!blockSettings[block].isGrass
@@ -66,24 +75,24 @@ bool canHaveGrassDecals(BlockType block)
 
 bool isGrass(BlockType block)
 {
-	permaAssert(block < Blocks::BLOCKS_COUNT);
-	permaAssert(block >= 0);
+	permaAssertDevelopement(block < Blocks::BLOCKS_COUNT);
+	permaAssertDevelopement(block >= 0);
 
 	return blockSettings[block].isGrass;
 }
 
 bool isWall(BlockType block)
 {
-	permaAssert(block < Blocks::BLOCKS_COUNT);
-	permaAssert(block >= 0);
+	permaAssertDevelopement(block < Blocks::BLOCKS_COUNT);
+	permaAssertDevelopement(block >= 0);
 
 	return blockSettings[block].isWall;
 }
 
 bool isChunkyTile(BlockType block)
 {
-	permaAssert(block < Blocks::BLOCKS_COUNT);
-	permaAssert(block >= 0);
+	permaAssertDevelopement(block < Blocks::BLOCKS_COUNT);
+	permaAssertDevelopement(block >= 0);
 
 	return blockSettings[block].chunkyTile;
 }

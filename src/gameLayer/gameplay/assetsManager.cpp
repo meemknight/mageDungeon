@@ -25,6 +25,7 @@ void AssetsManager::loadAllAssets()
 		16, //hill
 		16, //hill3D
 		0, //smallTree   0 for no texture atlas
+		16, //stoneWall3D
 	};
 
 	//if you see an error that means you added a sprite but forgot to add
@@ -47,6 +48,7 @@ void AssetsManager::loadAllAssets()
 		{1, 1}, //hill
 		{6, 4}, //hill3D
 		{1, 1}, //smallTree
+		{6, 4}, //stone wall 3D
 
 	};
 

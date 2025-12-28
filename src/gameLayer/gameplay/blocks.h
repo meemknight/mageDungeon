@@ -18,6 +18,7 @@ namespace Blocks
 		fence,
 		hill,
 		smallTree,
+		cobbleStoneWall,
 
 		BLOCKS_COUNT
 
@@ -50,6 +51,7 @@ namespace TileSets
 		hill,
 		hillWall3D,
 		smallTree,
+		stoneWall3D,
 		TILE_SETS_COUNT
 	};
 }
@@ -67,6 +69,8 @@ struct BlockSettings
 	bool isWall = 0;
 	bool isSmallWall = 0;
 	bool chunkyTile = 0;
+	int wall3DTileSet = 0; 
+
 
 	BlockSettings &setCollidable()
 	{
@@ -77,6 +81,12 @@ struct BlockSettings
 	BlockSettings &setTileSet(int tileSet)
 	{
 		this->tileSet = tileSet;
+		return *this;
+	}
+
+	BlockSettings &setWall3DTileSet(int wall3DTileSet)
+	{
+		this->wall3DTileSet = wall3DTileSet;
 		return *this;
 	}
 
@@ -122,6 +132,7 @@ struct BlockSettings
 
 glm::ivec2 getBlockAtlasPos(BlockType block);
 int getTileSetIndex(BlockType block);
+int getWall3DTileSetIndex(BlockType block);
 int isBlockColidable(BlockType block);
 
 bool canHaveGrassDecals(BlockType block);

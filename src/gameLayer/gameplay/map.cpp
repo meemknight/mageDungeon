@@ -443,216 +443,227 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 		{
 
 			auto current = getBlockUnsafe(x, y);
-			if (!isWall(current.type))
+			if (isWall(current.type))
 			{
-				continue;
+				bool top = 0;
+				bool top2 = 0;
+				bool bottom = 0;
+				bool left = 0;
+				bool right = 0;
+
+				bool topLeft = 0;
+				bool topRight = 0;
+				bool bottomLeft = 0;
+				bool bottomRight = 0;
+
+				auto b = getBlockSafe(x, y - 1); top = b ? isWall(b->type) : 0;
+				b = getBlockSafe(x, y - 2); top2 = b ? isWall(b->type) : 0;
+				b = getBlockSafe(x, y + 1); bottom = b ? isWall(b->type) : 0;
+				b = getBlockSafe(x - 1, y); left = b ? isWall(b->type) : 0;
+				b = getBlockSafe(x + 1, y); right = b ? isWall(b->type) : 0;
+				b = getBlockSafe(x + 1, y + 1); bottomRight = b ? isWall(b->type) : 0;
+				b = getBlockSafe(x - 1, y + 1); bottomLeft = b ? isWall(b->type) : 0;
+				b = getBlockSafe(x + 1, y - 1); topRight = b ? isWall(b->type) : 0;
+				b = getBlockSafe(x - 1, y - 1); topLeft = b ? isWall(b->type) : 0;
+
+				auto wall = assetManager.tileSets[getWall3DTileSetIndex(current.type)];
+
+				if (left && right && top && bottom)
+				{
+					//fully inclosed
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(2, 1)
+					);
+				
+				}else
+
+				if (left && top)
+				{
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(3, 2)
+					);
+
+				}else if(right &&top)
+				{
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(1, 2)
+					);
+
+				}
+				else if(right && bottom)
+				{
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(1, 0)
+					);
+
+				}
+				else if (left && bottom)
+				{
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(3, 0)
+					);
+
+				}
+				else
+
+
+				if (left && right)
+				{
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(2, 3)
+					);
+
+				}
+				else if (left)
+				{
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(3, 3)
+					);
+				}
+				else if (right)
+				{
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(1, 3)
+					);
+				}else
+				if (bottom && top)
+				{
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(0, 1)
+					);
+
+				}
+				else
+				if (bottom)
+				{
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(0, 0)
+					);
+
+				}else
+				if (top)
+				{
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(0, 2)
+					);
+
+				}
+				else
+				if (!bottom && !left && !right && !top)
+				{
+					//fully open
+					renderer.renderRectangle({x,y-1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(0, 3)
+					);
+				}
+
+
+				//corners
+				if (bottom && left && !bottomLeft)
+				{
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(5, 0)
+					);
+				}
+				if (bottom && right && !bottomRight)
+				{
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(4, 0)
+					);
+				}
+				if (top && left && !topLeft)
+				{
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(5, 1)
+					);
+				}
+				if (top && right && !topRight)
+				{
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(4, 1)
+					);
+				}
 			}
 
-			bool top = 0;
-			bool top2 = 0;
-			bool bottom = 0;
-			bool left = 0;
-			bool right = 0;
-
-			bool topLeft = 0;
-			bool topRight = 0;
-			bool bottomLeft = 0;
-			bool bottomRight = 0;
-
-			auto b = getBlockSafe(x, y - 1); top = b ? isWall(b->type) : 0;
-			b = getBlockSafe(x, y - 2); top2 = b ? isWall(b->type) : 0;
-			b = getBlockSafe(x, y + 1); bottom = b ? isWall(b->type) : 0;
-			b = getBlockSafe(x - 1, y); left = b ? isWall(b->type) : 0;
-			b = getBlockSafe(x + 1, y); right = b ? isWall(b->type) : 0;
-			b = getBlockSafe(x + 1, y + 1); bottomRight = b ? isWall(b->type) : 0;
-			b = getBlockSafe(x - 1, y + 1); bottomLeft = b ? isWall(b->type) : 0;
-			b = getBlockSafe(x + 1, y - 1); topRight = b ? isWall(b->type) : 0;
-			b = getBlockSafe(x - 1, y - 1); topLeft = b ? isWall(b->type) : 0;
-
-			auto wall = assetManager.tileSets[TileSets::dungeonWall3D];
-
-			if (current.type == Blocks::hill)
+			else if (isChunkyTile(current.type))
 			{
-				wall = assetManager.tileSets[TileSets::hillWall3D];
-			}
+				int tileSet = getTileSetIndex(current.type);
+				auto tile = assetManager.tileSets[tileSet];
 
-			if (left && right && top && bottom)
-			{
-				//fully inclosed
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
+				glm::vec4 aabb{x,y,2,1};
+				aabb.x -= 0.5;
+				aabb.y -= 1;
+
+				renderer.renderRectangle(aabb,
+					tile.texture,
+					Colors_White,
 					{},
 					0,
-					wall.atlas.get(2, 1)
-				);
-			
-			}else
-
-			if (left && top)
-			{
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(3, 2)
-				);
-
-			}else if(right &&top)
-			{
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(1, 2)
-				);
-
-			}
-			else if(right && bottom)
-			{
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(1, 0)
-				);
-
-			}
-			else if (left && bottom)
-			{
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(3, 0)
-				);
-
-			}
-			else
-
-
-			if (left && right)
-			{
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(2, 3)
-				);
-
-			}
-			else if (left)
-			{
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(3, 3)
-				);
-			}
-			else if (right)
-			{
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(1, 3)
-				);
-			}else
-			if (bottom && top)
-			{
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(0, 1)
-				);
-
-			}
-			else
-			if (bottom)
-			{
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(0, 0)
-				);
-
-			}else
-			if (top)
-			{
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(0, 2)
-				);
-
-			}
-			else
-			if (!bottom && !left && !right && !top)
-			{
-				//fully open
-				renderer.renderRectangle({x,y-1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(0, 3)
-				);
-			}
-
-
-			//corners
-			if (bottom && left && !bottomLeft)
-			{
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(5, 0)
-				);
-			}
-			if (bottom && right && !bottomRight)
-			{
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(4, 0)
-				);
-			}
-			if (top && left && !topLeft)
-			{
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(5, 1)
-				);
-			}
-			if (top && right && !topRight)
-			{
-				renderer.renderRectangle({x,y - 1,1,1},
-					wall.texture,
-					color,
-					{},
-					0,
-					wall.atlas.get(4, 1)
+					{0,1,1,0.5}
 				);
 			}
 
