@@ -98,11 +98,11 @@ struct Projectile
 		return 1;
 	}
 
-	virtual void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager)
+	virtual void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager, ParticlePostProcessRenderer &particlePostProcessRenderer)
 	{
 		glm::vec4 aabb = physics.getAABB();
 
-		particleSystem.render(renderer, physics.getPos());
+		particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
 
 		renderer.renderRectangleOutline(aabb, {0,0,1,0.8}, 0.02);
 
@@ -140,12 +140,12 @@ struct ProjectileHolder
 
 	}
 
-	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager)
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager, ParticlePostProcessRenderer &particlePostProcessRenderer)
 	{
 
 		for (auto &el : projectiles)
 		{
-			el.render(renderer, assetManager);
+			el.render(renderer, assetManager, particlePostProcessRenderer);
 		}
 
 	}

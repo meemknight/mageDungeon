@@ -2249,6 +2249,8 @@ namespace gl2d
 		if (h < 0) { h = 0; }
 
 		if (this->w == w && this->h == h) return;
+
+		clear();
 		create(w, h);
 
 	}

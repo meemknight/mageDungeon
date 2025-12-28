@@ -78,20 +78,28 @@ struct ParticleInstance
 
 };
 
+struct ParticlePostProcessRenderer
+{
+	void init();
+
+	gl2d::FrameBuffer fbo;
+
+	void updateWindowMetrics(gl2d::Renderer2D &renderer);
+
+	void finalRender(gl2d::Renderer2D &renderer);
+
+};
 
 struct ParticleSystem
 {
-	
-	void clear();  //todo
-
-
-	gl2d::FrameBuffer fbo;
 
 	int maxCount = 50;
 
 	void update(float deltaTime);
 
-	void render(gl2d::Renderer2D &renderer, glm::vec2 parentPos);
+	void render(gl2d::Renderer2D &renderer, 
+		ParticlePostProcessRenderer &postProcessRenderer,
+		glm::vec2 parentPos);
 
 	std::vector<ParticleInstance> particles;
 

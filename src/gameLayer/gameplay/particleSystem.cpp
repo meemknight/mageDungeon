@@ -1,7 +1,7 @@
 #include "particleSystem.h"
 #include <gameplay/Physics.h>
 #include <iostream>
-
+#include <gameLayer.h>
 
 void ParticleSystem::emitParticles(const ParticleSettings &particle, glm::vec2 pos, std::ranlux24_base &rng
 	, glm::vec2 parentPos)
@@ -172,8 +172,11 @@ void ParticleSystem::update(float deltaTime)
 
 }
 
-void ParticleSystem::render(gl2d::Renderer2D &renderer, glm::vec2 parentPos)
+void ParticleSystem::render(gl2d::Renderer2D &renderer, 
+	ParticlePostProcessRenderer &postProcessRenderer,
+	glm::vec2 parentPos)
 {
+	if (particles.empty()) { return; }
 
 #pragma region post process stuff
 	const bool postProcessEffec = 1;
@@ -182,37 +185,20 @@ void ParticleSystem::render(gl2d::Renderer2D &renderer, glm::vec2 parentPos)
 	int pixelateFactor = (PIXEL_SIZE * renderer.currentCamera.zoom);
 	pixelateFactor = std::max(pixelateFactor, 2);
 
-	if (postProcessEffec)
-	{
-		if (!fbo.texture.isValid())
-		{
-			fbo.create(1, 1);
-		}
-	};
-
 	glm::ivec2 oldSize = {renderer.windowW, renderer.windowH};
 
-	// --- FIX (use actual FBO size + real scale) ---
 	int fbW = 1, fbH = 1;
 	float scaleX = 1.0f, scaleY = 1.0f;
-	// ---------------------------------------------
+	fbW = std::max(1, (oldSize.x + pixelateFactor - 1) / pixelateFactor); // ceil div
+	fbH = std::max(1, (oldSize.y + pixelateFactor - 1) / pixelateFactor); // ceil div
+	scaleX = (float)oldSize.x / (float)fbW;
+	scaleY = (float)oldSize.y / (float)fbH;
 
 	if (postProcessEffec)
 	{
-		// --- FIX ---
-		fbW = std::max(1, (oldSize.x + pixelateFactor - 1) / pixelateFactor); // ceil div
-		fbH = std::max(1, (oldSize.y + pixelateFactor - 1) / pixelateFactor); // ceil div
-		scaleX = (float)oldSize.x / (float)fbW;
-		scaleY = (float)oldSize.y / (float)fbH;
-		// -----------
+		postProcessRenderer.fbo.bind();
+		renderer.updateWindowMetrics(postProcessRenderer.fbo.w, postProcessRenderer.fbo.h);
 
-		fbo.resize(fbW, fbH);
-		fbo.clear();
-
-		fbo.bind();
-		// --- FIX ---
-		renderer.updateWindowMetrics(fbW, fbH);
-		// -----------
 	};
 	auto cam = renderer.currentCamera;
 #pragma endregion
@@ -257,18 +243,56 @@ void ParticleSystem::render(gl2d::Renderer2D &renderer, glm::vec2 parentPos)
 
 	if (postProcessEffec)
 	{
-
 		renderer.currentCamera = cam;
 		renderer.updateWindowMetrics(oldSize.x, oldSize.y);
-		fbo.unbind();
-
-		//SDL_SetTextureAlphaMod(fbo.texture.tex, 255);
-		//SDL_SetTextureBlendMode(fbo.texture.tex, SDL_BLENDMODE_ADD);
-
-		renderer.pushCamera();
-		renderer.renderRectangle({0,0,oldSize.x, oldSize.y}, fbo.texture, Colors_White, {}, {}, {0,0,1,1});
-		renderer.popCamera();
+		postProcessRenderer.fbo.unbind();
 	};
 
+
+}
+
+void ParticlePostProcessRenderer::init()
+{
+
+	fbo.create(1, 1, true);
+
+}
+
+void ParticlePostProcessRenderer::updateWindowMetrics(gl2d::Renderer2D &renderer)
+{
+	//int pixelateFactor = 5;	
+
+	int pixelateFactor = (PIXEL_SIZE * renderer.currentCamera.zoom);
+	pixelateFactor = std::max(pixelateFactor, 2);
+
+	glm::ivec2 oldSize = {renderer.windowW, renderer.windowH};
+
+	// --- FIX (use actual FBO size + real scale) ---
+	int fbW = 1, fbH = 1;
+	float scaleX = 1.0f, scaleY = 1.0f;
+	// ---------------------------------------------
+
+	// --- FIX ---
+	fbW = std::max(1, (oldSize.x + pixelateFactor - 1) / pixelateFactor); // ceil div
+	fbH = std::max(1, (oldSize.y + pixelateFactor - 1) / pixelateFactor); // ceil div
+	scaleX = (float)oldSize.x / (float)fbW;
+	scaleY = (float)oldSize.y / (float)fbH;
+	// -----------
+
+	fbo.resize(fbW, fbH);
+	fbo.clear();
+
+
+}
+
+void ParticlePostProcessRenderer::finalRender(gl2d::Renderer2D &renderer)
+{
+
+	//SDL_SetTextureAlphaMod(fbo.texture.tex, 255);
+	//SDL_SetTextureBlendMode(fbo.texture.tex, SDL_BLENDMODE_ADD);
+
+	renderer.pushCamera();
+	renderer.renderRectangle({0,0, renderer.windowW, renderer.windowH}, fbo.texture, {1,1,1,2}, {}, {}, {0,0,1,1});
+	renderer.popCamera();
 
 }

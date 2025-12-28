@@ -16,6 +16,7 @@ struct GameLogic
 	ProjectileHolder projectiles;
 
 	ParticleSystem particleSystem;
+	ParticlePostProcessRenderer particlePostProcessRenderer;
 
 	//returns false on fail
 	bool init();

@@ -22,6 +22,7 @@ bool GameLogic::init()
 
 	roomGenerator.clear();
 
+	particlePostProcessRenderer.init();
 
 	player.physical.getPos() = {35, 35};
 
@@ -35,6 +36,7 @@ bool GameLogic::update(float deltaTime,
 	AssetsManager &assetsManager)
 {
 	bool exitDungeon = false;
+
 
 #pragma region imgui
 	//ImGui::ShowDemoWindow();
@@ -103,6 +105,9 @@ bool GameLogic::update(float deltaTime,
 		deltaTime * 4.f, 0.00001, 0,
 		renderer.windowW, renderer.windowH);
 
+	particlePostProcessRenderer.updateWindowMetrics(renderer);
+
+#pragma region rendering
 
 	map.renderMap(renderer, assetsManager);
 
@@ -111,13 +116,15 @@ bool GameLogic::update(float deltaTime,
 	player.update(deltaTime);
 	player.render(renderer, assetsManager);
 
-	projectiles.render(renderer, assetsManager);
+	projectiles.render(renderer, assetsManager, particlePostProcessRenderer);
 
-	particleSystem.render(renderer, {});
+	particleSystem.render(renderer, particlePostProcessRenderer, {});
 
+	particlePostProcessRenderer.finalRender(renderer);
 
 	map.renderMapAfterEntities(renderer, assetsManager);
 
+#pragma endregion
 
 
 	// magic ui, todo move
