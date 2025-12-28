@@ -144,7 +144,7 @@ bool GameLogic::update(float deltaTime,
 
 			Projectile p;
 			p.physics.teleport(player.physical.getPos());
-			p.physics.velocity = dir * 10.f;
+			p.physics.velocity = dir * 10.f; //TODO should be selected by the projectile creator
 
 			projectiles.projectiles.push_back(p);
 

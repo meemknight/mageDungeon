@@ -54,6 +54,8 @@ void ParticleSystem::emitParticles(const ParticleSettings &particle, glm::vec2 p
 
 		instance.texture = particle.texture;
 
+		instance.followParent = particle.folowParent;
+
 		particles.push_back(instance);
 
 	}
@@ -213,7 +215,12 @@ void ParticleSystem::render(gl2d::Renderer2D &renderer,
 		glm::vec4 finalColor = interpolate(p.colorEnd, p.colorStart, perc);
 		float finalSize = interpolate(p.sizeEnd, p.sizeStart, perc);
 
-		glm::vec4 aabb = {p.pos - glm::vec2(finalSize / 2.f) - p.parentPos + parentPos, finalSize, finalSize};
+		glm::vec4 aabb = {p.pos - glm::vec2(finalSize / 2.f), finalSize, finalSize};
+
+		if (p.followParent)
+		{
+			aabb += glm::vec4(-p.parentPos + parentPos, glm::vec2(0,0));
+		}
 
 		if (postProcessEffec)
 		{

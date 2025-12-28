@@ -48,8 +48,22 @@ struct ParticleSettings
 
 	unsigned char tranzitionType = TRANZITION_TYPES::linear;
 
+	bool folowParent = true;
+};
+
+struct ParticleEmissionSettings
+{
+	
+	ParticleSettings create;
+
+	ParticleSettings sustain;
+
+	ParticleSettings release;
+
+	float emitTimer = 0.01;
 
 };
+
 
 struct ParticleInstance
 {
@@ -76,6 +90,7 @@ struct ParticleInstance
 
 	gl2d::Texture texture = {};
 
+	bool followParent = true;
 };
 
 struct ParticlePostProcessRenderer

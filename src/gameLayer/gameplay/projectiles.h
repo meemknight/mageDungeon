@@ -6,6 +6,7 @@
 #include <memory>
 #include "particleSystem.h"
 #include <random>
+#include <particles/particleCreator.h>
 
 struct Projectile
 {
@@ -51,46 +52,39 @@ struct Projectile
 		return 1;
 	}
 
-	float particleTimer = 0.1;
+	float particleTimer = 0.0;
+	bool firstTime = 1;
 
 	virtual bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		std::ranlux24_base &rng)
 	{
+		static ParticleEmissionSettings fireEmision = getBasicMagicMissleParticleEmision(Elements::Earth);
 
-		if (!basicPhysicsAndCollisionsCheck(deltaTime, map)) { return 0; }
+		if (firstTime)
+		{
+			firstTime = 0;
+
+			particleSystem.emitParticles(fireEmision.create, physics.getPos(), rng, physics.getPos());
+
+		}
+
+
 
 		particleTimer -= deltaTime;
 		if (particleTimer < 0)
 		{
-			particleTimer += 0.01;
-
-
-			ParticleSettings fireParticle;
-
-			fireParticle.onCreateCount = 1;
-			fireParticle.particleLifeTime = {0.3, 0.6};
-			fireParticle.velocityX = glm::vec2{-8,8} * PIXEL_SIZE;
-			fireParticle.velocityY = glm::vec2{-8,-12} * PIXEL_SIZE;
-			fireParticle.createApearence.size = glm::vec2{5, 7} *PIXEL_SIZE;
-			fireParticle.endApearence.size = glm::vec2{3, 5} *PIXEL_SIZE;
-
-			fireParticle.dragX = glm::vec2{-5,5} * PIXEL_SIZE;
-			fireParticle.dragY = glm::vec2{-50,-80} *PIXEL_SIZE;
-			fireParticle.rotation = {0, 360};
-			fireParticle.rotationSpeed = {0, 10};
-			fireParticle.rotationDrag = {0, 100};
-			fireParticle.createApearence.color1 = glm::vec4{255, 223, 135, 80} / 255.f;
-			fireParticle.createApearence.color2 = glm::vec4{255, 205, 69, 100} / 255.f; 
-			fireParticle.endApearence.color1 = {0.8, 0.1, 0.1, 0.4};
-			fireParticle.endApearence.color2 = {0.9, 0.2, 0.2, 0.5};
-
-			fireParticle.tranzitionType = ParticleSettings::TRANZITION_TYPES::abruptCurbe;
-			fireParticle.positionX = glm::vec2{-2,2} * PIXEL_SIZE;
-			fireParticle.positionY = glm::vec2{-2,2} * PIXEL_SIZE;
-
-			particleSystem.emitParticles(fireParticle, physics.getPos(), rng, physics.getPos());
+			particleTimer += fireEmision.emitTimer;
+			particleSystem.emitParticles(fireEmision.sustain, physics.getPos(), rng, physics.getPos());
 
 		}
+
+		//have chance to emit one particle at least so we keep this last
+		if (!basicPhysicsAndCollisionsCheck(deltaTime, map)) 
+		{
+			particleSystem.emitParticles(fireEmision.release, physics.getPos(), rng, physics.getPos());
+			return 0; 
+		}
+
 
 		particleSystem.update(deltaTime);
 
