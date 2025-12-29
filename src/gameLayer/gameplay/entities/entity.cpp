@@ -1,8 +1,4 @@
-#include "enemy.h"
-#include "enemy.h"
-#include "enemy.h"
-
-
+#include "entity.h"
 
 
 bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,

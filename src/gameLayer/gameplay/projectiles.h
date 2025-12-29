@@ -126,7 +126,7 @@ struct BasicMagicMissle: Projectile
 	float particleTimer = 0.0;
 	bool firstTime = 1;
 
-	ParticleEmissionSettings fireEmision;
+	ParticleEmissionSettings particleEmmision;
 
 	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		std::ranlux24_base &rng) override
@@ -135,9 +135,9 @@ struct BasicMagicMissle: Projectile
 		if (firstTime)
 		{
 			firstTime = 0;
-			fireEmision = getBasicMagicMissleParticleEmision(element);
+			particleEmmision = getBasicMagicMissleParticleEmision(element);
 
-			particleSystem.emitParticles(fireEmision.create, physics.getPos(), rng, physics.getPos());
+			particleSystem.emitParticles(particleEmmision.create, physics.getPos(), rng, physics.getPos());
 		}
 
 
@@ -145,15 +145,15 @@ struct BasicMagicMissle: Projectile
 		particleTimer -= deltaTime;
 		if (particleTimer < 0)
 		{
-			particleTimer += fireEmision.emitTimer;
-			particleSystem.emitParticles(fireEmision.sustain, physics.getPos(), rng, physics.getPos());
+			particleTimer += particleEmmision.emitTimer;
+			particleSystem.emitParticles(particleEmmision.sustain, physics.getPos(), rng, physics.getPos());
 
 		}
 
 		//have chance to emit one particle at least so we keep this last
 		if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
 		{
-			particleSystem.emitParticles(fireEmision.release, physics.getPos(), rng, physics.getPos());
+			particleSystem.emitParticles(particleEmmision.release, physics.getPos(), rng, physics.getPos());
 			return 0;
 		}
 

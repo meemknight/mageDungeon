@@ -1,4 +1,4 @@
-#include <gameplay/enemy.h>
+#include "entity.h"
 
 
 namespace EnemyTypes

@@ -6,7 +6,7 @@
 #include <glui/glui.h>
 #include <unordered_set>
 #include <iostream>
-#include <gameplay/enemy.h>
+#include <gameplay/entities/entity.h>
 #include <gameplay/entities/enemyTypes.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
@@ -30,7 +30,7 @@ bool GameLogic::init()
 	player.physics.getPos() = {35, 35};
 
 
-	enemyHolder.addEnemy(EnemyTypes::getSkeletonEnemy(), {20, 20});
+	enemyHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {20, 20});
 
 
 
@@ -188,23 +188,19 @@ bool GameLogic::update(float deltaTime,
 
 #pragma endregion
 
-
 	// magic ui, todo move
 	{
 		static std::vector<int> elementsLoaded;
 
 		auto fireProjectile = [&]()
 		{
-			glm::vec2 dir = fireDirection;
+			int element = 0;
 
-
-			auto p = BasicMagicMissle();
-			p.physics.velocity = dir * 10.f; //TODO MOVE, the spell should tell this details
-			
 			if(elementsLoaded.size())
-				{p.element = elementsLoaded[0];}
+				{element = elementsLoaded[0];}
 
-			projectiles.addProjectile(p, player.physics.getPos());
+			spellsHolder.addSpell(getBasicMagicMissleSpell(element), 
+				player.physics.getPos(), fireDirection);
 
 		};
 
@@ -588,6 +584,10 @@ bool GameLogic::update(float deltaTime,
 		renderer.popCamera();
 	}
 
+
+	//we want the first frame of the spell to happen in the same frame it was cast
+	spellsHolder.update(deltaTime, map, particleSystem,
+		projectiles, rng, player, fireDirection);
 
 
 	renderer.flush();

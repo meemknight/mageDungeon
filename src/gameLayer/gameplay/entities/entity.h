@@ -1,11 +1,11 @@
 #pragma once
 
 
-#include "Physics.h"
-#include "elements.h"
+#include "gameplay/Physics.h"
+#include "gameplay/elements.h"
 #include <map>
 #include <memory>
-#include "particleSystem.h"
+#include <gameplay/particleSystem.h>
 #include <random>
 #include <particles/particleCreator.h>
 #include <gameplay/characterAnimator.h>
@@ -13,7 +13,7 @@
 #include <gameplay/player.h>
 #include <gameplay/aStar.h>
 
-struct Enemy
+struct Entity
 {
 
 	PhysicalEntity physics{glm::vec2{12.f * PIXEL_SIZE, 12.f * PIXEL_SIZE}};
@@ -22,7 +22,7 @@ struct Enemy
 
 	int element = 0;
 
-	Enemy()
+	Entity()
 	{
 	}
 
@@ -46,7 +46,7 @@ struct Enemy
 struct EnemyHolder
 {
 
-	std::vector<std::unique_ptr<Enemy>> enemies;
+	std::vector<std::unique_ptr<Entity>> entities;
 
 	//void addEnemy(std::unique_ptr<Enemy> &e, glm::vec2 pos)
 	//{
@@ -55,28 +55,28 @@ struct EnemyHolder
 	//}
 
 	template <typename T>
-	void addEnemy(T enemy, glm::vec2 pos)
+	void addEntity(T entity, glm::vec2 pos)
 	{
-		static_assert(std::is_base_of_v<Enemy, T>);
+		static_assert(std::is_base_of_v<Entity, T>);
 
-		auto ptr = std::make_unique<T>(std::move(enemy));
+		auto ptr = std::make_unique<T>(std::move(entity));
 		ptr->physics.teleport(pos);
-		enemies.push_back(std::move(ptr));
+		entities.push_back(std::move(ptr));
 	}
 
 	void update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		std::ranlux24_base &rng, Player &player)
 	{
 
-		for (auto it = enemies.begin(); it != enemies.end(); )
+		for (auto it = entities.begin(); it != entities.end(); )
 		{
-			Enemy &p = **it;
+			Entity &p = **it;
 
 			if (!p.update(deltaTime, map, mainParticleSystem, rng, player))
 			{
 				mainParticleSystem.copyParticles(
 					p.particleSystem, rng, p.physics.getPos());
-				it = enemies.erase(it);
+				it = entities.erase(it);
 				continue;
 			}
 
@@ -87,7 +87,7 @@ struct EnemyHolder
 	void render(gl2d::Renderer2D &renderer, ParticlePostProcessRenderer &particlePostProcessRenderer)
 	{
 
-		for (auto &e : enemies)
+		for (auto &e : entities)
 		{
 			e->render(renderer, particlePostProcessRenderer);
 		}
@@ -98,7 +98,7 @@ struct EnemyHolder
 
 };
 
-struct BasicMeleEnemy : public Enemy
+struct BasicMeleEnemy : public Entity
 {
 
 	TileSet tileSet;
