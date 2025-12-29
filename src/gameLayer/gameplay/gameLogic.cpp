@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include <iostream>
 #include <gameplay/enemy.h>
+#include <gameplay/entities/enemyTypes.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 
@@ -27,6 +28,10 @@ bool GameLogic::init()
 	particlePostProcessRenderer.init();
 
 	player.physics.getPos() = {35, 35};
+
+
+	enemyHolder.addEnemy(EnemyTypes::getSkeletonEnemy(), {20, 20});
+
 
 
 	inGame = true;
@@ -165,10 +170,9 @@ bool GameLogic::update(float deltaTime,
 	map.renderMap(renderer, assetsManager);
 
 
-	static auto enemy = getSkeletonEnemy({20,20});
+	enemyHolder.update(deltaTime, map, particleSystem, rng, player);
+	enemyHolder.render(renderer, particlePostProcessRenderer);
 
-	enemy.update(deltaTime, map, particleSystem, rng, player);
-	enemy.render(renderer, particlePostProcessRenderer);
 
 	//renderer.renderRectangle(player.physical.getAABB(), Colors_Red);
 	player.update(deltaTime);
@@ -194,14 +198,13 @@ bool GameLogic::update(float deltaTime,
 			glm::vec2 dir = fireDirection;
 
 
-			auto p = std::make_unique<BasicMagicMissle>();
-			p->physics.teleport(player.physics.getPos());
-			p->physics.velocity = dir * 10.f; //TODO MOVE, the spell should tell this details
+			auto p = BasicMagicMissle();
+			p.physics.velocity = dir * 10.f; //TODO MOVE, the spell should tell this details
 			
 			if(elementsLoaded.size())
-				{p->element = elementsLoaded[0];}
+				{p.element = elementsLoaded[0];}
 
-			projectiles.projectiles.push_back(std::move(p));
+			projectiles.addProjectile(p, player.physics.getPos());
 
 		};
 

@@ -4,6 +4,7 @@
 #include <gameplay/player.h>
 #include <gameplay/projectiles.h>
 #include "particleSystem.h"
+#include <gameplay/enemy.h>
 
 //this is an instance of the game.
 //This shouldn't load things like textures, those should be load outside
@@ -14,6 +15,7 @@ struct GameLogic
 	Map map;
 	Player player;
 	ProjectileHolder projectiles;
+	EnemyHolder enemyHolder;
 
 	ParticleSystem particleSystem;
 	ParticlePostProcessRenderer particlePostProcessRenderer;

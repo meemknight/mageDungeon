@@ -66,6 +66,16 @@ struct ProjectileHolder
 
 	std::vector<std::unique_ptr<Projectile>> projectiles;
 
+	template <typename T>
+	void addProjectile(T projectile, glm::vec2 pos)
+	{
+		static_assert(std::is_base_of_v<Projectile, T>);
+
+		auto ptr = std::make_unique<T>(std::move(projectile));
+		ptr->physics.teleport(pos);
+		projectiles.push_back(std::move(ptr));
+	}
+
 	void update(float deltaTime,
 		Map &map,
 		ParticleSystem &mainParticleSystem,
