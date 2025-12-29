@@ -56,7 +56,7 @@ struct EntityLifeThings
 struct Entity
 {
 
-	PhysicalEntity physics{glm::vec2{12.f * PIXEL_SIZE, 12.f * PIXEL_SIZE}};
+	PhysicalEntity physics{glm::vec2{12.f * PIXEL_SIZE, 12.f * PIXEL_SIZE}, true};
 	CharacterAnimator animator{glm::vec2(48.f * PIXEL_SIZE,48.f * PIXEL_SIZE)};
 	ParticleSystem particleSystem;
 

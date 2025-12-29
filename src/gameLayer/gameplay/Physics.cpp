@@ -23,7 +23,34 @@ bool checkCollisionRecs(glm::vec4 rec1, glm::vec4 rec2)
 	return collision;
 }
 
+bool checkCollisionCircles(glm::vec2 ca, float da,
+	glm::vec2 cb, float db)
+{
+	const float r = 0.5f * (da + db);
+	const float d2 = glm::dot(ca - cb, ca - cb);
+	return d2 <= r * r;
+}
 
+
+inline float clampf(float v, float lo, float hi)
+{
+	return glm::max(lo, glm::min(v, hi));
+}
+
+// rect = {x,y,w,h}, circle center + DIAMETER
+bool checkCollisionRectCircle(glm::vec4 rect,
+	glm::vec2 c, float d)
+{
+	const float r = 0.5f * d;
+
+	const float closestX = clampf(c.x, rect.x, rect.x + rect.z);
+	const float closestY = clampf(c.y, rect.y, rect.y + rect.w);
+
+	const glm::vec2 p(closestX, closestY);
+	const glm::vec2 diff = c - p;
+
+	return glm::dot(diff, diff) <= r * r;
+}
 
 void PhysicalEntity::updateMove()
 {

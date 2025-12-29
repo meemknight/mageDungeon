@@ -22,6 +22,7 @@ struct Projectile
 	{
 		//basic size
 		physics.transform.size = {PIXEL_SIZE * 8, PIXEL_SIZE * 8};
+		physics.transform.isCircleCollider = true;
 	}
 
 	enum ProjectileTypes

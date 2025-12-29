@@ -9,6 +9,10 @@ bool checkCollisionPointRec(glm::vec2 point, glm::vec4 rec);
 //from raylib
 bool checkCollisionRecs(glm::vec4 rec1, glm::vec4 rec2);
 
+bool checkCollisionCircles(glm::vec2 ca, float da, glm::vec2 cb, float db);
+
+bool checkCollisionRectCircle(glm::vec4 rect, glm::vec2 c, float d);
+
 constexpr static float PIXEL_SIZE = (1.f / 16.f);
 
 struct Transform2D
@@ -28,12 +32,12 @@ struct Transform2D
 	glm::vec2 getBottomRight()  const { return {pos.x + size.x * 0.5f, pos.y + size.y * 0.5f}; }
 
 	//also usefull for rendering
-	glm::vec4 getAABB()
+	glm::vec4 getAABB() const
 	{
 		return {pos.x - size.x * 0.5f, pos.y - size.y * 0.5f, size};
 	}
 
-	bool intersectPoint(glm::vec4 point, float delta = 0)
+	bool intersectPoint(glm::vec4 point, float delta = 0) const
 	{
 		glm::vec4 aabb = getAABB();
 		aabb.x -= delta;
@@ -45,29 +49,59 @@ struct Transform2D
 
 	}
 
-	bool intersectTransform(Transform2D other, float delta = 0)
+	bool intersectTransform(const Transform2D &other, float delta = 0.0f) const
 	{
-		glm::vec4 a = getAABB();
-		glm::vec4 b = other.getAABB();
+		const bool aCircle = this->isCircleCollider;
+		const bool bCircle = other.isCircleCollider;
 
-		a.x -= delta;
-		a.y -= delta;
-		a.z += 2 * delta;
-		a.w += 2 * delta;
+		if (!aCircle && !bCircle)
+		{
+			// Rect vs Rect
+			glm::vec4 a = getAABB();
+			glm::vec4 b = other.getAABB();
 
-		b.x -= delta;
-		b.y -= delta;
-		b.z += 2 * delta;
-		b.w += 2 * delta;
+			a.x -= delta; a.y -= delta; a.z += 2.0f * delta; a.w += 2.0f * delta;
+			b.x -= delta; b.y -= delta; b.z += 2.0f * delta; b.w += 2.0f * delta;
 
-		return checkCollisionRecs(a, b);
+			return checkCollisionRecs(a, b);
+		}
+		else if (aCircle && bCircle)
+		{
+			// Circle vs Circle (DIAMETER)
+			const float da = this->size.x + 2.0f * delta;
+			const float db = other.size.x + 2.0f * delta;
+
+			return checkCollisionCircles(this->pos, da, other.pos, db);
+		}
+		else
+		{
+			// Rect vs Circle
+			const Transform2D &rectT = aCircle ? other : *this;
+			const Transform2D &circleT = aCircle ? *this : other;
+
+			glm::vec4 rect = rectT.getAABB();
+			rect.x -= delta; rect.y -= delta; rect.z += 2.0f * delta; rect.w += 2.0f * delta;
+
+			const float d = circleT.size.x + 2.0f * delta;
+
+			return checkCollisionRectCircle(rect, circleT.pos, d);
+		}
 	}
 
 	void renderCollider(gl2d::Renderer2D &renderer)
 	{
-		renderer.renderRectangleOutline(getAABB(), Colors_Blue, 0.02);
+		if (isCircleCollider)
+		{
+			renderer.renderCircleOutline(pos, size.x / 2, Colors_Blue, 0.02);
+		}
+		else
+		{
+			renderer.renderRectangleOutline(getAABB(), Colors_Blue, 0.02);
+		}
+
 	}
 
+	bool isCircleCollider = 0;
 };
 
 
@@ -75,7 +109,8 @@ struct PhysicalEntity
 {
 	PhysicalEntity() {};
 
-	PhysicalEntity(glm::vec2 size) {transform.size = size; };
+	PhysicalEntity(glm::vec2 size) { transform.size = size; };
+	PhysicalEntity(glm::vec2 size, bool circleCollider) { transform.size = size; transform.isCircleCollider = circleCollider; };
 
 
 	Transform2D transform;
