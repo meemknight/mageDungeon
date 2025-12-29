@@ -156,6 +156,10 @@ void PhysicalEntity::checkCollisionOnce(glm::vec2 &pos, Map &mapData)
 	pos = performCollision(mapData, {newPos.x, pos.y}, {0, delta.y});
 }
 
+
+//TODO fix this, optimize map rendering,
+
+
 glm::vec2 PhysicalEntity::performCollision(Map &mapData, glm::vec2 pos, glm::vec2 delta)
 {
 	int minX = 0;
@@ -186,6 +190,7 @@ glm::vec2 PhysicalEntity::performCollision(Map &mapData, glm::vec2 pos, glm::vec
 				Transform2D entity;
 				entity.pos = pos;
 				entity.size = dimensions;
+				entity.isCircleCollider = transform.isCircleCollider;
 
 				Transform2D block;
 				block.pos = {x + 0.5f, y + 0.5f};
@@ -193,37 +198,43 @@ glm::vec2 PhysicalEntity::performCollision(Map &mapData, glm::vec2 pos, glm::vec
 
 				if (entity.intersectTransform(block, -0.00005f))
 				{
-					if (delta.x != 0)
+					const bool isCircle = entity.isCircleCollider;
+					const float radius = isCircle ? (dimensions.x * 0.5f) : 0.0f;
+
+					if (delta.x != 0.0f)
 					{
-						if (delta.x < 0) // moving left
+						const float extentX = isCircle ? radius : (dimensions.x * 0.5f);
+
+						if (delta.x < 0.0f) // moving left
 						{
 							leftTouch = 1;
-							pos.x = x + 1.f + dimensions.x / 2;
+							pos.x = (x + 1.0f) + extentX; // block right + extent
 							return pos;
 						}
-						else
+						else // moving right
 						{
 							rightTouch = 1;
-							pos.x = x - dimensions.x / 2;
+							pos.x = (float)x - extentX;   // block left - extent
 							return pos;
 						}
 					}
-					else if (delta.y != 0)
+					else if (delta.y != 0.0f)
 					{
-						if (delta.y < 0) //moving up
+						const float extentY = isCircle ? radius : (dimensions.y * 0.5f);
+
+						if (delta.y < 0.0f) // moving up
 						{
 							upTouch = 1;
-							pos.y = y + 1.f + dimensions.y / 2;
+							pos.y = (y + 1.0f) + extentY; // block top + extent
 							return pos;
 						}
-						else
+						else // moving down
 						{
 							downTouch = 1;
-							pos.y = y - dimensions.y / 2;
+							pos.y = (float)y - extentY;   // block bottom - extent
 							return pos;
 						}
 					}
-
 				}
 			}
 
