@@ -8,6 +8,7 @@
 #include <iostream>
 #include <gameplay/entities/entity.h>
 #include <gameplay/entities/enemyTypes.h>
+#include <gameplay/spells/spellTypes.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 
@@ -30,7 +31,7 @@ bool GameLogic::init()
 	player.physics.getPos() = {35, 35};
 
 
-	enemyHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {20, 20});
+	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {20, 20});
 
 
 
@@ -150,7 +151,7 @@ bool GameLogic::update(float deltaTime,
 	player.physics.updateMove();
 
 
-	projectiles.update(deltaTime, map, particleSystem, rng);
+	projectiles.update(deltaTime, map, particleSystem, rng, entityHolder);
 
 
 	particleSystem.update(deltaTime);
@@ -170,8 +171,8 @@ bool GameLogic::update(float deltaTime,
 	map.renderMap(renderer, assetsManager);
 
 
-	enemyHolder.update(deltaTime, map, particleSystem, rng, player);
-	enemyHolder.render(renderer, particlePostProcessRenderer);
+	entityHolder.update(deltaTime, map, particleSystem, rng, player);
+	entityHolder.render(renderer, particlePostProcessRenderer);
 
 
 	//renderer.renderRectangle(player.physical.getAABB(), Colors_Red);
@@ -199,7 +200,7 @@ bool GameLogic::update(float deltaTime,
 			if(elementsLoaded.size())
 				{element = elementsLoaded[0];}
 
-			spellsHolder.addSpell(getBasicMagicMissleSpell(element), 
+			spellsHolder.addSpell(SpellTypes::getBasicMagicMissleSpell(element),
 				player.physics.getPos(), fireDirection);
 
 		};

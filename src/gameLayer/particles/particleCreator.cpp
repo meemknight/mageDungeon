@@ -439,6 +439,7 @@ ParticleEmissionSettings getBasicMagicMissleParticleEmision(int element)
 	//fire
 	ret.sustain = getBasicMagicMissleParticle(color1, color2);
 	ret.emitTimer = 0.01;
+	ret.sustain.folowParent = false;
 	//ret.create = getBasicMagicMissleParticle(color1Create, color2Create);
 	//ret.create.folowParent = false;
 	//

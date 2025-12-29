@@ -2,7 +2,7 @@
 #include <gameplay/map.h>
 #include <gameplay/Physics.h>
 #include <gameplay/player.h>
-#include <gameplay/projectiles.h>
+#include <gameplay/projectiles/projectiles.h>
 #include "particleSystem.h"
 #include <gameplay/entities/entity.h>
 #include <gameplay/spells/spells.h>
@@ -16,7 +16,7 @@ struct GameLogic
 	Map map;
 	Player player;
 	ProjectileHolder projectiles;
-	EnemyHolder enemyHolder;
+	EntityHolder entityHolder;
 	SpellsHolder spellsHolder;
 
 	ParticleSystem particleSystem;

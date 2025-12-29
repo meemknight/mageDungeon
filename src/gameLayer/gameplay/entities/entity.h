@@ -13,12 +13,54 @@
 #include <gameplay/player.h>
 #include <gameplay/aStar.h>
 
+struct HitStats
+{
+	float damage = 0;
+	float pushBack = 0;
+};
+
+struct EntityLifeThings
+{
+
+	EntityLifeThings() {};
+	EntityLifeThings(float l) { setLifeAndMaxLife(l); };
+
+	float life = 10;
+	float maxLife = 10;
+
+	float setLifeAndMaxLife(float l)
+	{
+		life = l;
+		maxLife = l;
+	}
+
+	void computeHit(HitStats hitStats, char hitElement, char hostElement,
+		glm::vec2 hitDirecton,
+		glm::vec2 &outPushBack)
+	{
+		outPushBack = {};
+		if (glm::length(hitDirecton) > 0.00001)
+		{
+			hitDirecton = glm::normalize(hitDirecton);
+			outPushBack = hitDirecton * hitStats.pushBack;
+		}
+
+		life -= hitStats.damage;
+
+
+	}
+
+};
+
+
 struct Entity
 {
 
 	PhysicalEntity physics{glm::vec2{12.f * PIXEL_SIZE, 12.f * PIXEL_SIZE}};
 	CharacterAnimator animator{glm::vec2(48.f * PIXEL_SIZE,48.f * PIXEL_SIZE)};
 	ParticleSystem particleSystem;
+
+	EntityLifeThings life;
 
 	int element = 0;
 
@@ -28,7 +70,7 @@ struct Entity
 
 	void basicPhysicsAndCollisionsCheck(float deltaTime, Map &map)
 	{
-		physics.updateForces(deltaTime);
+		physics.updateForces(deltaTime, 1);
 		physics.resolveConstrains(map);
 		physics.updateMove();
 
@@ -40,10 +82,13 @@ struct Entity
 
 	virtual void render(gl2d::Renderer2D &renderer, ParticlePostProcessRenderer &particlePostProcessRenderer) = 0;
 
+	virtual void onKill() {};
+
+	virtual ~Entity() = default;
 
 };
 
-struct EnemyHolder
+struct EntityHolder
 {
 
 	std::vector<std::unique_ptr<Entity>> entities;
@@ -72,8 +117,12 @@ struct EnemyHolder
 		{
 			Entity &p = **it;
 
-			if (!p.update(deltaTime, map, mainParticleSystem, rng, player))
+			if ((p.life.life <= 0) ||  !p.update(deltaTime, map, mainParticleSystem, rng, player) ||
+				(p.life.life <= 0)
+				)
 			{
+				p.onKill();
+
 				mainParticleSystem.copyParticles(
 					p.particleSystem, rng, p.physics.getPos());
 				it = entities.erase(it);

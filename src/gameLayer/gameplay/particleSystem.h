@@ -135,7 +135,10 @@ struct ParticleSystem
 				p.durationTotal = 4;
 			}
 
-			p.pos += -p.parentPos + parentPos;
+			if (p.followParent)
+			{
+				p.pos += -p.parentPos + parentPos;
+			}
 
 			p.parentPos = {};
 

@@ -188,7 +188,7 @@ void BasicMeleEnemy::render(gl2d::Renderer2D &renderer, ParticlePostProcessRende
 		Colors_White, {}, {}, tileSet.atlas.get(animator.positionX, animator.positionY,
 		animator.flipX));
 
-	renderer.renderRectangleOutline(aabb, Colors_Blue, 0.02);
+	physics.renderCollider(renderer);
 
 
 }

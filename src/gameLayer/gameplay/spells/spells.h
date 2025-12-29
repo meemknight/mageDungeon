@@ -2,7 +2,7 @@
 #include <gameplay/particleSystem.h>
 #include <gameplay/map.h>
 #include <gameplay/player.h>
-#include <gameplay/projectiles.h>
+#include <gameplay/projectiles/projectiles.h>
 
 struct Spell
 {
@@ -12,6 +12,9 @@ struct Spell
 	//how many times it triggers
 	int maxFireCount = 1; //tweak
 	float triggerDelay = 0.4; //tweak
+	float driftAngleDegrees = 0; //tweak
+	int elementsPerCast = 1; //tweak
+
 
 	float triggerTimer = 0; //the counter
 	int currentFireCounter = 0; //the counter
@@ -23,7 +26,6 @@ struct Spell
 		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
 		Player &player, glm::vec2 currentAimDir) = 0;
 
-
 	bool isFirstTime()
 	{
 		return currentFireCounter == 0;
@@ -33,6 +35,8 @@ struct Spell
 	{
 		return currentFireCounter == (maxFireCount - 1);
 	}
+
+	virtual ~Spell() = default;
 };
 
 struct SpellsHolder
@@ -54,43 +58,7 @@ struct SpellsHolder
 
 	void update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		ProjectileHolder &projectileHolder,
-		std::ranlux24_base &rng, Player &player, glm::vec2 currentAimDir)
-	{
-
-		for (auto it = spells.begin(); it != spells.end(); )
-		{
-			Spell &p = **it;
-			if (p.currentFireCounter >= p.maxFireCount)
-			{
-				it = spells.erase(it);
-				continue;
-			}
-
-			p.triggerTimer -= deltaTime;
-
-			if (p.triggerTimer <= 0)
-			{
-				p.triggerTimer += p.triggerDelay;
-
-				if (!p.update(deltaTime, map, mainParticleSystem,
-					projectileHolder, rng, player, currentAimDir))
-				{
-					it = spells.erase(it);
-					continue;
-				}
-
-				p.currentFireCounter++;
-
-				if (p.currentFireCounter >= p.maxFireCount)
-				{
-					it = spells.erase(it);
-					continue;
-				}
-			}
-
-			++it;
-		}
-	}
+		std::ranlux24_base &rng, Player &player, glm::vec2 currentAimDir);
 
 
 };
@@ -99,32 +67,20 @@ struct SpellsHolder
 struct BasicMagicMissleSpell: public Spell
 {
 
+	std::unique_ptr<Projectile> projectile;
+
 	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
 		Player &player, glm::vec2 currentAimDir)
 	{
 
-		auto p = BasicMagicMissle();
-		p.physics.velocity = currentAimDir * 10.f; //TODO MOVE, the spell should tell this details
-		p.element = element;
+		auto pptr = projectile->clone(); // copy dynamic type
+		pptr->physics.velocity = currentAimDir * 10.f;
+		pptr->element = element;
 
-		projectileHolder.addProjectile(p, player.physics.getPos());
+		projectileHolder.addProjectileAsPtr(std::move(pptr), player.physics.getPos());
 
 		return true;
 	};
 
 };
-
-//todo move stuff
-inline BasicMagicMissleSpell getBasicMagicMissleSpell(int element)
-{
-
-	BasicMagicMissleSpell ret;
-
-	ret.element = element;
-	ret.maxFireCount = 1;
-	ret.triggerDelay = 0.1;
-	//todo other stats
-
-	return ret;
-}

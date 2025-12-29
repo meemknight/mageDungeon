@@ -63,6 +63,11 @@ struct Transform2D
 		return checkCollisionRecs(a, b);
 	}
 
+	void renderCollider(gl2d::Renderer2D &renderer)
+	{
+		renderer.renderRectangleOutline(getAABB(), Colors_Blue, 0.02);
+	}
+
 };
 
 
@@ -125,6 +130,11 @@ struct PhysicalEntity
 		}
 
 		acceleration = {};
+	}
+	
+	void renderCollider(gl2d::Renderer2D &renderer)
+	{
+		transform.renderCollider(renderer);
 	}
 
 };

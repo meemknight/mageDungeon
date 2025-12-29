@@ -20,7 +20,7 @@ void Player::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager)
 		Colors_White, {}, {}, assetManager.player.atlas.get(animator.positionX, animator.positionY, 
 		animator.flipX));
 
-	renderer.renderRectangleOutline(aabb, Colors_Blue, 0.02);
+	physics.renderCollider(renderer);
 
 }
 

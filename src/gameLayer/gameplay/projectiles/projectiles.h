@@ -1,12 +1,13 @@
 #pragma once
 
-#include "Physics.h"
-#include "elements.h"
+#include "gameplay/Physics.h"
+#include "gameplay/elements.h"
 #include <map>
 #include <memory>
-#include "particleSystem.h"
+#include "gameplay/particleSystem.h"
 #include <random>
 #include <particles/particleCreator.h>
+#include <gameplay/entities/entity.h>
 
 struct Projectile
 {
@@ -54,12 +55,20 @@ struct Projectile
 
 
 	virtual bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
-		std::ranlux24_base &rng) = 0;
+		std::ranlux24_base &rng, EntityHolder &entityHolder) = 0;
 
 	virtual void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager, ParticlePostProcessRenderer &particlePostProcessRenderer) = 0;
 
+	virtual ~Projectile() = default;
+
+	virtual std::unique_ptr<Projectile> clone() const = 0;
 
 };
+
+//return true if hit
+bool basicProjectileHitEntitiesLogic(PhysicalEntity &physics, 
+	glm::vec2 projectileMoveDirection, char projectileElement,
+	EntityHolder &entities, HitStats hitStats);
 
 struct ProjectileHolder
 {
@@ -76,10 +85,16 @@ struct ProjectileHolder
 		projectiles.push_back(std::move(ptr));
 	}
 
+	void addProjectileAsPtr(std::unique_ptr<Projectile> p, glm::vec2 pos)
+	{
+		p->physics.teleport(pos);
+		projectiles.push_back(std::move(p));
+	}
+
 	void update(float deltaTime,
 		Map &map,
 		ParticleSystem &mainParticleSystem,
-		std::ranlux24_base &rng)
+		std::ranlux24_base &rng, EntityHolder &entityHolder)
 	{
 		for (auto it = projectiles.begin(); it != projectiles.end(); )
 		{
@@ -93,7 +108,7 @@ struct ProjectileHolder
 				continue;
 			}
 
-			if (!p.update(deltaTime, map, mainParticleSystem, rng))
+			if (!p.update(deltaTime, map, mainParticleSystem, rng, entityHolder))
 			{
 				mainParticleSystem.copyParticles(
 					p.particleSystem, rng, p.physics.getPos());
@@ -121,7 +136,13 @@ struct ProjectileHolder
 
 struct BasicMagicMissle: Projectile
 {
+	HitStats hitStats;
 
+	BasicMagicMissle()
+	{
+		hitStats.damage = 2;
+		hitStats.pushBack = 5.2;
+	}
 
 	float particleTimer = 0.0;
 	bool firstTime = 1;
@@ -129,7 +150,7 @@ struct BasicMagicMissle: Projectile
 	ParticleEmissionSettings particleEmmision;
 
 	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
-		std::ranlux24_base &rng) override
+		std::ranlux24_base &rng, EntityHolder &entityHolder) override
 	{
 
 		if (firstTime)
@@ -148,6 +169,13 @@ struct BasicMagicMissle: Projectile
 			particleTimer += particleEmmision.emitTimer;
 			particleSystem.emitParticles(particleEmmision.sustain, physics.getPos(), rng, physics.getPos());
 
+		}
+
+		if (basicProjectileHitEntitiesLogic(physics, physics.velocity,
+			element, entityHolder, hitStats))
+		{
+			//we hit an enemy
+			return 0;
 		}
 
 		//have chance to emit one particle at least so we keep this last
@@ -170,11 +198,13 @@ struct BasicMagicMissle: Projectile
 
 		particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
 
-		renderer.renderRectangleOutline(aabb, {0,0,1,0.8}, 0.02);
-
+		physics.renderCollider(renderer);
 	}
 
-
+	std::unique_ptr<Projectile> clone() const override
+	{
+		return std::make_unique<BasicMagicMissle>(*this); // normal copy
+	}
 
 };
 
