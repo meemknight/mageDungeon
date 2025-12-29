@@ -157,9 +157,7 @@ void PhysicalEntity::checkCollisionOnce(glm::vec2 &pos, Map &mapData)
 }
 
 
-//TODO fix this, optimize map rendering,
-
-
+//TODO fix this, 
 glm::vec2 PhysicalEntity::performCollision(Map &mapData, glm::vec2 pos, glm::vec2 delta)
 {
 	int minX = 0;

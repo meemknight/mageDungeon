@@ -56,6 +56,14 @@ struct SpellsHolder
 		spells.push_back(std::move(ptr));
 	}
 
+	void addSpell(std::unique_ptr<Spell> spell, glm::vec2 createPos, glm::vec2 createAimDir)
+	{
+		spell->createPos = createPos;
+		spell->createAimDir = createAimDir;
+
+		spells.push_back(std::move(spell));
+	}
+
 	void update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		ProjectileHolder &projectileHolder,
 		std::ranlux24_base &rng, Player &player, glm::vec2 currentAimDir);

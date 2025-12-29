@@ -6,6 +6,7 @@
 #include "particleSystem.h"
 #include <gameplay/entities/entity.h>
 #include <gameplay/spells/spells.h>
+#include <gameplay/spells/spellTypes.h>
 
 //this is an instance of the game.
 //This shouldn't load things like textures, those should be load outside
@@ -18,6 +19,7 @@ struct GameLogic
 	ProjectileHolder projectiles;
 	EntityHolder entityHolder;
 	SpellsHolder spellsHolder;
+	SpellRecepie spellRecepie; //current spell recepie;
 
 	ParticleSystem particleSystem;
 	ParticlePostProcessRenderer particlePostProcessRenderer;

@@ -32,6 +32,13 @@ bool GameLogic::init()
 
 
 	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {20, 20});
+	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {22, 20});
+	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {23, 25});
+	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {25, 24});
+	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {22, 25});
+	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {23, 26});
+	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {24, 18});
+	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {25, 18});
 
 
 
@@ -191,24 +198,11 @@ bool GameLogic::update(float deltaTime,
 
 	// magic ui, todo move
 	{
-		static std::vector<int> elementsLoaded;
 
-		auto fireProjectile = [&]()
-		{
-			int element = 0;
-
-			if(elementsLoaded.size())
-				{element = elementsLoaded[0];}
-
-			spellsHolder.addSpell(SpellTypes::getBasicMagicMissleSpell(element),
-				player.physics.getPos(), fireDirection);
-
-		};
 
 		auto tryAddElement = [&](int element)
 		{
-			if(elementsLoaded.size() < 4)
-				elementsLoaded.push_back(element);
+			spellRecepie.add(element, 4);
 		};
 
 
@@ -217,10 +211,12 @@ bool GameLogic::update(float deltaTime,
 
 			//if (elementsLoaded.size())
 			{
-				//cast spell
-				fireProjectile();
+				auto spell =SpellTypes::getSpellFromRecepie(spellRecepie);
 
-				elementsLoaded.clear();
+				spellsHolder.addSpell(std::move(spell),
+				player.physics.getPos(), fireDirection);
+
+				spellRecepie.clear();
 			}
 
 
@@ -572,9 +568,9 @@ bool GameLogic::update(float deltaTime,
 				elementBox.y -= PIXEL_SIZE * 16 * cameraZoom;
 				elementBox.x -= PIXEL_SIZE * 8 * cameraZoom;
 
-				for (auto e : elementsLoaded)
+				for (int i=0; i< spellRecepie.count; i++)
 				{
-					renderer.renderRectangle(elementBox, elementToColor(e));
+					renderer.renderRectangle(elementBox, elementToColor(spellRecepie.elements[i]));
 					elementBox.x += elementSize * 1.5;
 				}
 			}

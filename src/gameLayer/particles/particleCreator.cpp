@@ -146,7 +146,7 @@ ParticleSettings getArcaneTrailParticle(glm::vec4 startColor, glm::vec4 endColor
 // ------------------------------------------------------------
 // 2) Arcane sparks (impact / hit flash)
 // ------------------------------------------------------------
-ParticleSettings getArcaneSparkBurstParticle(glm::vec4 startColor, glm::vec4 endColor)
+ParticleSettings getSparkBurstParticle(glm::vec4 startColor, glm::vec4 endColor)
 {
 	ParticleSettings p;
 
@@ -437,9 +437,22 @@ ParticleEmissionSettings getBasicMagicMissleParticleEmision(int element)
 
 
 	//fire
-	ret.sustain = getBasicMagicMissleParticle(color1, color2);
+
+	if (element == 0)
+	{
+		ret.sustain = getSparkBurstParticle(color1, color2); //small spark for noob spell
+		ret.release = getSparkBurstParticle(color1, color2);
+		ret.release.particleLifeTime *= 2;
+	} 
+	else
+	{
+		ret.sustain = getBasicMagicMissleParticle(color1, color2);
+		ret.release = getBasicMagicMissleParticle(color1, color2);
+		ret.release.particleLifeTime *= 2;
+	}
+
 	ret.emitTimer = 0.01;
-	ret.sustain.folowParent = false;
+	ret.sustain.folowParent = true;
 	//ret.create = getBasicMagicMissleParticle(color1Create, color2Create);
 	//ret.create.folowParent = false;
 	//

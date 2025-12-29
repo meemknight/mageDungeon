@@ -145,6 +145,11 @@ struct BasicMagicMissle: Projectile
 		hitStats.pushBack = 5.2;
 	}
 
+	BasicMagicMissle(HitStats hitStats)
+	{
+		this->hitStats = hitStats;
+	}
+
 	float particleTimer = 0.0;
 	bool firstTime = 1;
 

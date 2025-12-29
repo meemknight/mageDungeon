@@ -115,15 +115,23 @@ void Map::renderMapAfterEntities(gl2d::Renderer2D &renderer, AssetsManager &asse
 
 }
 
-
 void MapLayer::renderMap(gl2d::Renderer2D &renderer,
 	AssetsManager &assetManager)
 {
 
+	auto viewRect = renderer.getViewRect();
+	glm::ivec4 viewRectInt = {};
+	viewRectInt.x = int(viewRect.x) - 1;
+	viewRectInt.y = int(viewRect.y) - 1;
+	viewRectInt.z = int(viewRect.z + 0.5) + 2;
+	viewRectInt.w = int(viewRect.w + 0.5) + 2;
+	viewRectInt.z += viewRect.x;
+	viewRectInt.w += viewRect.y;
+	viewRectInt = glm::clamp(viewRectInt, {0,0,0,0}, {size.x - 1,size.y - 1,size.x - 1,size.y - 1});
 
-	for (int y = 0; y < size.y; y++)
+	for (int y = viewRectInt.y; y < viewRectInt.w; y++)
 	{
-		for (int x = 0; x < size.x; x++)
+		for (int x = viewRectInt.x; x < viewRectInt.z; x++)
 		{
 
 			Block b = getBlockUnsafe(x, y);
@@ -437,9 +445,19 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 
 	glm::vec4 color = {1,1,1,opacity};
 
-	for (int y = 0; y < size.y; y++)
+	auto viewRect = renderer.getViewRect();
+	glm::ivec4 viewRectInt = {};
+	viewRectInt.x = int(viewRect.x) - 1;
+	viewRectInt.y = int(viewRect.y) - 1;
+	viewRectInt.z = int(viewRect.z + 0.5) + 2;
+	viewRectInt.w = int(viewRect.w + 0.5) + 2;
+	viewRectInt.z += viewRect.x;
+	viewRectInt.w += viewRect.y;
+	viewRectInt = glm::clamp(viewRectInt, {0,0,0,0}, {size.x - 1,size.y - 1,size.x - 1,size.y - 1});
+
+	for (int y = viewRectInt.y; y < viewRectInt.w; y++)
 	{
-		for (int x = 0; x < size.x; x++)
+		for (int x = viewRectInt.x; x < viewRectInt.z; x++)
 		{
 
 			auto current = getBlockUnsafe(x, y);

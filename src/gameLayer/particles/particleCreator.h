@@ -25,7 +25,7 @@ glm::vec4 changeColorBrightness(glm::vec4 colorIn, float b);
 ParticleSettings getBasicMagicMissleParticle(glm::vec4 startColor, glm::vec4 endColor);
 
 ParticleSettings getArcaneTrailParticle(glm::vec4 startColor, glm::vec4 endColor);
-ParticleSettings getArcaneSparkBurstParticle(glm::vec4 startColor, glm::vec4 endColor);
+ParticleSettings getSparkBurstParticle(glm::vec4 startColor, glm::vec4 endColor);
 ParticleSettings getHealingMoteParticle(glm::vec4 startColor, glm::vec4 endColor);
 ParticleSettings getFrostShardParticle(glm::vec4 startColor, glm::vec4 endColor);
 ParticleSettings getPoisonMistParticle(glm::vec4 startColor, glm::vec4 endColor);
