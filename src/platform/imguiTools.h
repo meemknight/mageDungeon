@@ -4,7 +4,8 @@
 #include <glm/vec4.hpp>
 
 //change to remove imgui
-#define REMOVE_IMGUI PRODUCTION_BUILD
+//#define REMOVE_IMGUI PRODUCTION_BUILD
+#define REMOVE_IMGUI 0
 
 
 

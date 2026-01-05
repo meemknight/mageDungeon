@@ -80,6 +80,11 @@ namespace SpellTypes
 		ret.triggerDelay = 0.1;
 		ret.projectile = std::make_unique<BasicMagicMissle>(hitStats);
 
+		if (element == 0)
+		{
+			ret.projectile->physics.transform.size *= 0.8f;
+		}
+
 		return ret;
 
 	}
@@ -98,7 +103,7 @@ namespace SpellTypes
 		ret.maxFireCount = 100;
 		ret.elementsPerCast = 3;
 		ret.triggerDelay = 0.03;
-		ret.projectile = std::make_unique<BasicMagicMissle>(hitStats);
+		ret.projectile = std::make_unique<BasicMagicMissle>(hitStats, 2);
 		ret.projectile->timeAlieve = 0.25;
 		ret.driftAngleDegrees = 35.f;
 

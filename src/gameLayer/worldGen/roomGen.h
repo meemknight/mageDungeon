@@ -190,6 +190,53 @@ struct RoomGenerator
 		map.firstLayer.getBlockUnsafe(16, 17).type = Blocks::cobbleStoneWall;
 		map.firstLayer.getBlockUnsafe(17, 17).type = Blocks::cobbleStoneWall;
 
+		for (int y = 0; y < 15; y++)
+		{
+			for (int x = 15; x < 30; x++)
+			{
+				map.firstLayer.getBlockUnsafe(x,y).type = Blocks::floor1;
+			}
+		}
+
+		for (int y = 15; y < 30; y++)
+		{
+			for (int x = 15; x < 30; x++)
+			{
+				map.firstLayer.getBlockUnsafe(x, y).type = Blocks::floor2;
+			}
+		}
+
+		map.firstLayer.getBlockUnsafe(5 + 16, 3).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(5 + 16, 7).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(4 + 16, 7).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(6 + 16, 7).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(8 + 16, 5).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(8 + 16, 6).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(8 + 16, 7).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(12 + 16, 5).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(12 + 16, 6).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(12 + 16, 7).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(11 + 16, 6).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(13 + 16, 6).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(14 + 16, 6).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(14 + 16, 5).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(3 + 16, 11).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(4 + 16, 11).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(6 + 16, 11).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(7 + 16, 11).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(3 + 16, 12).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(7 + 16, 12).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(3 + 16, 15).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(7 + 16, 15).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(3 + 16, 16).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(4 + 16, 16).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(6 + 16, 16).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(7 + 16, 16).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(16 + 16, 16).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(17 + 16, 16).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(16 + 16, 17).type = Blocks::dungeonWall;
+		map.firstLayer.getBlockUnsafe(17 + 16, 17).type = Blocks::dungeonWall;
+
 
 	}
 };

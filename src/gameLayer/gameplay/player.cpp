@@ -14,7 +14,7 @@ void Player::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager)
 	renderPos.y -= (renderPos.w - physics.transform.size.y);
 	renderPos.x -= (renderPos.z - physics.transform.size.x) / 2;
 
-	renderPos.y += PIXEL_SIZE * 2;
+	renderPos.y += PIXEL_SIZE * 10;
 
 	renderer.renderRectangle(renderPos, assetManager.player.texture,
 		Colors_White, {}, {}, assetManager.player.atlas.get(animator.positionX, animator.positionY, 

@@ -131,6 +131,9 @@ void AssetsManager::loadAllAssets()
 	s = elements.texture.GetSize();
 	elements.atlas = gl2d::TextureAtlasPadding(4, 1, s.x, s.y);
 
+	shadow.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "map/shadow.png", 16);
+	s = shadow.texture.GetSize();
+	shadow.atlas = gl2d::TextureAtlasPadding(2, 3, s.x, s.y);
 
 	upCircle.loadFromFile(RESOURCES_PATH "ui/upCircle.png");
 	downCircle.loadFromFile(RESOURCES_PATH "ui/downCircle.png");
@@ -138,6 +141,7 @@ void AssetsManager::loadAllAssets()
 	rightCircle.loadFromFile(RESOURCES_PATH "ui/rightCircle.png");
 
 	particleCircle.loadFromFile(RESOURCES_PATH "circle.png");
+	particleSmoke.loadFromFile(RESOURCES_PATH "smoke.png");
 	target.loadFromFile(RESOURCES_PATH "target.png");
 
 

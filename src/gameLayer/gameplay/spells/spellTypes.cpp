@@ -74,7 +74,8 @@ namespace SpellTypes
 
 	}
 
-
+	//next enemies pushing in one another
+	//cast spells with the initial speed the player casts it
 
 
 };

@@ -150,8 +150,15 @@ struct BasicMagicMissle: Projectile
 		this->hitStats = hitStats;
 	}
 
+	BasicMagicMissle(HitStats hitStats, float particleSizeBias)
+	{
+		this->hitStats = hitStats;
+		this->particleSizeBias = particleSizeBias;
+	}
+
 	float particleTimer = 0.0;
 	bool firstTime = 1;
+	float particleSizeBias = 1;
 
 	ParticleEmissionSettings particleEmmision;
 
@@ -162,7 +169,7 @@ struct BasicMagicMissle: Projectile
 		if (firstTime)
 		{
 			firstTime = 0;
-			particleEmmision = getBasicMagicMissleParticleEmision(element);
+			particleEmmision = getBasicMagicMissleParticleEmision(element, particleSizeBias);
 
 			particleSystem.emitParticles(particleEmmision.create, physics.getPos(), rng, physics.getPos());
 		}

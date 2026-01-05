@@ -20,6 +20,8 @@ struct AssetsManager
 	TileSet skeleton;
 
 	TileSet elements;
+	TileSet shadow;
+
 
 	gl2d::Texture upCircle;
 	gl2d::Texture downCircle;
@@ -27,6 +29,7 @@ struct AssetsManager
 	gl2d::Texture rightCircle;
 
 	gl2d::Texture particleCircle;
+	gl2d::Texture particleSmoke;
 	gl2d::Texture target;
 
 

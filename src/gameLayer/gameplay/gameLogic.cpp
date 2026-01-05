@@ -177,6 +177,7 @@ bool GameLogic::update(float deltaTime,
 
 	map.renderMap(renderer, assetsManager);
 
+	map.renderWallShadows(renderer, assetsManager);
 
 	entityHolder.update(deltaTime, map, particleSystem, rng, player);
 	entityHolder.render(renderer, particlePostProcessRenderer);

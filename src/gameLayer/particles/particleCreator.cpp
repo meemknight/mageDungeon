@@ -156,8 +156,8 @@ ParticleSettings getSparkBurstParticle(glm::vec4 startColor, glm::vec4 endColor)
 	p.velocityX = glm::vec2{-50, 50} *PIXEL_SIZE;
 	p.velocityY = glm::vec2{-50, 50} *PIXEL_SIZE;
 
-	p.createApearence.size = glm::vec2{2, 3} *PIXEL_SIZE;
-	p.endApearence.size = glm::vec2{0.5f, 1.5f} *PIXEL_SIZE;
+	p.createApearence.size = glm::vec2{2.5, 3.5} *PIXEL_SIZE;
+	p.endApearence.size = glm::vec2{0.8f, 2.0f} *PIXEL_SIZE;
 
 	p.dragX = glm::vec2{-120, -200} *PIXEL_SIZE;
 	p.dragY = glm::vec2{-120, -200} *PIXEL_SIZE;
@@ -283,6 +283,7 @@ ParticleSettings getPoisonMistParticle(glm::vec4 startColor, glm::vec4 endColor)
 
 	p.positionX = glm::vec2{-6, 6} *PIXEL_SIZE;
 	p.positionY = glm::vec2{-4, 4} *PIXEL_SIZE;
+	p.texture = getAssetManager().particleSmoke;
 
 	return p;
 }
@@ -395,7 +396,7 @@ ParticleSettings getTeleportPuffParticle(glm::vec4 startColor, glm::vec4 endColo
 	return p;
 }
 
-ParticleEmissionSettings getBasicMagicMissleParticleEmision(int element)
+ParticleEmissionSettings getBasicMagicMissleParticleEmision(int element, float sizeBias)
 {
 
 	ParticleEmissionSettings ret;
@@ -441,17 +442,24 @@ ParticleEmissionSettings getBasicMagicMissleParticleEmision(int element)
 	if (element == 0)
 	{
 		ret.sustain = getSparkBurstParticle(color1, color2); //small spark for noob spell
+		ret.sustain.particleLifeTime /= 2;
+
 		ret.release = getSparkBurstParticle(color1, color2);
 		ret.release.particleLifeTime *= 2;
+		ret.emitTimer = 0.05;
 	} 
 	else
 	{
 		ret.sustain = getBasicMagicMissleParticle(color1, color2);
 		ret.release = getBasicMagicMissleParticle(color1, color2);
 		ret.release.particleLifeTime *= 2;
+		ret.emitTimer = 0.01;
+
 	}
 
-	ret.emitTimer = 0.01;
+	ret.sustain.createApearence.size *= sizeBias;
+	ret.sustain.endApearence.size *= sizeBias;
+
 	ret.sustain.folowParent = true;
 	//ret.create = getBasicMagicMissleParticle(color1Create, color2Create);
 	//ret.create.folowParent = false;

@@ -35,4 +35,4 @@ ParticleSettings getTeleportPuffParticle(glm::vec4 startColor, glm::vec4 endColo
 
 
 
-ParticleEmissionSettings getBasicMagicMissleParticleEmision(int element);
+ParticleEmissionSettings getBasicMagicMissleParticleEmision(int element, float sizeBias = 1);

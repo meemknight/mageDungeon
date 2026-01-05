@@ -107,6 +107,122 @@ void Map::renderMap(gl2d::Renderer2D &renderer, AssetsManager &assetManager)
 
 }
 
+void Map::renderWallShadows(gl2d::Renderer2D &renderer, AssetsManager &assetManager)
+{
+
+	auto viewRect = renderer.getViewRect();
+	glm::ivec4 viewRectInt = {};
+	viewRectInt.x = int(viewRect.x) - 1;
+	viewRectInt.y = int(viewRect.y) - 1;
+	viewRectInt.z = int(viewRect.z + 0.5) + 2;
+	viewRectInt.w = int(viewRect.w + 0.5) + 2;
+	viewRectInt.z += viewRect.x;
+	viewRectInt.w += viewRect.y;
+
+	viewRectInt = glm::clamp(viewRectInt, {0,1,0,0}, {size.x - 1,size.y - 1,size.x - 1,size.y - 2});
+
+	auto &shadow = assetManager.shadow;
+	
+	auto checkIsWall = [&](int x, int y)
+	{
+		return isWall(firstLayer.getBlockUnsafe(x, y).type) ||
+			isWall(secondLayer.getBlockUnsafe(x, y).type);
+	};
+
+	for (int y = viewRectInt.y; y < viewRectInt.w; y++)
+	{
+		for (int x = viewRectInt.x; x < viewRectInt.z; x++)
+		{
+
+			if (!checkIsWall(x, y))
+			{
+
+				bool wallTop = checkIsWall(x, y - 1);
+				bool wallRight = checkIsWall(x + 1, y);
+				bool wallTopRight = checkIsWall(x+1, y - 1);
+				glm::vec4 color = {1,1,1,0.3};
+
+				if (wallTop && wallRight)
+				{
+					renderer.renderRectangle({x,y,1,1},
+						shadow.texture,
+						color,
+						{},
+						0,
+						shadow.atlas.get(1, 2)
+					);
+				}else
+				if (wallRight)
+				{
+
+					if (!wallTopRight)
+					{
+						renderer.renderRectangle({x,y,1,1},
+							shadow.texture,
+							color,
+							{},
+							0,
+							shadow.atlas.get(0, 0)
+						);
+					}
+					else
+					{
+						renderer.renderRectangle({x,y,1,1},
+							shadow.texture,
+							color,
+							{},
+							0,
+							shadow.atlas.get(0, 1)
+						);
+					}
+
+				}else
+				if(wallTop)
+				{
+
+					if (!wallTopRight)
+					{
+						renderer.renderRectangle({x,y,1,1},
+							shadow.texture,
+							color,
+							{},
+							0,
+							shadow.atlas.get(1, 1)
+						);
+					}
+					else
+					{
+						renderer.renderRectangle({x,y,1,1},
+							shadow.texture,
+							color,
+							{},
+							0,
+							shadow.atlas.get(1, 0)
+						);
+					}
+
+				}
+				else if (wallTopRight) //corner
+				{
+					renderer.renderRectangle({x,y,1,1},
+						shadow.texture,
+						color,
+						{},
+						0,
+						shadow.atlas.get(0, 2)
+					);
+				}
+
+
+
+
+			}
+
+		}
+	}
+
+}
+
 void Map::renderMapAfterEntities(gl2d::Renderer2D &renderer, AssetsManager &assetManager)
 {
 
