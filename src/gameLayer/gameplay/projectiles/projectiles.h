@@ -227,11 +227,18 @@ struct BasicMagicMissle: public CloneableProjectile<BasicMagicMissle>
 struct TrapProjectile: public CloneableProjectile<TrapProjectile>
 {
 
+	HitStats hitStats;
 
 	TrapProjectile()
 	{
 		timeAlieve = 20;
 	}
+
+	TrapProjectile(HitStats hitStats): hitStats(hitStats)
+	{
+		timeAlieve = 20;
+	}
+
 
 	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
 		ParticlePostProcessRenderer &particlePostProcessRenderer) override
@@ -246,6 +253,9 @@ struct TrapProjectile: public CloneableProjectile<TrapProjectile>
 			elements.atlas.get(element, 0));
 
 		physics.renderCollider(renderer);
+		auto smallerTransform = physics.transform;
+		smallerTransform.size *= activateRadiousMultiplier;
+		smallerTransform.renderCollider(renderer);
 
 		particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
 
@@ -253,6 +263,9 @@ struct TrapProjectile: public CloneableProjectile<TrapProjectile>
 
 	float particleTimer = 0;
 	float trapRadious = 1.5;
+	constexpr static float activateRadiousMultiplier = 0.8;
+	bool triggered = 0;
+	float triggerTimer = 0.4;
 
 	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		std::ranlux24_base &rng, EntityHolder &entityHolder)
@@ -285,6 +298,48 @@ struct TrapProjectile: public CloneableProjectile<TrapProjectile>
 			}
 
 		}
+
+		//try hit enemies
+		auto projectile = physics.transform;
+
+		auto smallerTransform = physics.transform;
+		smallerTransform.size *= activateRadiousMultiplier;
+
+		if(!triggered)
+		for (auto &e : entityHolder.entities)
+		{
+
+			if (smallerTransform.intersectTransform(e->physics.transform))
+			{
+				triggered = true;
+				break;
+			}
+		}
+
+		if (triggered)
+		{
+			triggerTimer -= deltaTime;
+
+			if (triggerTimer <= 0)
+			{
+				for (auto &e : entityHolder.entities)
+				{
+
+					if (projectile.intersectTransform(e->physics.transform))
+					{
+						//hit enemy
+						glm::vec2 pushBack = {};
+
+						e->life.computeHit(hitStats, element, e->element, {e->physics.getPos() - getPos()}, pushBack);
+						e->physics.velocity += pushBack;
+					}
+
+
+				}
+				return false;
+			};
+		}
+
 
 		particleSystem.update(deltaTime);
 

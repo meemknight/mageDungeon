@@ -18,6 +18,10 @@ namespace SpellTypes
 			{Elements::Ice},	//iceBolt,
 			{Elements::Fire,Elements::Fire,Elements::Fire},	//dragonsBreath,
 			{Elements::Ice,Elements::Ice},	//iceTrap,
+			{Elements::Ice,Elements::Fire},	//fireTrap,
+			{Elements::Ice,Elements::Water},//waterTrap,
+			{Elements::Ice,Elements::Earth},	//earthTrap,
+
 
 
 		};
@@ -63,6 +67,18 @@ namespace SpellTypes
 
 		case iceTrap:
 		return std::make_unique<BasicMagicMissleSpell>(getTrapSpell(Elements::Ice));
+		break;
+
+		case fireTrap:
+		return std::make_unique<BasicMagicMissleSpell>(getTrapSpell(Elements::Fire));
+		break;
+
+		case waterTrap:
+		return std::make_unique<BasicMagicMissleSpell>(getTrapSpell(Elements::Water));
+		break;
+
+		case earthTrap:
+		return std::make_unique<BasicMagicMissleSpell>(getTrapSpell(Elements::Earth));
 		break;
 
 		case none:

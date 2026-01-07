@@ -115,9 +115,13 @@ namespace SpellTypes
 
 		BasicMagicMissleSpell ret;
 
+		HitStats hitStats;
+		//hitStats.pushBack = 0.3;
+		hitStats.damage = 15;
+
 		ret.element = element;
 		ret.throwVelocity = 0;
-		ret.projectile = std::make_unique<TrapProjectile>();
+		ret.projectile = std::make_unique<TrapProjectile>(hitStats);
 		ret.projectile->element = element;
 		
 		return ret;
@@ -133,6 +137,9 @@ namespace SpellTypes
 		iceBolt,
 		dragonsBreath,
 		iceTrap,
+		fireTrap,
+		waterTrap,
+		earthTrap,
 
 		SPELLS_COUNT
 	};
