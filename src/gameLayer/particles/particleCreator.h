@@ -32,6 +32,7 @@ ParticleSettings getPoisonMistParticle(glm::vec4 startColor, glm::vec4 endColor)
 ParticleSettings getLightningZapParticle(glm::vec4 startColor, glm::vec4 endColor);
 ParticleSettings getDarkCurseEmberParticle(glm::vec4 startColor, glm::vec4 endColor);
 ParticleSettings getTeleportPuffParticle(glm::vec4 startColor, glm::vec4 endColor);
+ParticleSettings getSmallSquareParticle(glm::vec4 startColor, glm::vec4 endColor);
 
 
 

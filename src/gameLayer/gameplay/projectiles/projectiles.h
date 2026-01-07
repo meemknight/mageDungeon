@@ -18,20 +18,17 @@ struct Projectile
 	int type = 0;
 	float timeAlieve = 10;
 
+	glm::vec2 &getPos()
+	{
+		return physics.getPos();
+	}
+
 	Projectile()
 	{
 		//basic size
 		physics.transform.size = {PIXEL_SIZE * 8, PIXEL_SIZE * 8};
 		physics.transform.isCircleCollider = true;
 	}
-
-	enum ProjectileTypes
-	{
-		none,
-		fireBolt,
-
-
-	};
 
 	virtual bool runTimer(float deltaTime)
 	{
@@ -133,9 +130,18 @@ struct ProjectileHolder
 
 };
 
+// CRTP mixin that implements clone() for any Derived
+template <class Derived, class Base = Projectile>
+struct CloneableProjectile: Base
+{
+	std::unique_ptr<Projectile> clone() const override
+	{
+		return std::make_unique<Derived>(static_cast<const Derived &>(*this));
+		// or: return std::make_unique<Derived>(*static_cast<const Derived*>(this));
+	}
+};
 
-
-struct BasicMagicMissle: Projectile
+struct BasicMagicMissle: public CloneableProjectile<BasicMagicMissle>
 {
 	HitStats hitStats;
 
@@ -214,10 +220,77 @@ struct BasicMagicMissle: Projectile
 		physics.renderCollider(renderer);
 	}
 
-	std::unique_ptr<Projectile> clone() const override
-	{
-		return std::make_unique<BasicMagicMissle>(*this); // normal copy
-	}
 
 };
 
+
+struct TrapProjectile: public CloneableProjectile<TrapProjectile>
+{
+
+
+	TrapProjectile()
+	{
+		timeAlieve = 20;
+	}
+
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+		ParticlePostProcessRenderer &particlePostProcessRenderer) override
+	{
+		float size = 1;
+		glm::vec4 aabb(getPos() - glm::vec2(size / 2.f), size, size);
+
+		auto &assetManaget = getAssetManager();
+		auto &elements = assetManaget.elements;
+
+		renderer.renderRectangle(aabb, elements.texture, Colors_White, {}, 0,
+			elements.atlas.get(element, 0));
+
+		physics.renderCollider(renderer);
+
+		particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+
+	};
+
+	float particleTimer = 0;
+	float trapRadious = 1.5;
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng, EntityHolder &entityHolder)
+	{
+
+		physics.transform.size = glm::vec2(trapRadious * 2);
+
+		particleTimer -= deltaTime;
+		if (particleTimer < 0)
+		{
+			particleTimer += 0.20;
+			//particleTimer = 1000000;
+
+			auto particle = getSmallSquareParticle(elementToColor(element),
+				elementToSecondaryColor(element));
+			particle.folowParent = false;
+			//particle.particleLifeTime.x = timeAlieve + 0.2;
+			//particle.particleLifeTime.y = timeAlieve + 0.2;
+
+			for (float i = 0; i < 3.14159 * 2; i += 0.3)
+			{
+
+				float dist = trapRadious;
+				glm::vec2 p = getPos() + glm::vec2(std::cos(i), std::sin(i)) * dist;
+
+				if (HasLineOfSightGrid(map, getPos(), p))
+				{
+					particleSystem.emitParticles(particle, p, rng, physics.getPos());
+				}
+			}
+
+		}
+
+		particleSystem.update(deltaTime);
+
+		return true;
+	};
+
+
+
+};

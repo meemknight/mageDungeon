@@ -1,7 +1,4 @@
 #include "spellTypes.h"
-#include "spellTypes.h"
-#include "spellTypes.h"
-
 
 
 
@@ -20,6 +17,7 @@ namespace SpellTypes
 			{Elements::Earth},	//earthBolt,
 			{Elements::Ice},	//iceBolt,
 			{Elements::Fire,Elements::Fire,Elements::Fire},	//dragonsBreath,
+			{Elements::Ice,Elements::Ice},	//iceTrap,
 
 
 		};
@@ -63,6 +61,9 @@ namespace SpellTypes
 		return std::make_unique<BasicMagicMissleSpell>(getBasicBurstSpell(Elements::Fire));
 		break;
 
+		case iceTrap:
+		return std::make_unique<BasicMagicMissleSpell>(getTrapSpell(Elements::Ice));
+		break;
 
 		case none:
 		case sparkBolt:

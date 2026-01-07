@@ -76,9 +76,9 @@ bool HasLineOfSightGrid(Map &map, glm::ivec2 a, glm::ivec2 b)
 		// to avoid cutting corners through blocked cells.
 		if (x0 != xPrev && y0 != yPrev)
 		{
-			// moved diagonally => ensure both adjacent orthogonal tiles aren't blocked
-			if (IsBlockedTile(map, xPrev, y0)) return false;
-			if (IsBlockedTile(map, x0, yPrev)) return false;
+			// Only blocked if the diagonal passes between TWO blockers (tight corner).
+			if (IsBlockedTile(map, xPrev, y0) && IsBlockedTile(map, x0, yPrev))
+				return false;
 		}
 
 		if (IsBlockedTile(map, x0, y0)) return false;

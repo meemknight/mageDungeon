@@ -105,10 +105,12 @@ struct ParticlePostProcessRenderer
 
 };
 
+ParticlePostProcessRenderer &getParticlePostProcessRenderer();
+
 struct ParticleSystem
 {
 
-	int maxCount = 50;
+	int maxCount = 150;
 
 	void update(float deltaTime);
 

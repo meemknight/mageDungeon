@@ -14,7 +14,9 @@ struct Spell
 	float triggerDelay = 0.4; //tweak
 	float driftAngleDegrees = 0; //tweak
 	int elementsPerCast = 1; //tweak
-
+	bool continuousUpdate = false;
+	float continuousUpdateTimer = 10;
+	bool firstTime = true;
 
 	float triggerTimer = 0; //the counter
 	int currentFireCounter = 0; //the counter
@@ -35,6 +37,8 @@ struct Spell
 	{
 		return currentFireCounter == (maxFireCount - 1);
 	}
+
+	virtual void renderBeforeEntities(gl2d::Renderer2D &renderer) { };
 
 	virtual ~Spell() = default;
 };
@@ -68,14 +72,21 @@ struct SpellsHolder
 		ProjectileHolder &projectileHolder,
 		std::ranlux24_base &rng, Player &player, glm::vec2 currentAimDir);
 
+	void renderBeforeEntities(gl2d::Renderer2D &renderer,
+		ParticlePostProcessRenderer &particlePostProcessRenderer);
 
 };
 
 //the most basic spell
 struct BasicMagicMissleSpell: public Spell
 {
+	BasicMagicMissleSpell()
+	{
+		Spell::maxFireCount = 1;
+	}
 
 	std::unique_ptr<Projectile> projectile;
+	float throwVelocity = 10;
 
 	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
@@ -83,12 +94,11 @@ struct BasicMagicMissleSpell: public Spell
 	{
 
 		auto pptr = projectile->clone(); // copy dynamic type
-		pptr->physics.velocity = currentAimDir * 10.f;
+		pptr->physics.velocity = currentAimDir * throwVelocity;
 		pptr->element = element;
 
 		projectileHolder.addProjectileAsPtr(std::move(pptr), player.physics.getPos());
 
 		return true;
 	};
-
 };

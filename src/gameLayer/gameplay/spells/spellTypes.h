@@ -110,6 +110,19 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline BasicMagicMissleSpell getTrapSpell(int element)
+	{
+
+		BasicMagicMissleSpell ret;
+
+		ret.element = element;
+		ret.throwVelocity = 0;
+		ret.projectile = std::make_unique<TrapProjectile>();
+		ret.projectile->element = element;
+		
+		return ret;
+	}
+
 	enum Spells
 	{
 		none,
@@ -119,6 +132,7 @@ namespace SpellTypes
 		earthBolt,
 		iceBolt,
 		dragonsBreath,
+		iceTrap,
 
 		SPELLS_COUNT
 	};

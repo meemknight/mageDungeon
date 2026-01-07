@@ -127,9 +127,9 @@ void AssetsManager::loadAllAssets()
 	s = skeleton.texture.GetSize();
 	skeleton.atlas = gl2d::TextureAtlasPadding(6, 13, s.x, s.y);
 
-	elements.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "characters/elements.png", 16);
+	elements.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "ui/elements.png", 16);
 	s = elements.texture.GetSize();
-	elements.atlas = gl2d::TextureAtlasPadding(4, 1, s.x, s.y);
+	elements.atlas = gl2d::TextureAtlasPadding(5, 1, s.x, s.y);
 
 	shadow.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "map/shadow.png", 16);
 	s = shadow.texture.GetSize();

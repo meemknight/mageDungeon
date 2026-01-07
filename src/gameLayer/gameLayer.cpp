@@ -28,6 +28,16 @@ AssetsManager &getAssetManager()
 	return assetsManager;
 }
 
+ParticlePostProcessRenderer &getParticlePostProcessRenderer()
+{
+	return game.particlePostProcessRenderer;
+}
+
+gl2d::Renderer2D &getRenderer()
+{
+	return renderer;
+}
+
 
 bool initGame(SDL_Renderer *sdlRenderer)
 {

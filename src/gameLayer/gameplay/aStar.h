@@ -28,6 +28,7 @@ static inline bool IsBlockedTile(Map &map, int x, int y)
 	return map.isCollidableAtPosSafe(x, y);
 }
 
+bool HasLineOfSightGrid(Map &map, glm::ivec2 a, glm::ivec2 b);
 
 static bool IsBlockedTileLineOfSight(Map &map, int tx, int ty)
 {

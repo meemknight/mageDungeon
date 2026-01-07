@@ -396,6 +396,41 @@ ParticleSettings getTeleportPuffParticle(glm::vec4 startColor, glm::vec4 endColo
 	return p;
 }
 
+ParticleSettings getSmallSquareParticle(glm::vec4 startColor, glm::vec4 endColor)
+{
+	ParticleSettings p;
+
+	p.onCreateCount = 2;
+	p.particleLifeTime = glm::vec2{0.35f, 0.45f} * 1.f;
+
+	p.velocityX = glm::vec2{-2, 2} *PIXEL_SIZE;
+	p.velocityY = glm::vec2{-10, -11} *PIXEL_SIZE;
+
+	p.createApearence.size = glm::vec2{4, 5} *PIXEL_SIZE;
+	p.endApearence.size = glm::vec2{3.5, 4.5} *PIXEL_SIZE;
+
+	p.dragX = glm::vec2{-35, -55} *PIXEL_SIZE; // pulls inward / damps quickly
+	p.dragY = glm::vec2{-35, -55} *PIXEL_SIZE;
+
+	p.rotation = {0, 360};
+	p.rotationSpeed = {100, 120};
+	//p.rotationDrag = {50, 120};
+
+	p.createApearence.color1 = changeColorBrightness(startColor, 0.15f);
+	p.createApearence.color2 = changeColorBrightness(startColor, -0.10f);
+	p.endApearence.color1 = changeColorBrightness(endColor, 0.10f);
+	p.endApearence.color2 = changeColorBrightness(endColor, -0.15f);
+
+	p.tranzitionType = ParticleSettings::TRANZITION_TYPES::curbe;
+
+	p.positionX = glm::vec2{-2, 2} *PIXEL_SIZE;
+	p.positionY = glm::vec2{-2, 2} *PIXEL_SIZE;
+
+	p.folowParent = false;
+
+	return p;
+}
+
 ParticleEmissionSettings getBasicMagicMissleParticleEmision(int element, float sizeBias)
 {
 

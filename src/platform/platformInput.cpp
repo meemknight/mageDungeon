@@ -338,11 +338,6 @@ void platform::internal::UpdateControllersSDL3(float deltaTime)
 			const SDL_GamepadButton sb = ToSDLButton((Controller::Buttons)b);
 			const bool down = (sb != SDL_GAMEPAD_BUTTON_INVALID) && SDL_GetGamepadButton(pad, sb);
 
-			if (b == Controller::Up)
-			{
-				int a = 0;
-			}
-
 			// mirror your old logic:
 			processEventButton(c.buttons[b], down ? 1 : 0);
 			updateButton(c.buttons[b], deltaTime);
