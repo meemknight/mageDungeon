@@ -33,7 +33,7 @@ add_subdirectory(thirdparty/stb_image)              # loading images
 add_subdirectory(thirdparty/stb_truetype)           # loading ttf files
 add_subdirectory(thirdparty/glm)                    # math
 add_subdirectory(thirdparty/imgui-docking)          # ui
-add_subdirectory(thirdparty/raudio)					#audio
+# add_subdirectory(thirdparty/raudio)					#audio
 add_subdirectory(thirdparty/magic_enum-0.9.3)
 add_subdirectory(thirdparty/FastNoiseSIMD)
 
@@ -46,14 +46,22 @@ set_property(TARGET "${CMAKE_PROJECT_NAME}" PROPERTY CXX_STANDARD 17)
 
 target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC GLFW_INCLUDE_NONE=1)
 
+
+if(EMSCRIPTEN)
+  target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC RESOURCES_PATH="/resources/")
+elseif(PRODUCTION_BUILD)
+  target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC RESOURCES_PATH="./resources/")
+else()
+  target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC RESOURCES_PATH="${CMAKE_CURRENT_SOURCE_DIR}/resources/")
+endif()
+
+
 if(PRODUCTION_BUILD)
   # setup the ASSETS_PATH macro to be in the root folder of your exe
-  target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC RESOURCES_PATH="./resources/")
   target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC PRODUCTION_BUILD=1)
   target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC DEVELOPLEMT_BUILD=0)
 else()
   # This is useful to get an ASSETS_PATH in your IDE during development
-  target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC RESOURCES_PATH="${CMAKE_CURRENT_SOURCE_DIR}/resources/")
   target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC PRODUCTION_BUILD=0)
   target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC DEVELOPLEMT_BUILD=1)
 endif()
@@ -76,7 +84,22 @@ target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE
   stb_truetype
   imgui
   SDL3::SDL3
-  raudio
+  # raudio
   magic_enum
   fastNoiseSIMD
 )
+
+if(EMSCRIPTEN)
+  set(CMAKE_EXECUTABLE_SUFFIX ".html")
+  target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+	"-sALLOW_MEMORY_GROWTH=1"
+	"--preload-file" "${CMAKE_SOURCE_DIR}/resources@/resources"
+  )
+endif()
+
+# no warnings
+if(EMSCRIPTEN)
+  target_compile_options("${CMAKE_PROJECT_NAME}" PRIVATE
+	-w
+  )
+endif()

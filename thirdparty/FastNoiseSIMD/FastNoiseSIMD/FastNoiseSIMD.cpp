@@ -69,10 +69,14 @@
 #if !defined(__aarch64__) && !defined(FN_IOS)
 #include "ARM/cpu-features.h"
 #endif
+#elif defined(__EMSCRIPTEN__)
+/* no cpuid on wasm */
 #else
 #include <cpuid.h>
 #include "inttypes.h"
 #endif
+
+
 
 int FastNoiseSIMD::s_currentSIMDLevel = -1;
 
@@ -85,31 +89,44 @@ int GetFastestSIMD()
 	if (android_getCpuFamily() == ANDROID_CPU_FAMILY_ARM)
 	{
 		auto cpuFeatures = android_getCpuFeatures();
-		
+
 		if (cpuFeatures & ANDROID_CPU_ARM_FEATURE_NEON)
-#ifdef FN_USE_FMA
+		#ifdef FN_USE_FMA
 			if (cpuFeatures & ANDROID_CPU_ARM_FEATURE_NEON_FMA)
-#endif
+			#endif
 				return FN_NEON;
 	}
 
 	return FN_NO_SIMD_FALLBACK;
 #endif
 }
-#else
+#else // !FN_ARM
+
+#if defined(__EMSCRIPTEN__)
+
+int GetFastestSIMD()
+{
+	return FN_NO_SIMD_FALLBACK;
+}
+
+#else  // !__EMSCRIPTEN__
 
 #ifdef _WIN32
-void cpuid(int32_t out[4], int32_t x) {
+void cpuid(int32_t out[4], int32_t x)
+{
 	__cpuidex(out, x, 0);
 }
-uint64_t xgetbv(unsigned int x) {
+uint64_t xgetbv(unsigned int x)
+{
 	return _xgetbv(x);
 }
 #else
-void cpuid(int32_t out[4], int32_t x) {
+void cpuid(int32_t out[4], int32_t x)
+{
 	__cpuid_count(x, 0, out[0], out[1], out[2], out[3]);
 }
-uint64_t xgetbv(unsigned int index) {
+uint64_t xgetbv(unsigned int index)
+{
 	uint32_t eax, edx;
 	__asm__ __volatile__("xgetbv" : "=a"(eax), "=d"(edx) : "c"(index));
 	return ((uint64_t)edx << 32) | eax;
@@ -171,24 +188,28 @@ int GetFastestSIMD()
 		return FN_SSE41;
 
 	// AVX512
-	bool cpuAVX512Support = (cpuInfo[1] & 1 << 16) != 0;		
+	bool cpuAVX512Support = (cpuInfo[1] & 1 << 16) != 0;
 	bool oxAVX512Support = (xgetbv(_XCR_XFEATURE_ENABLED_MASK) & 0xe6) == 0xe6;
 
 	if (!cpuAVX512Support || !oxAVX512Support)
 		return FN_AVX2;
 
-	return FN_AVX512;	
+	return FN_AVX512;
 }
-#endif
 
-FastNoiseSIMD* FastNoiseSIMD::NewFastNoiseSIMD(int seed)
+#endif // __EMSCRIPTEN__
+#endif // FN_ARM
+
+
+
+FastNoiseSIMD *FastNoiseSIMD::NewFastNoiseSIMD(int seed)
 {
 	GetSIMDLevel();
 
 #ifdef FN_COMPILE_NEON
 #ifdef FN_COMPILE_NO_SIMD_FALLBACK
 	if (s_currentSIMDLevel >= FN_NEON)
-#endif
+	#endif
 		return new FastNoiseSIMD_internal::FASTNOISE_SIMD_CLASS(FN_NEON)(seed);
 #endif
 
@@ -210,7 +231,7 @@ FastNoiseSIMD* FastNoiseSIMD::NewFastNoiseSIMD(int seed)
 #ifdef FN_COMPILE_SSE2
 #ifdef FN_COMPILE_NO_SIMD_FALLBACK
 	if (s_currentSIMDLevel >= FN_SSE2)
-#endif
+	#endif
 		return new FastNoiseSIMD_internal::FASTNOISE_SIMD_CLASS(FN_SSE2)(seed);
 #endif
 
@@ -227,19 +248,19 @@ int FastNoiseSIMD::GetSIMDLevel()
 	return s_currentSIMDLevel;
 }
 
-void FastNoiseSIMD::FreeNoiseSet(float* floatArray)
+void FastNoiseSIMD::FreeNoiseSet(float *floatArray)
 {
 #ifdef FN_ALIGNED_SETS
 	GetSIMDLevel();
 
 	if (s_currentSIMDLevel > FN_NO_SIMD_FALLBACK)
-#ifdef _WIN32
+	#ifdef _WIN32
 		_aligned_free(floatArray);
 #else
 		free(floatArray);
 #endif
 	else
-#endif
+	#endif
 		delete[] floatArray;
 }
 
@@ -271,7 +292,7 @@ int FastNoiseSIMD::AlignedSize(int size)
 	return size;
 }
 
-float* FastNoiseSIMD::GetEmptySet(int size)
+float *FastNoiseSIMD::GetEmptySet(int size)
 {
 #ifdef FN_ALIGNED_SETS
 	GetSIMDLevel();
@@ -299,18 +320,18 @@ float* FastNoiseSIMD::GetEmptySet(int size)
 	return new float[size];
 }
 
-FastNoiseVectorSet* FastNoiseSIMD::GetVectorSet(int xSize, int ySize, int zSize)
+FastNoiseVectorSet *FastNoiseSIMD::GetVectorSet(int xSize, int ySize, int zSize)
 {
-	FastNoiseVectorSet* vectorSet = new FastNoiseVectorSet();
+	FastNoiseVectorSet *vectorSet = new FastNoiseVectorSet();
 	FillVectorSet(vectorSet, xSize, ySize, zSize);
 	return vectorSet;
 }
 
-void FastNoiseSIMD::FillVectorSet(FastNoiseVectorSet* vectorSet, int xSize, int ySize, int zSize)
+void FastNoiseSIMD::FillVectorSet(FastNoiseVectorSet *vectorSet, int xSize, int ySize, int zSize)
 {
 	assert(vectorSet);
 
-	vectorSet->SetSize(xSize*ySize*zSize);
+	vectorSet->SetSize(xSize * ySize * zSize);
 	vectorSet->sampleScale = 0;
 
 	int index = 0;
@@ -330,14 +351,14 @@ void FastNoiseSIMD::FillVectorSet(FastNoiseVectorSet* vectorSet, int xSize, int 
 	}
 }
 
-FastNoiseVectorSet* FastNoiseSIMD::GetSamplingVectorSet(int sampleScale, int xSize, int ySize, int zSize)
+FastNoiseVectorSet *FastNoiseSIMD::GetSamplingVectorSet(int sampleScale, int xSize, int ySize, int zSize)
 {
-	FastNoiseVectorSet* vectorSet = new FastNoiseVectorSet();
+	FastNoiseVectorSet *vectorSet = new FastNoiseVectorSet();
 	FillSamplingVectorSet(vectorSet, sampleScale, xSize, ySize, zSize);
 	return vectorSet;
 }
 
-void FastNoiseSIMD::FillSamplingVectorSet(FastNoiseVectorSet* vectorSet, int sampleScale, int xSize, int ySize, int zSize)
+void FastNoiseSIMD::FillSamplingVectorSet(FastNoiseVectorSet *vectorSet, int sampleScale, int xSize, int ySize, int zSize)
 {
 	assert(vectorSet);
 
@@ -371,7 +392,7 @@ void FastNoiseSIMD::FillSamplingVectorSet(FastNoiseVectorSet* vectorSet, int sam
 	ySizeSample = (ySizeSample >> sampleScale) + 1;
 	zSizeSample = (zSizeSample >> sampleScale) + 1;
 
-	vectorSet->SetSize(xSizeSample*ySizeSample*zSizeSample);
+	vectorSet->SetSize(xSizeSample * ySizeSample * zSizeSample);
 	vectorSet->sampleScale = sampleScale;
 
 	int index = 0;
@@ -382,105 +403,105 @@ void FastNoiseSIMD::FillSamplingVectorSet(FastNoiseVectorSet* vectorSet, int sam
 		{
 			for (int iz = 0; iz < zSizeSample; iz++)
 			{
-				vectorSet->xSet[index] = float(ix*sampleSize);
-				vectorSet->ySet[index] = float(iy*sampleSize);
-				vectorSet->zSet[index] = float(iz*sampleSize);
+				vectorSet->xSet[index] = float(ix * sampleSize);
+				vectorSet->ySet[index] = float(iy * sampleSize);
+				vectorSet->zSet[index] = float(iz * sampleSize);
 				index++;
 			}
 		}
 	}
 }
 
-float* FastNoiseSIMD::GetNoiseSet(int xStart, int yStart, int zStart, int xSize, int ySize, int zSize, float scaleModifier)
+float *FastNoiseSIMD::GetNoiseSet(int xStart, int yStart, int zStart, int xSize, int ySize, int zSize, float scaleModifier)
 {
-	float* noiseSet = GetEmptySet(xSize, ySize, zSize);
+	float *noiseSet = GetEmptySet(xSize, ySize, zSize);
 
 	FillNoiseSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
 
 	return noiseSet;
 }
 
-void FastNoiseSIMD::FillNoiseSet(float* noiseSet, int xStart, int yStart, int zStart, int xSize, int ySize, int zSize, float scaleModifier)
+void FastNoiseSIMD::FillNoiseSet(float *noiseSet, int xStart, int yStart, int zStart, int xSize, int ySize, int zSize, float scaleModifier)
 {
 	switch (m_noiseType)
 	{
 	case Value:
-		FillValueSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
-		break;
+	FillValueSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
+	break;
 	case ValueFractal:
-		FillValueFractalSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
-		break;
+	FillValueFractalSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
+	break;
 	case Perlin:
-		FillPerlinSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
-		break;
+	FillPerlinSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
+	break;
 	case PerlinFractal:
-		FillPerlinFractalSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
-		break;
+	FillPerlinFractalSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
+	break;
 	case Simplex:
-		FillSimplexSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
-		break;
+	FillSimplexSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
+	break;
 	case SimplexFractal:
-		FillSimplexFractalSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
-		break;
+	FillSimplexFractalSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
+	break;
 	case WhiteNoise:
-		FillWhiteNoiseSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
-		break;
+	FillWhiteNoiseSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
+	break;
 	case Cellular:
-		FillCellularSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
-		break;
+	FillCellularSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
+	break;
 	case Cubic:
-		FillCubicSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
-		break;
+	FillCubicSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
+	break;
 	case CubicFractal:
-		FillCubicFractalSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
-		break;
+	FillCubicFractalSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, scaleModifier);
+	break;
 	default:
-		break;
+	break;
 	}
 }
 
-void FastNoiseSIMD::FillNoiseSet(float* noiseSet, FastNoiseVectorSet* vectorSet, float xOffset, float yOffset, float zOffset)
+void FastNoiseSIMD::FillNoiseSet(float *noiseSet, FastNoiseVectorSet *vectorSet, float xOffset, float yOffset, float zOffset)
 {
 	switch (m_noiseType)
 	{
 	case Value:
-		FillValueSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
-		break;
+	FillValueSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
+	break;
 	case ValueFractal:
-		FillValueFractalSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
-		break;
+	FillValueFractalSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
+	break;
 	case Perlin:
-		FillPerlinSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
-		break;
+	FillPerlinSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
+	break;
 	case PerlinFractal:
-		FillPerlinFractalSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
-		break;
+	FillPerlinFractalSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
+	break;
 	case Simplex:
-		FillSimplexSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
-		break;
+	FillSimplexSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
+	break;
 	case SimplexFractal:
-		FillSimplexFractalSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
-		break;
+	FillSimplexFractalSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
+	break;
 	case WhiteNoise:
-		FillWhiteNoiseSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
-		break;
+	FillWhiteNoiseSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
+	break;
 	case Cellular:
-		FillCellularSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
-		break;
+	FillCellularSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
+	break;
 	case Cubic:
-		FillCubicSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
-		break;
+	FillCubicSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
+	break;
 	case CubicFractal:
-		FillCubicFractalSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
-		break;
+	FillCubicFractalSet(noiseSet, vectorSet, xOffset, yOffset, zOffset);
+	break;
 	default:
-		break;
+	break;
 	}
 }
 
-float* FastNoiseSIMD::GetSampledNoiseSet(int xStart, int yStart, int zStart, int xSize, int ySize, int zSize, int sampleScale)
+float *FastNoiseSIMD::GetSampledNoiseSet(int xStart, int yStart, int zStart, int xSize, int ySize, int zSize, int sampleScale)
 {
-	float* noiseSet = GetEmptySet(xSize, ySize, zSize);
+	float *noiseSet = GetEmptySet(xSize, ySize, zSize);
 
 	FillSampledNoiseSet(noiseSet, xStart, yStart, zStart, xSize, ySize, zSize, sampleScale);
 
