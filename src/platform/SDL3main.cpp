@@ -22,6 +22,10 @@
 #include "IconsForkAwesome.h"
 #endif
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#endif
+
 #undef min
 #undef max
 
@@ -33,6 +37,9 @@ bool currentFullScreen = false;
 bool fullScreen = false;
 bool windowFocus = true;
 int mouseMovedFlag = 0;
+
+static bool gShouldQuit = false;
+static std::chrono::high_resolution_clock::time_point gLast;
 #pragma endregion
 
 namespace platform
@@ -100,7 +107,6 @@ namespace platform
 	bool hasFocused() { return windowFocus; }
 	bool mouseMoved() { return mouseMovedFlag; }
 
-	// ----- file helpers unchanged -----
 	bool writeEntireFile(const char *name, void *buffer, size_t size)
 	{
 		std::ofstream f(name, std::ios::binary);
@@ -115,7 +121,12 @@ static void handleSDLEvent(const SDL_Event &e)
 	switch (e.type)
 	{
 	case SDL_EVENT_QUIT:
+#ifdef __EMSCRIPTEN__
+	gShouldQuit = true;
+#else
 	exit(0);
+#endif
+	break;
 
 	case SDL_EVENT_WINDOW_FOCUS_GAINED:
 	windowFocus = true;
@@ -146,8 +157,6 @@ static void handleSDLEvent(const SDL_Event &e)
 		bool state = (e.type == SDL_EVENT_KEY_DOWN);
 
 		SDL_Keycode key = e.key.key;
-		//SDL_Keymod  mod = e.key.mod;
-		//SDL_Scancode sc = e.key.scancode;
 
 		if (key >= SDLK_A && key <= SDLK_Z)
 			platform::internal::setButtonState(
@@ -199,39 +208,120 @@ void updateFullscreen()
 	}
 }
 
+static bool tickOneFrame()
+{
+	updateFullscreen();
+
+	SDL_Event e;
+	while (SDL_PollEvent(&e))
+	{
+	#if REMOVE_IMGUI == 0
+		ImGui_ImplSDL3_ProcessEvent(&e);
+	#endif
+		handleSDLEvent(e);
+	}
+
+	auto now = std::chrono::high_resolution_clock::now();
+	float dt = std::chrono::duration<float>(now - gLast).count();
+	gLast = now;
+	dt = std::min(dt, 1.f / 10.f);
+
+#if REMOVE_IMGUI == 0
+	ImGui_ImplSDLRenderer3_NewFrame();
+	ImGui_ImplSDL3_NewFrame();
+	ImGui::NewFrame();
+
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, {});
+	ImGui::PushStyleColor(ImGuiCol_DockingEmptyBg, {});
+	ImGui::DockSpaceOverViewport();
+	ImGui::PopStyleColor(2);
+#endif
+
+	platform::Input input = {};
+	input.deltaTime = dt;
+	input.hasFocus = platform::hasFocused();
+	memcpy(input.buttons, platform::getAllButtons(), sizeof(input.buttons));
+	input.mouseX = platform::getRelMousePosition().x;
+	input.mouseY = platform::getRelMousePosition().y;
+	input.lMouse = platform::getLMouseButton();
+	input.rMouse = platform::getRMouseButton();
+	strlcpy(input.typedInput, platform::getTypedInput(), sizeof(input.typedInput));
+
+	input.controller = platform::getControllerButtons();
+
+	for (int i = 0; i < 4; i++)
+	{
+		input.controllers[i] = platform::getControllerButtonsAtIndex(i);
+	}
+
+	SDL_SetRenderDrawColor(sdlRenderer, 0, 0, 0, 255);
+	SDL_RenderClear(sdlRenderer);
+
+	if (!gameLogic(dt, input, sdlRenderer))
+	{
+		return false;
+	}
+
+	mouseMovedFlag = 0;
+	platform::internal::updateAllButtons(dt);
+	platform::internal::resetTypedInput();
+
+#if REMOVE_IMGUI == 0
+	ImGui::Render();
+	ImGui_ImplSDLRenderer3_RenderDrawData(
+		ImGui::GetDrawData(), sdlRenderer);
+#endif
+
+	SDL_RenderPresent(sdlRenderer);
+
+	if (gShouldQuit) return false;
+
+	return true;
+}
+
+#ifdef __EMSCRIPTEN__
+static void mainLoop()
+{
+	if (!tickOneFrame())
+	{
+		emscripten_cancel_main_loop();
+
+		closeGame();
+
+	#if REMOVE_IMGUI == 0
+		ImGui_ImplSDLRenderer3_Shutdown();
+		ImGui_ImplSDL3_Shutdown();
+		ImGui::DestroyContext();
+	#endif
+
+		SDL_DestroyRenderer(sdlRenderer);
+		SDL_DestroyWindow(window);
+		SDL_Quit();
+	}
+}
+#endif
+
 int main(int, char **)
 {
 	permaAssertComment(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD),
 		"SDL init failed");
 
 	window = SDL_CreateWindow(
-		"geam",
-		800, 800,
+		"Mages Dungeon",
+		1000, 800,
 		SDL_WINDOW_RESIZABLE
 	);
 
 	permaAssertComment(window, "SDL window creation failed");
 
 	sdlRenderer = SDL_CreateRenderer(window, nullptr);
-	
+
 	permaAssertComment(sdlRenderer, "SDL renderer creation failed");
 
 	SDL_SetRenderDrawBlendMode(sdlRenderer, SDL_BLENDMODE_BLEND);
 
 	SDL_StartTextInput(window);
 
-#pragma region audio
-	//InitAudioDevice();
-
-	//Music m = LoadMusicStream(RESOURCES_PATH "target.ogg");
-	//Music m = {};
-	//UpdateMusicStream(m);
-	//StopMusicStream(m);
-	//PlayMusicStream(m);
-
-#pragma endregion
-
-#pragma region imgui
 #if REMOVE_IMGUI == 0
 	ImGui::CreateContext();
 	imguiThemes::embraceTheDarkness();
@@ -246,132 +336,47 @@ int main(int, char **)
 	ImGui_ImplSDL3_InitForSDLRenderer(window, sdlRenderer);
 	ImGui_ImplSDLRenderer3_Init(sdlRenderer);
 
-	if (1) //load font awesome
+	if (1)
 	{
-		//https://pixtur.github.io/mkdocs-for-imgui/site/FONTS/
-		//https://github.com/juliettef/IconFontCppHeaders
-		//https://fontawesome.com/v4/icons/
-
-
 		if (1)
 		{
-			// use the default font
 			io.Fonts->AddFontDefault();
 		}
 		else
 		{
-			//load custom font
 			io.Fonts->AddFontFromFileTTF(RESOURCES_PATH "arial.ttf", 16);
 		}
 
-
-
-		// Merge FontAwesome into the default font
 		ImFontConfig config;
 		config.MergeMode = true;
 		config.PixelSnapH = true;
-		config.GlyphMinAdvanceX = 16.0f; // adjust as needed
+		config.GlyphMinAdvanceX = 16.0f;
 
 		static const ImWchar icon_ranges[] = {ICON_MIN_FK, ICON_MAX_FK, 0};
 		io.Fonts->AddFontFromFileTTF(RESOURCES_PATH "fontawesome-webfont.ttf", 16.0f, &config, icon_ranges);
 
-		// Build fonts after all additions
 		io.Fonts->Build();
-
-		//make one icon larger example
-		//{
-		//	ImVector<ImWchar> ranges;
-		//	ImFontGlyphRangesBuilder builder;
-		//	builder.AddChar(0xf016);//ICON_FK_FILE_O
-		//	builder.AddChar(0xf114);//ICON_FK_FOLDER_O
-		//	builder.BuildRanges(&ranges);
-		//
-		//	io.Fonts->AddFontFromFileTTF(RESOURCES_PATH "fontawesome-webfont.ttf",
-		//		150.f / io.FontGlobalScale, 0, ranges.Data);
-		//}
-
 	}
 #endif
-#pragma endregion
-
 
 	if (!initGame(sdlRenderer))
 	{
 		return 0;
 	}
 
-	auto last = std::chrono::high_resolution_clock::now();
+	gLast = std::chrono::high_resolution_clock::now();
 
+#ifdef __EMSCRIPTEN__
+	emscripten_set_main_loop(mainLoop, 0, 1);
+	return 0;
+#else
 	while (true)
 	{
-		updateFullscreen();
-
-		SDL_Event e;
-		while (SDL_PollEvent(&e))
-		{
-		#if REMOVE_IMGUI == 0
-			ImGui_ImplSDL3_ProcessEvent(&e);
-		#endif
-			handleSDLEvent(e);
-		}
-
-
-		auto now = std::chrono::high_resolution_clock::now();
-		float dt = std::chrono::duration<float>(now - last).count();
-		last = now;
-		dt = std::min(dt, 1.f / 10.f);
-
-	#pragma region imgui
-	#if REMOVE_IMGUI == 0
-		ImGui_ImplSDLRenderer3_NewFrame();
-		ImGui_ImplSDL3_NewFrame();
-		ImGui::NewFrame();
-
-		ImGui::PushStyleColor(ImGuiCol_WindowBg, {});
-		ImGui::PushStyleColor(ImGuiCol_DockingEmptyBg, {});
-		ImGui::DockSpaceOverViewport();
-		ImGui::PopStyleColor(2);
-	#endif
-	#pragma endregion
-
-		platform::Input input = {};
-		input.deltaTime = dt;
-		input.hasFocus = platform::hasFocused();
-		memcpy(input.buttons, platform::getAllButtons(), sizeof(input.buttons));
-		input.mouseX = platform::getRelMousePosition().x;
-		input.mouseY = platform::getRelMousePosition().y;
-		input.lMouse = platform::getLMouseButton();
-		input.rMouse = platform::getRMouseButton();
-		strlcpy(input.typedInput, platform::getTypedInput(), sizeof(input.typedInput));
-
-		input.controller = platform::getControllerButtons();
-
-		for (int i = 0; i < 4; i++)
-		{
-			input.controllers[i] = platform::getControllerButtonsAtIndex(i);
-		}
-
-
-		SDL_SetRenderDrawColor(sdlRenderer, 0, 0, 0, 255);
-		SDL_RenderClear(sdlRenderer);
-
-		if (!gameLogic(dt, input, sdlRenderer))
-		{
-			break;
-		}
-
-		mouseMovedFlag = 0;
-		platform::internal::updateAllButtons(dt);
-		platform::internal::resetTypedInput();
-
-	#if REMOVE_IMGUI == 0
-		ImGui::Render();
-		ImGui_ImplSDLRenderer3_RenderDrawData(
-			ImGui::GetDrawData(), sdlRenderer);
-	#endif
-
-		SDL_RenderPresent(sdlRenderer);
+		if (!tickOneFrame()) break;
 	}
+
+	SDL_DestroyRenderer(sdlRenderer);
+	SDL_DestroyWindow(window);
 
 	closeGame();
 
@@ -381,7 +386,7 @@ int main(int, char **)
 	ImGui::DestroyContext();
 #endif
 
-	SDL_DestroyRenderer(sdlRenderer);
-	SDL_DestroyWindow(window);
+
 	SDL_Quit();
+#endif
 }
