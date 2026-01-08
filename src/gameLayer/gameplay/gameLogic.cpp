@@ -446,7 +446,7 @@ bool GameLogic::update(float deltaTime,
 
 					if (!selectedUp && !selectedDown && !selectedLeft && !selectedRight)
 					{
-						auto &c = platform::getControllerButtons();
+						auto c = platform::getControllerButtons();
 						
 						if (c.RStickButtonUp.pressed) { selectedUp = true; } else
 						if (c.RStickButtonDown.pressed) { selectedDown = true; } else

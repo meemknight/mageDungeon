@@ -89,13 +89,15 @@ target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE
   fastNoiseSIMD
 )
 
-if(EMSCRIPTEN)
-  set(CMAKE_EXECUTABLE_SUFFIX ".html")
-  target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
-	"-sALLOW_MEMORY_GROWTH=1"
-	"--preload-file" "${CMAKE_SOURCE_DIR}/resources@/resources"
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  set_target_properties("${CMAKE_PROJECT_NAME}" PROPERTIES SUFFIX ".html")
+
+  target_link_options("${CMAKE_PROJECT_NAME}" PRIVATE
+    "-sALLOW_MEMORY_GROWTH=1"
+    "--preload-file" "${CMAKE_SOURCE_DIR}/resources@resources"
   )
 endif()
+
 
 # no warnings
 if(EMSCRIPTEN)
