@@ -1,5 +1,6 @@
 #include "Physics.h"
 #include <glm/glm.hpp>
+#include <cmath>
 
 
 //from raylib
@@ -180,6 +181,12 @@ glm::vec2 PhysicalEntity::performCollision(Map &mapData, glm::vec2 pos, glm::vec
 	maxX = std::min(mapData.size.x, maxX);
 	maxY = std::min(mapData.size.y, maxY);
 
+	const bool resolveX = delta.x != 0.0f;
+	const bool resolveY = delta.y != 0.0f;
+	bool collided = false;
+	float resolvedPos = resolveX ? pos.x : pos.y;
+	const float separation = 0.0001f;
+
 	for (int y = minY; y < maxY; y++)
 		for (int x = minX; x < maxX; x++)
 		{
@@ -203,77 +210,120 @@ glm::vec2 PhysicalEntity::performCollision(Map &mapData, glm::vec2 pos, glm::vec
 						const float closestX = clampf(pos.x, rect.x, rect.x + rect.z);
 						const float closestY = clampf(pos.y, rect.y, rect.y + rect.w);
 
-						if (delta.x != 0.0f)
+						if (resolveX)
 						{
 							const float dy = pos.y - closestY;
 							const float push = glm::sqrt(glm::max(0.0f, radius * radius - dy * dy));
+							const float prevX = pos.x - delta.x;
+							float candidate = pos.x;
 
-							if (delta.x < 0.0f) // moving left
+							if (prevX <= rect.x)
 							{
-								leftTouch = 1;
-								pos.x = (rect.x + rect.z) + push; // block right + radius at contact
-								return pos;
+								candidate = rect.x - push - separation;
 							}
-							else // moving right
+							else if (prevX >= rect.x + rect.z)
 							{
-								rightTouch = 1;
-								pos.x = rect.x - push;         // block left - radius at contact
-								return pos;
+								candidate = rect.x + rect.z + push + separation;
+							}
+							else if (delta.x > 0.0f)
+							{
+								candidate = rect.x - push - separation;
+							}
+							else
+							{
+								candidate = rect.x + rect.z + push + separation;
+							}
+
+							if (!collided)
+							{
+								resolvedPos = candidate;
+								collided = true;
+							}
+							else if (delta.x < 0.0f)
+							{
+								resolvedPos = std::max(resolvedPos, candidate);
+							}
+							else
+							{
+								resolvedPos = std::min(resolvedPos, candidate);
 							}
 						}
-						else if (delta.y != 0.0f)
+						else if (resolveY)
 						{
 							const float dx = pos.x - closestX;
 							const float push = glm::sqrt(glm::max(0.0f, radius * radius - dx * dx));
-
-							if (delta.y < 0.0f) // moving up
+							const float prevY = pos.y - delta.y;
+							float candidate = pos.y;
+							if (prevY <= rect.y)
 							{
-								upTouch = 1;
-								pos.y = (rect.y + rect.w) + push; // block top + radius at contact
-								return pos;
+								candidate = rect.y - push - separation;
 							}
-							else // moving down
+							else if (prevY >= rect.y + rect.w)
 							{
-								downTouch = 1;
-								pos.y = rect.y - push;          // block bottom - radius at contact
-								return pos;
+								candidate = rect.y + rect.w + push + separation;
+							}
+							else if (delta.y > 0.0f)
+							{
+								candidate = rect.y - push - separation;
+							}
+							else
+							{
+								candidate = rect.y + rect.w + push + separation;
+							}
+
+							if (!collided)
+							{
+								resolvedPos = candidate;
+								collided = true;
+							}
+							else if (delta.y < 0.0f)
+							{
+								resolvedPos = std::max(resolvedPos, candidate);
+							}
+							else
+							{
+								resolvedPos = std::min(resolvedPos, candidate);
 							}
 						}
 					}
 					else
 					{
-						if (delta.x != 0.0f)
+						if (resolveX)
 						{
 							const float extentX = dimensions.x * 0.5f;
+							float candidate = (delta.x < 0.0f) ? ((x + 1.0f) + extentX) : ((float)x - extentX);
 
-							if (delta.x < 0.0f) // moving left
+							if (!collided)
 							{
-								leftTouch = 1;
-								pos.x = (x + 1.0f) + extentX; // block right + extent
-								return pos;
+								resolvedPos = candidate;
+								collided = true;
 							}
-							else // moving right
+							else if (delta.x < 0.0f)
 							{
-								rightTouch = 1;
-								pos.x = (float)x - extentX;   // block left - extent
-								return pos;
+								resolvedPos = std::max(resolvedPos, candidate);
+							}
+							else
+							{
+								resolvedPos = std::min(resolvedPos, candidate);
 							}
 						}
-						else if (delta.y != 0.0f)
+						else if (resolveY)
 						{
 							const float extentY = dimensions.y * 0.5f;
+							float candidate = (delta.y < 0.0f) ? ((y + 1.0f) + extentY) : ((float)y - extentY);
 
-							if (delta.y < 0.0f) // moving up
+							if (!collided)
 							{
-								upTouch = 1;
-								pos.y = (y + 1.0f) + extentY; // block top + extent
-								return pos;
+								resolvedPos = candidate;
+								collided = true;
 							}
-							else // moving down
+							else if (delta.y < 0.0f)
 							{
-								downTouch = 1;
-								pos.y = (float)y - extentY;   // block bottom - extent
-								return pos;
+								resolvedPos = std::max(resolvedPos, candidate);
+							}
+							else
+							{
+								resolvedPos = std::min(resolvedPos, candidate);
 							}
 						}
 					}
@@ -281,6 +331,22 @@ glm::vec2 PhysicalEntity::performCollision(Map &mapData, glm::vec2 pos, glm::vec
 			}
 
 		}
+
+	if (collided)
+	{
+		if (resolveX)
+		{
+			pos.x = resolvedPos;
+			if (delta.x < 0.0f) { leftTouch = 1; } else { rightTouch = 1; }
+			return pos;
+		}
+		if (resolveY)
+		{
+			pos.y = resolvedPos;
+			if (delta.y < 0.0f) { upTouch = 1; } else { downTouch = 1; }
+			return pos;
+		}
+	}
 
 	return pos;
 }

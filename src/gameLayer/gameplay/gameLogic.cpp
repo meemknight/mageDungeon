@@ -24,7 +24,7 @@ bool GameLogic::init()
 
 	std::vector<FloorConnection> connections;
 
-	floorGenerator.generateDungeonFloor(70, 70, map, 1234, connections, true, floorInfo);
+	floorGenerator.generateDungeonFloor(70, 70, map, 12345, connections, true, floorInfo);
 
 	floorGenerator.clear();
 
