@@ -4,7 +4,6 @@
 #include <platformInput.h>
 #include <gameLayer.h>
 #include <glui/glui.h>
-#include <unordered_set>
 #include <iostream>
 #include <gameplay/entities/entity.h>
 #include <gameplay/entities/enemyTypes.h>
@@ -248,14 +247,9 @@ bool GameLogic::update(float deltaTime,
 			
 			;
 		bool startDraw = platform::isLMouseHeld();
-
-		static bool executedFirstFrame = 0;
-
-		static bool isDrawing = 0;
-		static bool isClickSelection = 0;
-		static glm::vec2 mouseStart = {};
-
-		static std::unordered_set<glm::ivec2> trail;
+		constexpr float TRAIL_TIMER = 0.55f;
+		bool selectionActive = startSelectionButton || startDraw;
+		auto &selection = spellSelectionState;
 
 		{
 
@@ -265,90 +259,80 @@ bool GameLogic::update(float deltaTime,
 
 			//float selectorSize = std::min(renderer.windowW, renderer.windowH);
 			//selectorSize /= 2;
-
-			auto mainBox = glui::Box().xCenter().yCenter()
-				.xDimensionPixels(selectorSize).yDimensionPixels(selectorSize)();
+			glm::vec2 selectionCenter = screenCenter;
+			glm::vec4 mainBox = {};
+			glm::ivec4 mainBoxFrame = {};
+			float selectLength = (selectorSize / 6.f) * 1.5f;
+			auto getDragDirection = [&](glm::vec2 cursorVector)
+			{
+				if (glm::length(cursorVector) < selectLength)
+				{
+					return 0;
+				}
+				if (glm::abs(cursorVector.x) > glm::abs(cursorVector.y))
+				{
+					return cursorVector.x > 0 ? 4 : 3;
+				}
+				return cursorVector.y > 0 ? 2 : 1;
+			};
 
 
 			//0 1 2 3 4 -> none, up down left right
 			auto detectTrailDirection = [&]()
 			{
 				glm::vec2 mouseEnd = platform::getRelMousePosition();
-
-				glm::vec2 cursorVector = mouseEnd - mouseStart;
-
-				float selectLength = 150;
-
-				glm::vec2 upVector = glm::vec2(0, -1) * selectLength;
-				glm::vec2 downVector = glm::vec2(0, +1) * selectLength;
-				glm::vec2 leftVector = glm::vec2(-1, 0) * selectLength;
-				glm::vec2 rightVector = glm::vec2(1, 0) * selectLength;
-
-
-				if (glm::dot(cursorVector, upVector) > selectLength * selectLength)
-				{
-					return 1;
-				}
-				else if (glm::dot(cursorVector, downVector) > selectLength * selectLength)
-				{
-					return 2;
-				}
-				else if (glm::dot(cursorVector, leftVector) > selectLength * selectLength)
-				{
-					return 3;
-				}
-				else if (glm::dot(cursorVector, rightVector) > selectLength * selectLength)
-				{
-					return 4;
-				}
-
-				return 0;
+				return getDragDirection(mouseEnd - selection.mouseStart);
 			};
 
-			//end drawing
-			if (isDrawing && !startDraw)
+			for (size_t i = 0; i < selection.trail.size();)
 			{
-				int dir = detectTrailDirection();
-
-				switch (dir)
+				auto &point = selection.trail[i];
+				point.timer -= deltaTime;
+				if (point.timer <= 0.0f)
 				{
-					case 1: tryAddElement(Fire); break;
-					case 2: tryAddElement(Earth); break;
-					case 3: tryAddElement(Ice); break;
-					case 4: tryAddElement(Water); break;
+					selection.trail[i] = selection.trail.back();
+					selection.trail.pop_back();
+					continue;
 				}
-
+				++i;
 			}
 
-
-			if (startSelectionButton || startDraw)
+			if (selectionActive)
 			{
 
-				if (!executedFirstFrame)
+				if (!selection.executedFirstFrame)
 				{
-					executedFirstFrame = true;
+					selection.executedFirstFrame = true;
 
-					isDrawing = 0;
-					isClickSelection = 0;
+					selection.isDrawing = 0;
+					selection.isClickSelection = 0;
 
 					if (startSelectionButton)
 					{
-						isClickSelection = true;
+						selection.isClickSelection = true;
 					}
 					else if(startDraw)
 					{
-						isDrawing = true;
-						mouseStart = platform::getRelMousePosition();
+						selection.isDrawing = true;
+						selection.mouseStart = platform::getRelMousePosition();
 					}
 
 					//platform::setRelMousePosition(screenCenter.x, screenCenter.y);
-					trail = {};
+					selection.trail.clear();
+					selection.dragDirection = 0;
 				}
 
-				if (isDrawing)
+				if (selection.isDrawing)
 				{
-					trail.insert(platform::getRelMousePosition());
+					selection.trail.push_back({platform::getRelMousePosition(), TRAIL_TIMER});
 				}
+
+				selectionCenter = selection.isDrawing ? selection.mouseStart : screenCenter;
+				mainBox = {selectionCenter.x - selectorSize * 0.5f,
+					selectionCenter.y - selectorSize * 0.5f,
+					selectorSize, selectorSize};
+				mainBoxFrame = {static_cast<int>(mainBox.x), static_cast<int>(mainBox.y),
+					static_cast<int>(mainBox.z), static_cast<int>(mainBox.w)};
 
 			#pragma region detect selections
 				bool selectedUp = 0;
@@ -360,8 +344,9 @@ bool GameLogic::update(float deltaTime,
 				bool hoveredDown = 0;
 				bool hoveredLeft = 0;
 				bool hoveredRight = 0;
+				glm::vec2 cursorVector = cursorPos - selectionCenter;
 
-				if(isClickSelection)
+				if (selection.isClickSelection)
 				{
 					//v1
 					//glm::vec2 cursorVector = cursorPos - screenCenter;
@@ -395,9 +380,6 @@ bool GameLogic::update(float deltaTime,
 					//}
 
 					//v2
-					float selectLength = (selectorSize / 6.f) * 1.5;
-					glm::vec2 cursorVector = cursorPos - screenCenter;
-
 					glm::vec2 upVector = glm::vec2(0, -1) * selectLength;
 					glm::vec2 downVector = glm::vec2(0, +1) * selectLength;
 					glm::vec2 leftVector = glm::vec2(-1, 0) * selectLength;
@@ -408,41 +390,28 @@ bool GameLogic::update(float deltaTime,
 						if (glm::dot(cursorVector, upVector) > selectLength * selectLength)
 						{
 							hoveredUp = true;
-
-							if (platform::isLMousePressed())
-							{
-								selectedUp = true;
-							}
-
 						}
 						else if (glm::dot(cursorVector, downVector) > selectLength * selectLength)
 						{
 							hoveredDown = true;
-
-							if (platform::isLMousePressed())
-							{
-								selectedDown = true;
-							}
 						}
 						else if (glm::dot(cursorVector, leftVector) > selectLength * selectLength)
 						{
 							hoveredLeft = true;
-
-							if (platform::isLMousePressed())
-							{
-								selectedLeft = true;
-							}
 						}
 						else if (glm::dot(cursorVector, rightVector) > selectLength * selectLength)
 						{
 							hoveredRight = true;
-
-							if (platform::isLMousePressed())
-							{
-								selectedRight = true;
-							}
 						}
 					}
+				}
+
+				if (selection.isClickSelection)
+				{
+					if (hoveredUp && platform::isLMousePressed()) { selectedUp = true; }
+					if (hoveredDown && platform::isLMousePressed()) { selectedDown = true; }
+					if (hoveredLeft && platform::isLMousePressed()) { selectedLeft = true; }
+					if (hoveredRight && platform::isLMousePressed()) { selectedRight = true; }
 
 					if (!selectedUp && !selectedDown && !selectedLeft && !selectedRight)
 					{
@@ -452,9 +421,29 @@ bool GameLogic::update(float deltaTime,
 						if (c.RStickButtonDown.pressed) { selectedDown = true; } else
 						if (c.RStickButtonLeft.pressed) { selectedLeft = true; } else
 						if (c.RStickButtonRight.pressed) { selectedRight = true; }
-
 					}
+				}
+				else if (selection.isDrawing)
+				{
+					int dragDir = getDragDirection(cursorVector);
 
+					hoveredUp = dragDir == 1;
+					hoveredDown = dragDir == 2;
+					hoveredLeft = dragDir == 3;
+					hoveredRight = dragDir == 4;
+
+					if (dragDir == 0)
+					{
+						selection.dragDirection = 0;
+					}
+					else if (dragDir != selection.dragDirection)
+					{
+						selection.dragDirection = dragDir;
+						selectedUp = dragDir == 1;
+						selectedDown = dragDir == 2;
+						selectedLeft = dragDir == 3;
+						selectedRight = dragDir == 4;
+					}
 				}
 
 			#pragma endregion
@@ -528,40 +517,49 @@ bool GameLogic::update(float deltaTime,
 
 					color.a = 0.7;
 
-
-
 					int sizeInt = 4;
 					float trailSize = PIXEL_SIZE * sizeInt * cameraZoom;
 
-					for (auto e : trail)
+					for (const auto &point : selection.trail)
 					{
 						//if (e.x % sizeInt != 0 || e.y % sizeInt != 0) { continue; }
 
-						glm::vec4 pos = {e, trailSize, trailSize};
+						float normalized = glm::clamp(point.timer / TRAIL_TIMER, 0.0f, 1.0f);
+						float fade = glm::pow(normalized, 0.6);
+						glm::vec4 drawColor = color;
+						drawColor.a *= fade;
+						glm::vec4 pos = {point.pos.x, point.pos.y, trailSize, trailSize};
 
 						//pos.x -= trailSize / 2.f;
 						//pos.y -= trailSize / 2.f;
 
-						renderer.renderRectangle(pos, color);
+						renderer.renderRectangle(pos, drawColor);
 					}
-
 				}
 
 
 			}
 			else
 			{
-				executedFirstFrame = false;
-				isClickSelection = false;
-				isDrawing = false;
-				mouseStart = {};
-				trail = {};
+				selection.executedFirstFrame = false;
+				selection.isClickSelection = false;
+				selection.isDrawing = false;
+				selection.mouseStart = {};
+				selection.trail.clear();
+				selection.dragDirection = 0;
+
+				selectionCenter = screenCenter;
+				mainBox = {selectionCenter.x - selectorSize * 0.5f,
+					selectionCenter.y - selectorSize * 0.5f,
+					selectorSize, selectorSize};
+				mainBoxFrame = {static_cast<int>(mainBox.x), static_cast<int>(mainBox.y),
+					static_cast<int>(mainBox.z), static_cast<int>(mainBox.w)};
 			}
 
 
 			//render loaded elements
 			{
-				glui::Frame inCircle(mainBox);
+				glui::Frame inCircle(mainBoxFrame);
 
 				float elementSize = PIXEL_SIZE * 4 * cameraZoom;
 

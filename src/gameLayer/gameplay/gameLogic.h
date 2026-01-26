@@ -7,11 +7,27 @@
 #include <gameplay/entities/entity.h>
 #include <gameplay/spells/spells.h>
 #include <gameplay/spells/spellTypes.h>
+#include <vector>
 
 //this is an instance of the game.
 //This shouldn't load things like textures, those should be load outside
 struct GameLogic
 {
+	struct SpellSelectionState
+	{
+		struct TrailPoint
+		{
+			glm::vec2 pos = {};
+			float timer = 0.0f;
+		};
+
+		bool executedFirstFrame = false;
+		bool isDrawing = false;
+		bool isClickSelection = false;
+		glm::vec2 mouseStart = {};
+		int dragDirection = 0;
+		std::vector<TrailPoint> trail;
+	};
 
 
 	Map map;
@@ -20,6 +36,7 @@ struct GameLogic
 	EntityHolder entityHolder;
 	SpellsHolder spellsHolder;
 	SpellRecepie spellRecepie; //current spell recepie;
+	SpellSelectionState spellSelectionState;
 
 	ParticleSystem particleSystem;
 	ParticlePostProcessRenderer particlePostProcessRenderer;
