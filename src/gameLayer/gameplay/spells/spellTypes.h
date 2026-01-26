@@ -144,6 +144,18 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline FlameWallSpell getFlameWallSpell()
+	{
+		FlameWallSpell ret;
+		ret.element = Elements::Fire;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<FlameWallProjectile>();
+		ret.projectile->element = Elements::Fire;
+		ret.wallOffset = 1.2f;
+		return ret;
+	}
+
 	enum Spells
 	{
 		none,
@@ -161,6 +173,7 @@ namespace SpellTypes
 		fireHomingMissle,
 		earthHomingMissle,
 		iceHomingMissle,
+		flameWall,
 
 		SPELLS_COUNT
 	};

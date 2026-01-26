@@ -102,3 +102,35 @@ struct BasicMagicMissleSpell: public Spell
 		return true;
 	};
 };
+
+struct FlameWallSpell: public Spell
+{
+	std::unique_ptr<Projectile> projectile;
+	float wallOffset = 1.2f;
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, glm::vec2 currentAimDir) override
+	{
+		auto pptr = projectile->clone();
+		pptr->element = element;
+
+		glm::vec2 aim = currentAimDir;
+		float len = glm::length(aim);
+		if (len <= 0.0001f)
+		{
+			aim = {1.0f, 0.0f};
+			len = 1.0f;
+		}
+		aim /= len;
+
+		if (auto wall = dynamic_cast<FlameWallProjectile *>(pptr.get()))
+		{
+			wall->setupWall(aim);
+		}
+
+		glm::vec2 spawnPos = player.physics.getPos() + aim * wallOffset;
+		projectileHolder.addProjectileAsPtr(std::move(pptr), spawnPos);
+		return true;
+	}
+};

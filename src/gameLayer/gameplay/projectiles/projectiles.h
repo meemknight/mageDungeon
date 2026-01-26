@@ -4,8 +4,10 @@
 #include "gameplay/elements.h"
 #include <glm/glm.hpp>
 #include <map>
+#include <cmath>
 #include <memory>
 #include "gameplay/particleSystem.h"
+#include <gameplay/damageViewerSystem.h>
 #include <random>
 #include <particles/particleCreator.h>
 #include <gameplay/entities/entity.h>
@@ -349,6 +351,139 @@ struct TrapProjectile: public CloneableProjectile<TrapProjectile>
 
 
 
+};
+
+struct FlameWallProjectile: public CloneableProjectile<FlameWallProjectile>
+{
+	HitStats hitStats;
+	bool firstTime = true;
+	float tickTimer = 0.0f;
+	float tickInterval = 0.2f;
+	float hitTimerPenalty = 0.15f;
+	float wallLength = 6.0f;
+	float wallThickness = 0.6f;
+	float particleTimer = 0.0f;
+	float particleInterval = 0.02f;
+	glm::vec2 wallNormal = {1.0f, 0.0f};
+	int segmentCount = 8;
+	float segmentRadius = 0.45f;
+	float segmentSpacing = 0.75f;
+	ParticleSettings flameParticle;
+
+	FlameWallProjectile()
+	{
+		hitStats.damage = 0.8f;
+		hitStats.pushBack = 0.4f;
+		timeAlieve = 10.0f;
+		physics.transform.isCircleCollider = false;
+		particleSystem.maxCount = 200;
+	}
+
+	void setupWall(glm::vec2 aimDir)
+	{
+		float len = glm::length(aimDir);
+		if (len <= 0.0001f)
+		{
+			aimDir = {1.0f, 0.0f};
+			len = 1.0f;
+		}
+		wallNormal = aimDir / len;
+		physics.transform.isCircleCollider = false;
+		physics.transform.size = {wallLength, wallLength};
+	}
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng, EntityHolder &entityHolder) override
+	{
+		if (firstTime)
+		{
+			firstTime = false;
+			flameParticle = getSmallSquareParticle(elementToSecondaryColor(element), elementToColor(element));
+			flameParticle.onCreateCount = 3;
+			flameParticle.particleLifeTime = {0.45f, 1.1f};
+			flameParticle.createApearence.size = {0.2f, 0.32f};
+			flameParticle.endApearence.size = {0.1f, 0.22f};
+			flameParticle.folowParent = false;
+		}
+
+		particleTimer -= deltaTime;
+		while (particleTimer <= 0.0f)
+		{
+			particleTimer += particleInterval;
+			glm::vec2 axis = glm::vec2(-wallNormal.y, wallNormal.x);
+			float along = getRandomFloat(rng, -wallLength * 0.5f, wallLength * 0.5f);
+			float across = getRandomFloat(rng, -wallThickness * 0.4f, wallThickness * 0.4f);
+			glm::vec2 spawnPos = physics.getPos() + axis * along + wallNormal * across;
+			particleSystem.emitParticles(flameParticle, spawnPos, rng, physics.getPos());
+		}
+
+		tickTimer -= deltaTime;
+		if (tickTimer <= 0.0f)
+		{
+			tickTimer += tickInterval;
+			int hitCount = 0;
+			glm::vec2 axis = glm::vec2(-wallNormal.y, wallNormal.x);
+			for (auto &e : entityHolder.entities)
+			{
+				glm::vec2 diff = e->physics.getPos() - physics.getPos();
+				float along = glm::dot(diff, axis);
+				float across = glm::dot(diff, wallNormal);
+				if (std::abs(along) > wallLength * 0.5f + e->physics.transform.size.y * 0.5f)
+				{
+					continue;
+				}
+				if (std::abs(across) > wallThickness * 0.5f + e->physics.transform.size.x * 0.5f)
+				{
+					continue;
+				}
+
+				glm::vec2 pushBack = {};
+				glm::vec2 hitDir = wallNormal;
+				if (glm::length(hitDir) <= 0.0001f)
+				{
+					hitDir = e->physics.getPos() - physics.getPos();
+				}
+				e->life.computeHit(hitStats, element, e->element, {hitDir}, pushBack);
+				e->physics.velocity += pushBack;
+				glm::vec2 damagePos = e->physics.getPos();
+				damagePos.y -= e->physics.transform.size.y * 0.6f;
+				getDamageViewerSystem().addDamage(hitStats.damage, damagePos);
+				hitCount++;
+			}
+
+			if (hitCount > 0)
+			{
+				timeAlieve -= hitTimerPenalty * hitCount;
+			}
+		}
+
+		particleSystem.update(deltaTime);
+		return true;
+	}
+
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager, ParticlePostProcessRenderer &particlePostProcessRenderer) override
+	{
+		particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+		glm::vec2 axis = glm::vec2(-wallNormal.y, wallNormal.x);
+		float axisLen = glm::length(axis);
+		if (axisLen <= 0.0001f)
+		{
+			axis = {1.0f, 0.0f};
+			axisLen = 1.0f;
+		}
+		axis /= axisLen;
+
+	float segmentLength = wallLength / (float)segmentCount;
+	for (int i = 0; i < segmentCount; i++)
+	{
+		float t = (i + 0.5f) / (float)segmentCount;
+		float along = (t - 0.5f) * wallLength;
+		glm::vec2 center = physics.getPos() + axis * along;
+		glm::vec4 rect = {center.x - segmentLength * 0.5f, center.y - wallThickness * 0.5f,
+			segmentLength, wallThickness};
+		renderer.renderRectangleOutline(rect, Colors_Blue, 0.02f);
+	}
+	}
 };
 
 struct HomingMagicMissle: public CloneableProjectile<HomingMagicMissle>
