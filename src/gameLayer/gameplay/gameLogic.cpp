@@ -210,6 +210,7 @@ bool GameLogic::update(float deltaTime,
 	spellsHolder.renderBeforeEntities(renderer, particlePostProcessRenderer);
 
 	entityHolder.update(deltaTime, map, particleSystem, rng, player);
+	resolveEntityPush(entityHolder, player);
 	entityHolder.render(renderer, particlePostProcessRenderer);
 
 

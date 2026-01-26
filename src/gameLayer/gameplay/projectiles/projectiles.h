@@ -60,6 +60,8 @@ struct Projectile
 
 	virtual void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager, ParticlePostProcessRenderer &particlePostProcessRenderer) = 0;
 
+	virtual void onDestroy(std::ranlux24_base &rng) {}
+
 	virtual ~Projectile() = default;
 
 	virtual std::unique_ptr<Projectile> clone() const = 0;
@@ -103,6 +105,7 @@ struct ProjectileHolder
 
 			if (!p.runTimer(deltaTime))
 			{
+				p.onDestroy(rng);
 				mainParticleSystem.copyParticles(
 					p.particleSystem, rng, p.physics.getPos());
 				it = projectiles.erase(it);
@@ -111,6 +114,7 @@ struct ProjectileHolder
 
 			if (!p.update(deltaTime, map, mainParticleSystem, rng, entityHolder))
 			{
+				p.onDestroy(rng);
 				mainParticleSystem.copyParticles(
 					p.particleSystem, rng, p.physics.getPos());
 				it = projectiles.erase(it);
@@ -223,6 +227,8 @@ struct BasicMagicMissle: public CloneableProjectile<BasicMagicMissle>
 		physics.renderCollider(renderer);
 	}
 
+	void onDestroy(std::ranlux24_base &rng) override {}
+
 
 };
 
@@ -263,6 +269,8 @@ struct TrapProjectile: public CloneableProjectile<TrapProjectile>
 		particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
 
 	};
+
+	void onDestroy(std::ranlux24_base &rng) override {}
 
 	float particleTimer = 0;
 	float trapRadious = 1.5;
@@ -351,6 +359,108 @@ struct TrapProjectile: public CloneableProjectile<TrapProjectile>
 
 
 
+};
+
+struct BoulderProjectile: public CloneableProjectile<BoulderProjectile>
+{
+	HitStats hitStats;
+	bool firstTime = true;
+	float trailTimer = 0.0f;
+	float trailInterval = 0.05f;
+	ParticleSettings bigParticle;
+	ParticleSettings trailParticle;
+
+	BoulderProjectile()
+	{
+		hitStats.damage = 10.0f;
+		hitStats.pushBack = 8.0f;
+		element = Elements::NoneElement;
+		physics.transform.size = {PIXEL_SIZE * 12.0f, PIXEL_SIZE * 12.0f};
+		physics.transform.isCircleCollider = true;
+		particleSystem.maxCount = 120;
+	}
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng, EntityHolder &entityHolder) override
+	{
+		if (firstTime)
+		{
+			firstTime = false;
+			glm::vec4 startColor = {0.55f, 0.55f, 0.55f, 0.9f};
+			glm::vec4 endColor = {0.3f, 0.3f, 0.3f, 0.9f};
+			bigParticle = getSmallSquareParticle(startColor, endColor);
+			bigParticle.onCreateCount = 1;
+			bigParticle.folowParent = true;
+			bigParticle.particleLifeTime = {timeAlieve + 0.2f, timeAlieve + 0.2f};
+			bigParticle.createApearence.size = {0.7f, 0.85f};
+			bigParticle.endApearence.size = {0.7f, 0.85f};
+			bigParticle.velocityX = {0.0f, 0.0f};
+			bigParticle.velocityY = {0.0f, 0.0f};
+
+			trailParticle = getSmallSquareParticle(startColor, endColor);
+			trailParticle.onCreateCount = 1;
+			trailParticle.folowParent = false;
+			trailParticle.particleLifeTime = {0.25f, 0.45f};
+			trailParticle.createApearence.size = {0.12f, 0.2f};
+			trailParticle.endApearence.size = {0.05f, 0.12f};
+			trailParticle.velocityX = {0.0f, 0.0f};
+			trailParticle.velocityY = {0.0f, 0.0f};
+
+			particleSystem.emitParticles(bigParticle, physics.getPos(), rng, physics.getPos());
+		}
+
+		trailTimer -= deltaTime;
+		if (trailTimer <= 0.0f)
+		{
+			trailTimer += trailInterval;
+			particleSystem.emitParticles(trailParticle, physics.getPos(), rng, physics.getPos());
+		}
+
+		if (basicProjectileHitEntitiesLogic(physics, physics.velocity,
+			element, entityHolder, hitStats))
+		{
+			return false;
+		}
+
+		if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+		{
+			return false;
+		}
+
+		particleSystem.update(deltaTime);
+		return true;
+	}
+
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager, ParticlePostProcessRenderer &particlePostProcessRenderer) override
+	{
+		glm::vec4 aabb = physics.getAABB();
+		renderer.renderRectangle(aabb, {0.6f, 0.6f, 0.6f, 1.0f});
+		particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+	}
+
+	void onDestroy(std::ranlux24_base &rng) override
+	{
+		for (auto &p : particleSystem.particles)
+		{
+			if (p.durationRemaining > 0.4f)
+			{
+				p.durationRemaining = 0.2f;
+				p.durationTotal = 0.2f;
+			}
+		}
+
+		glm::vec4 startColor = {0.55f, 0.55f, 0.55f, 0.9f};
+		glm::vec4 endColor = {0.3f, 0.3f, 0.3f, 0.9f};
+		auto burstParticle = getSmallSquareParticle(startColor, endColor);
+		burstParticle.onCreateCount = 6;
+		burstParticle.folowParent = false;
+		burstParticle.particleLifeTime = {0.25f, 0.35f};
+		burstParticle.createApearence.size = {0.3f, 0.45f};
+		burstParticle.endApearence.size = {0.1f, 0.28f};
+		burstParticle.velocityX = {-0.6f, 0.6f};
+		burstParticle.velocityY = {-0.6f, 0.6f};
+		particleSystem.emitParticles(burstParticle, physics.getPos(), rng, physics.getPos());
+	}
 };
 
 struct ElementWallProjectile: public CloneableProjectile<ElementWallProjectile>
@@ -497,16 +607,18 @@ struct ElementWallProjectile: public CloneableProjectile<ElementWallProjectile>
 		axis /= axisLen;
 
 	float segmentLength = wallLength / (float)segmentCount;
-	for (int i = 0; i < segmentCount; i++)
-	{
-		float t = (i + 0.5f) / (float)segmentCount;
-		float along = (t - 0.5f) * wallLength;
-		glm::vec2 center = physics.getPos() + axis * along;
-		glm::vec4 rect = {center.x - segmentLength * 0.5f, center.y - wallThickness * 0.5f,
-			segmentLength, wallThickness};
-		renderer.renderRectangleOutline(rect, Colors_Blue, 0.02f);
+		for (int i = 0; i < segmentCount; i++)
+		{
+			float t = (i + 0.5f) / (float)segmentCount;
+			float along = (t - 0.5f) * wallLength;
+			glm::vec2 center = physics.getPos() + axis * along;
+			glm::vec4 rect = {center.x - segmentLength * 0.5f, center.y - wallThickness * 0.5f,
+				segmentLength, wallThickness};
+			renderer.renderRectangleOutline(rect, Colors_Blue, 0.02f);
+		}
 	}
-	}
+
+	void onDestroy(std::ranlux24_base &rng) override {}
 };
 
 struct HomingMagicMissle: public CloneableProjectile<HomingMagicMissle>
@@ -637,4 +749,6 @@ struct HomingMagicMissle: public CloneableProjectile<HomingMagicMissle>
 		particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
 		physics.renderCollider(renderer);
 	}
+
+	void onDestroy(std::ranlux24_base &rng) override {}
 };

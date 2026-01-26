@@ -2,6 +2,7 @@
 #include "gameplay/Physics.h"
 #include "gameplay/elements.h"
 #include <map>
+#include <algorithm>
 #include <memory>
 #include <gameplay/particleSystem.h>
 #include <random>
@@ -172,6 +173,71 @@ struct EntityHolder
 	
 
 };
+
+inline void resolveEntityPush(EntityHolder &holder, Player &player)
+{
+	const float entityWeight = 1.0f;
+	const float playerWeight = 0.5f;
+	const float pushFactor = 0.5f;
+
+	auto getRadius = [&](const PhysicalEntity &entity)
+	{
+		if (entity.transform.isCircleCollider)
+		{
+			return entity.transform.size.x * 0.5f;
+		}
+		return 0.5f * std::max(entity.transform.size.x, entity.transform.size.y);
+	};
+
+	auto applyPush = [&](PhysicalEntity &a, float weightA, PhysicalEntity &b, float weightB)
+	{
+		if (!a.transform.intersectTransform(b.transform))
+		{
+			return;
+		}
+
+		glm::vec2 diff = b.getPos() - a.getPos();
+		float dist = glm::length(diff);
+		if (dist < 0.0001f)
+		{
+			diff = {1.0f, 0.0f};
+			dist = 1.0f;
+		}
+
+		float overlap = (getRadius(a) + getRadius(b)) - dist;
+		if (overlap <= 0.0f)
+		{
+			return;
+		}
+
+		glm::vec2 dir = diff / dist;
+		float totalWeight = weightA + weightB;
+		if (totalWeight <= 0.0001f)
+		{
+			return;
+		}
+
+		float pushA = overlap * pushFactor * (weightA / totalWeight);
+		float pushB = overlap * pushFactor * (weightB / totalWeight);
+
+		a.getPos() -= dir * pushA;
+		b.getPos() += dir * pushB;
+	};
+
+	for (size_t i = 0; i < holder.entities.size(); i++)
+	{
+		for (size_t j = i + 1; j < holder.entities.size(); j++)
+		{
+			applyPush(holder.entities[i]->physics, entityWeight,
+				holder.entities[j]->physics, entityWeight);
+		}
+	}
+
+	for (auto &entity : holder.entities)
+	{
+		applyPush(player.physics, playerWeight, entity->physics, entityWeight);
+	}
+}
 
 struct BasicMeleEnemy : public Entity
 {

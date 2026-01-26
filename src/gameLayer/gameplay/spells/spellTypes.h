@@ -156,6 +156,18 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline BasicMagicMissleSpell getBoulderSpell()
+	{
+		BasicMagicMissleSpell ret;
+		ret.element = Elements::NoneElement;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<BoulderProjectile>();
+		ret.projectile->element = Elements::NoneElement;
+		ret.throwVelocity = 9.0f;
+		return ret;
+	}
+
 	enum Spells
 	{
 		none,
@@ -175,6 +187,7 @@ namespace SpellTypes
 		iceHomingMissle,
 		flameWall,
 		iceWall,
+		boulder,
 
 		SPELLS_COUNT
 	};
