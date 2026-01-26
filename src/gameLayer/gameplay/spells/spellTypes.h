@@ -127,12 +127,30 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline BasicMagicMissleSpell getHomingMissleSpell(int element)
+	{
+		BasicMagicMissleSpell ret;
+
+		HitStats hitStats;
+		hitStats.damage = 7;
+		hitStats.pushBack = 5.2f;
+
+		ret.element = element;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<HomingMagicMissle>(hitStats);
+		ret.projectile->element = element;
+
+		return ret;
+	}
+
 	enum Spells
 	{
 		none,
 		sparkBolt, //empty spell with no element
 		fireBolt,
 		waterBolt,
+		waterHomingMissle,
 		earthBolt,
 		iceBolt,
 		dragonsBreath,
@@ -140,6 +158,9 @@ namespace SpellTypes
 		fireTrap,
 		waterTrap,
 		earthTrap,
+		fireHomingMissle,
+		earthHomingMissle,
+		iceHomingMissle,
 
 		SPELLS_COUNT
 	};

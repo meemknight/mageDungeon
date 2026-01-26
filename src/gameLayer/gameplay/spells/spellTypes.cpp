@@ -14,6 +14,7 @@ namespace SpellTypes
 			{},
 			{Elements::Fire},	//fireBolt,
 			{Elements::Water},	//waterBolt,
+			{Elements::Water,Elements::Water},	//waterHomingMissle,
 			{Elements::Earth},	//earthBolt,
 			{Elements::Ice},	//iceBolt,
 			{Elements::Fire,Elements::Fire,Elements::Fire},	//dragonsBreath,
@@ -21,6 +22,9 @@ namespace SpellTypes
 			{Elements::Ice,Elements::Fire},	//fireTrap,
 			{Elements::Ice,Elements::Water},//waterTrap,
 			{Elements::Ice,Elements::Earth},	//earthTrap,
+			{Elements::Water,Elements::Fire},	//fireHomingMissle,
+			{Elements::Water,Elements::Earth},	//earthHomingMissle,
+			{Elements::Water,Elements::Ice},	//iceHomingMissle,
 
 
 
@@ -51,6 +55,22 @@ namespace SpellTypes
 
 		case waterBolt:
 		return std::make_unique<BasicMagicMissleSpell>(getBasicMagicMissleSpell(Elements::Water));
+		break;
+
+		case waterHomingMissle:
+		return std::make_unique<BasicMagicMissleSpell>(getHomingMissleSpell(Elements::Water));
+		break;
+
+		case fireHomingMissle:
+		return std::make_unique<BasicMagicMissleSpell>(getHomingMissleSpell(Elements::Fire));
+		break;
+
+		case earthHomingMissle:
+		return std::make_unique<BasicMagicMissleSpell>(getHomingMissleSpell(Elements::Earth));
+		break;
+
+		case iceHomingMissle:
+		return std::make_unique<BasicMagicMissleSpell>(getHomingMissleSpell(Elements::Ice));
 		break;
 
 		case earthBolt:

@@ -2,6 +2,7 @@
 
 #include "gameplay/Physics.h"
 #include "gameplay/elements.h"
+#include <glm/glm.hpp>
 #include <map>
 #include <memory>
 #include "gameplay/particleSystem.h"
@@ -348,4 +349,134 @@ struct TrapProjectile: public CloneableProjectile<TrapProjectile>
 
 
 
+};
+
+struct HomingMagicMissle: public CloneableProjectile<HomingMagicMissle>
+{
+	HitStats hitStats;
+
+	HomingMagicMissle()
+	{
+		hitStats.damage = 2;
+		hitStats.pushBack = 5.2f;
+	}
+
+	HomingMagicMissle(HitStats hitStats)
+	{
+		this->hitStats = hitStats;
+	}
+
+	HomingMagicMissle(HitStats hitStats, float particleSizeBias)
+	{
+		this->hitStats = hitStats;
+		this->particleSizeBias = particleSizeBias;
+	}
+
+	float particleTimer = 0.0f;
+	bool firstTime = 1;
+	float particleSizeBias = 1.4f;
+	float homingRange = 6.0f;
+	float homingTurnRate = 4.0f;
+	float travelSpeed = 0.0f;
+
+	ParticleEmissionSettings particleEmmision;
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng, EntityHolder &entityHolder) override
+	{
+		auto safeNormalize = [](glm::vec2 v)
+		{
+			float len = glm::length(v);
+			if (len <= 0.00001f) { return glm::vec2(0.0f); }
+			return v / len;
+		};
+
+		if (firstTime)
+		{
+			firstTime = 0;
+			travelSpeed = glm::length(physics.velocity);
+			if (travelSpeed <= 0.00001f) { travelSpeed = 0.00001f; }
+
+			glm::vec4 startColor = elementToColor(element);
+			startColor.a = 0.3f;
+			glm::vec4 endColor = {0.7f, 0.3f, 0.95f, 0.3f};
+
+			particleEmmision.sustain = getBasicMagicMissleParticle(startColor, endColor);
+			particleEmmision.release = getBasicMagicMissleParticle(startColor, endColor);
+			particleEmmision.release.particleLifeTime *= 2.0f;
+			particleEmmision.emitTimer = 0.01f;
+
+			particleEmmision.sustain.createApearence.size *= particleSizeBias;
+			particleEmmision.sustain.endApearence.size *= particleSizeBias;
+			particleEmmision.release.createApearence.size *= particleSizeBias;
+			particleEmmision.release.endApearence.size *= particleSizeBias;
+			particleEmmision.create = particleEmmision.sustain;
+
+			particleEmmision.sustain.folowParent = false;
+			particleEmmision.release.folowParent = false;
+			particleEmmision.create.folowParent = false;
+
+			particleSystem.emitParticles(particleEmmision.create, physics.getPos(), rng, physics.getPos());
+		}
+
+		glm::vec2 toTarget = {};
+		float bestDist2 = homingRange * homingRange;
+		bool hasTarget = false;
+
+		for (auto &e : entityHolder.entities)
+		{
+			glm::vec2 diff = e->physics.getPos() - physics.getPos();
+			float dist2 = glm::dot(diff, diff);
+			if (dist2 < bestDist2)
+			{
+				bestDist2 = dist2;
+				toTarget = diff;
+				hasTarget = true;
+			}
+		}
+
+		if (hasTarget)
+		{
+			glm::vec2 desiredDir = safeNormalize(toTarget);
+			float currentSpeed = glm::length(physics.velocity);
+			float speed = currentSpeed > 0.00001f ? currentSpeed : travelSpeed;
+			glm::vec2 currentDir = currentSpeed > 0.00001f ? (physics.velocity / currentSpeed) : desiredDir;
+
+			float turn = glm::clamp(homingTurnRate * deltaTime, 0.0f, 1.0f);
+			glm::vec2 newDir = safeNormalize(glm::mix(currentDir, desiredDir, turn));
+			if (glm::length(newDir) > 0.00001f)
+			{
+				physics.velocity = newDir * speed;
+			}
+		}
+
+		particleTimer -= deltaTime;
+		if (particleTimer < 0)
+		{
+			particleTimer += particleEmmision.emitTimer;
+			particleSystem.emitParticles(particleEmmision.sustain, physics.getPos(), rng, physics.getPos());
+		}
+
+		if (basicProjectileHitEntitiesLogic(physics, physics.velocity,
+			element, entityHolder, hitStats))
+		{
+			return 0;
+		}
+
+		if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+		{
+			particleSystem.emitParticles(particleEmmision.release, physics.getPos(), rng, physics.getPos());
+			return 0;
+		}
+
+		particleSystem.update(deltaTime);
+
+		return 1;
+	}
+
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager, ParticlePostProcessRenderer &particlePostProcessRenderer) override
+	{
+		particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+		physics.renderCollider(renderer);
+	}
 };
