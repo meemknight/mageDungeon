@@ -10,34 +10,62 @@
 #include <gameplay/spells/spellTypes.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
+#include <randomStuff.h>
 
 #include <gameplay/elements.h>
 
-#include <worldGen/roomGen.h>
+#include <worldGen/floorGen.h>
 
 bool GameLogic::init()
 {
 	
-	RoomGenerator roomGenerator;
-	roomGenerator.init();
-	
-	roomGenerator.generatePlainsRoom(70, 70, map, 1234);
+	FloorGenerator floorGenerator;
+	floorGenerator.init();
 
-	roomGenerator.clear();
+	std::vector<FloorConnection> connections;
+
+	floorGenerator.generateDungeonFloor(70, 70, map, 1234, connections, true, floorInfo);
+
+	floorGenerator.clear();
 
 	particlePostProcessRenderer.init();
 
-	player.physics.getPos() = {35, 35};
+	if (floorInfo.playerSpawnPos)
+	{
+		player.physics.teleport(*floorInfo.playerSpawnPos);
+	}
+	else
+	{
+		player.physics.getPos() = {35, 35};
+	}
 
+	for (int i = 0; i < (int)floorInfo.rooms.size(); i++)
+	{
+		const auto &room = floorInfo.rooms[i];
+		if (room.isSpawnRoom)
+		{
+			continue;
+		}
 
-	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {20, 20});
-	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {22, 20});
-	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {23, 25});
-	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {25, 24});
-	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {22, 25});
-	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {23, 26});
-	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {24, 18});
-	entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), {25, 18});
+		if (room.enemySpawnPositions.empty())
+		{
+			continue;
+		}
+
+		int maxSpawns = std::min(2, (int)room.enemySpawnPositions.size());
+		int spawnCount = getRandomInt(rng, 0, maxSpawns);
+
+		auto spawnPositions = room.enemySpawnPositions;
+		for (int j = 0; j < spawnCount; j++)
+		{
+			int index = getRandomInt(rng, 0, (int)spawnPositions.size() - 1);
+			glm::vec2 pos = spawnPositions[index];
+			spawnPositions[index] = spawnPositions.back();
+			spawnPositions.pop_back();
+
+			entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), pos);
+		}
+	}
 
 
 

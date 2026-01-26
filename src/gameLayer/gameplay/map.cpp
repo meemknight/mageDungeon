@@ -239,8 +239,8 @@ void MapLayer::renderMap(gl2d::Renderer2D &renderer,
 	glm::ivec4 viewRectInt = {};
 	viewRectInt.x = int(viewRect.x) - 1;
 	viewRectInt.y = int(viewRect.y) - 1;
-	viewRectInt.z = int(viewRect.z + 0.5) + 2;
-	viewRectInt.w = int(viewRect.w + 0.5) + 2;
+	viewRectInt.z = int(viewRect.z + 1.5) + 2;
+	viewRectInt.w = int(viewRect.w + 1.5) + 2;
 	viewRectInt.z += viewRect.x;
 	viewRectInt.w += viewRect.y;
 	viewRectInt = glm::clamp(viewRectInt, {0,0,0,0}, {size.x - 1,size.y - 1,size.x - 1,size.y - 1});
@@ -565,8 +565,8 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 	glm::ivec4 viewRectInt = {};
 	viewRectInt.x = int(viewRect.x) - 1;
 	viewRectInt.y = int(viewRect.y) - 1;
-	viewRectInt.z = int(viewRect.z + 0.5) + 2;
-	viewRectInt.w = int(viewRect.w + 0.5) + 2;
+	viewRectInt.z = int(viewRect.z + 1.5) + 2;
+	viewRectInt.w = int(viewRect.w + 1.5) + 2;
 	viewRectInt.z += viewRect.x;
 	viewRectInt.w += viewRect.y;
 	viewRectInt = glm::clamp(viewRectInt, {0,0,0,0}, {size.x - 1,size.y - 1,size.x - 1,size.y - 1});
