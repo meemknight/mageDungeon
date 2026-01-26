@@ -8,6 +8,7 @@
 #include <gameplay/spells/spells.h>
 #include <gameplay/spells/spellTypes.h>
 #include <vector>
+#include <gameplay/damageViewerSystem.h>
 
 //this is an instance of the game.
 //This shouldn't load things like textures, those should be load outside
@@ -37,6 +38,7 @@ struct GameLogic
 	SpellsHolder spellsHolder;
 	SpellRecepie spellRecepie; //current spell recepie;
 	SpellSelectionState spellSelectionState;
+	DamageViewerSystem damageViewerSystem;
 
 	ParticleSystem particleSystem;
 	ParticlePostProcessRenderer particlePostProcessRenderer;

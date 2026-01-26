@@ -1,4 +1,5 @@
 #include "projectiles.h"
+#include <gameplay/damageViewerSystem.h>
 
 
 
@@ -19,6 +20,10 @@ bool basicProjectileHitEntitiesLogic(PhysicalEntity &physics,
 
 			e->life.computeHit(hitStats, projectileElement, e->element, projectileMoveDirection, pushBack);
 			e->physics.velocity += pushBack;
+
+			glm::vec2 damagePos = e->physics.getPos();
+			damagePos.y -= e->physics.transform.size.y * 0.6f;
+			getDamageViewerSystem().addDamage(hitStats.damage, damagePos);
 
 			return true;
 		}

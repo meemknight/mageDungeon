@@ -33,6 +33,11 @@ ParticlePostProcessRenderer &getParticlePostProcessRenderer()
 	return game.particlePostProcessRenderer;
 }
 
+DamageViewerSystem &getDamageViewerSystem()
+{
+	return game.damageViewerSystem;
+}
+
 gl2d::Renderer2D &getRenderer()
 {
 	return renderer;

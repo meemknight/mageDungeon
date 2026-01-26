@@ -1,5 +1,6 @@
 #include "gl2d/gl2d.h"
 #include <gameLayer.h>
+#include <cmath>
 
 //THIS IS A SDL PORT OF GL2D
 
@@ -1636,7 +1637,7 @@ namespace gl2d
 	void Renderer2D::renderText(glm::vec2 position, const char *text, const Font font,
 		const Color4f color, const float sizePixels, const float spacing, const float line_space, bool showInCenter,
 		const Color4f ShadowColor
-		, const Color4f LightColor, float positionZ
+		, const Color4f LightColor, float positionZ, float rotationDegrees
 	)
 	{
 
@@ -1653,14 +1654,20 @@ namespace gl2d
 		rectangle.x = position.x;
 		float linePositionY = position.y;
 
-		if (showInCenter)
+		glm::vec2 textSize = {};
+		if (showInCenter || std::abs(rotationDegrees) > 0.0001f)
 		{
-			auto textSize = this->getTextSize(text, font, sizePixels, spacing, line_space);
+			textSize = this->getTextSize(text, font, sizePixels, spacing, line_space);
 
-			position.x -= textSize.x / 2.f;
-			position.y -= textSize.y / 2.f;
-			position.y += (font.max_height * size / 2.f) * 1.5f;
+			if (showInCenter)
+			{
+				position.x -= textSize.x / 2.f;
+				position.y -= textSize.y / 2.f;
+				position.y += (font.max_height * size / 2.f) * 1.5f;
+			}
 		}
+
+		glm::vec2 textCenter = position + textSize * 0.5f;
 
 		rectangle = {};
 		rectangle.x = position.x;
@@ -1704,26 +1711,47 @@ namespace gl2d
 
 				glm::vec4 colorData[4] = {color, color, color, color};
 
+				glm::vec2 rectCenter = {rectangle.x + rectangle.z * 0.5f, rectangle.y + rectangle.w * 0.5f};
+				glm::vec2 origin = {0, 0};
+				if (std::abs(rotationDegrees) > 0.0001f)
+				{
+					origin = textCenter - rectCenter;
+				}
+
 				if (ShadowColor.w)
 				{
 					glm::vec2 pos = {-5, 3};
 					pos *= size;
-					renderRectangle({rectangle.x + pos.x, rectangle.y + pos.y,  rectangle.z, rectangle.w},
-						font.texture, ShadowColor, glm::vec2{0, 0}, 0,
+					glm::vec4 shadowRect = {rectangle.x + pos.x, rectangle.y + pos.y, rectangle.z, rectangle.w};
+					glm::vec2 shadowCenter = {shadowRect.x + shadowRect.z * 0.5f, shadowRect.y + shadowRect.w * 0.5f};
+					glm::vec2 shadowOrigin = origin;
+					if (std::abs(rotationDegrees) > 0.0001f)
+					{
+						shadowOrigin = textCenter - shadowCenter;
+					}
+					renderRectangle(shadowRect,
+						font.texture, ShadowColor, shadowOrigin, rotationDegrees,
 						glm::vec4{quad.s0, quad.t0, quad.s1, quad.t1}, positionZ);
 
 				}
 
-				renderRectangle(rectangle, font.texture, colorData, glm::vec2{0, 0}, 0,
+				renderRectangle(rectangle, font.texture, colorData, origin, rotationDegrees,
 					glm::vec4{quad.s0, quad.t0, quad.s1, quad.t1}, positionZ);
 
 				if (LightColor.w)
 				{
 					glm::vec2 pos = {-2, 1};
 					pos *= size;
-					renderRectangle({rectangle.x + pos.x, rectangle.y + pos.y,  rectangle.z, rectangle.w},
+					glm::vec4 lightRect = {rectangle.x + pos.x, rectangle.y + pos.y, rectangle.z, rectangle.w};
+					glm::vec2 lightCenter = {lightRect.x + lightRect.z * 0.5f, lightRect.y + lightRect.w * 0.5f};
+					glm::vec2 lightOrigin = origin;
+					if (std::abs(rotationDegrees) > 0.0001f)
+					{
+						lightOrigin = textCenter - lightCenter;
+					}
+					renderRectangle(lightRect,
 						font.texture,
-						LightColor, glm::vec2{0, 0}, 0,
+						LightColor, lightOrigin, rotationDegrees,
 						glm::vec4{quad.s0, quad.t0, quad.s1, quad.t1}, positionZ);
 
 				}
@@ -1820,7 +1848,7 @@ namespace gl2d
 		tex = nullptr;
 
 		// stb typically gives you 8-bit RGBA in memory.
-		// In SDL, ABGR8888 is commonly the “matches RGBA bytes in memory” choice on little-endian.
+		// In SDL, ABGR8888 is commonly the ï¿½matches RGBA bytes in memoryï¿½ choice on little-endian.
 		// If your channels look swapped, try SDL_PIXELFORMAT_RGBA8888 instead.
 		tex = SDL_CreateTexture(platform::getSdlRenderer(), SDL_PIXELFORMAT_ABGR8888,
 			SDL_TEXTUREACCESS_STATIC, width, height);

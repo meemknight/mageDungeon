@@ -1,6 +1,4 @@
 #pragma once
-
-
 #include "gameplay/Physics.h"
 #include "gameplay/elements.h"
 #include <map>
@@ -18,6 +16,25 @@ struct HitStats
 	float damage = 0;
 	float pushBack = 0;
 };
+
+inline bool beatsElement(int target, int attacker)
+{
+	switch (attacker)
+	{
+		case Fire:
+			return target == Earth || target == Ice;
+		case Water:
+			return target == Fire;
+		case Ice:
+			return target == Earth || target == Water;
+		case Earth:
+			return target == Water;
+		default:
+			return false;
+	}
+
+	return false;
+}
 
 struct EntityLifeThings
 {
@@ -43,6 +60,15 @@ struct EntityLifeThings
 		{
 			hitDirecton = glm::normalize(hitDirecton);
 			outPushBack = hitDirecton * hitStats.pushBack;
+		}
+
+
+		float extraDamage = 0;
+
+		if (beatsElement(hostElement, hitElement))
+		{
+			extraDamage = std::ceil(hitStats.damage * 0.25f);
+			extraDamage = std::max(extraDamage, 1.f);
 		}
 
 		life -= hitStats.damage;

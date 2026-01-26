@@ -518,7 +518,7 @@ namespace gl2d
 		//todo the function should returns the size of the text drawn also refactor
 		void renderText(glm::vec2 position, const char *text, const Font font, const Color4f color, const float sizePixels = 64.f,
 			const float spacing = 4, const float line_spacePixels = 3, bool showInCenter = 1, const Color4f ShadowColor = {0.1,0.1,0.1,1}
-		, const Color4f LightColor = {}, float positionZ = 0);
+		, const Color4f LightColor = {}, float positionZ = 0, float rotationDegrees = 0);
 
 		//determines the text size so that it fits in the given box,
 		//the x and y components of the transform are ignored

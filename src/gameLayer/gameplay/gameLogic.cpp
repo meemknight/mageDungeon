@@ -161,6 +161,7 @@ bool GameLogic::update(float deltaTime,
 
 
 	particleSystem.update(deltaTime);
+	damageViewerSystem.update(deltaTime);
 
 #pragma endregion
 
@@ -195,6 +196,7 @@ bool GameLogic::update(float deltaTime,
 	particlePostProcessRenderer.finalRender(renderer);
 
 	map.renderMapAfterEntities(renderer, assetsManager);
+	damageViewerSystem.render(renderer, assetsManager.font);
 
 #pragma endregion
 
