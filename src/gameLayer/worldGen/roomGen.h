@@ -190,6 +190,9 @@ struct RoomGenerator
 		map.firstLayer.getBlockUnsafe(16, 17).type = Blocks::cobbleStoneWall;
 		map.firstLayer.getBlockUnsafe(17, 17).type = Blocks::cobbleStoneWall;
 
+
+
+
 		for (int y = 0; y < 15; y++)
 		{
 			for (int x = 15; x < 30; x++)
@@ -237,6 +240,9 @@ struct RoomGenerator
 		map.firstLayer.getBlockUnsafe(16 + 16, 17).type = Blocks::dungeonWall;
 		map.firstLayer.getBlockUnsafe(17 + 16, 17).type = Blocks::dungeonWall;
 
+
+		for (int i = 0; i < 10; i++)
+			map.firstLayer.getBlockUnsafe(13, 19 + i).type = Blocks::cobbleStoneWall;
 
 	}
 };

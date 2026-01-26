@@ -196,41 +196,85 @@ glm::vec2 PhysicalEntity::performCollision(Map &mapData, glm::vec2 pos, glm::vec
 
 				if (entity.intersectTransform(block, -0.00005f))
 				{
-					const bool isCircle = entity.isCircleCollider;
-					const float radius = isCircle ? (dimensions.x * 0.5f) : 0.0f;
-
-					if (delta.x != 0.0f)
+					if (entity.isCircleCollider)
 					{
-						const float extentX = isCircle ? radius : (dimensions.x * 0.5f);
+						const float radius = dimensions.x * 0.5f;
+						const glm::vec4 rect = block.getAABB();
+						const float closestX = clampf(pos.x, rect.x, rect.x + rect.z);
+						const float closestY = clampf(pos.y, rect.y, rect.y + rect.w);
 
-						if (delta.x < 0.0f) // moving left
+						if (delta.x != 0.0f)
 						{
-							leftTouch = 1;
-							pos.x = (x + 1.0f) + extentX; // block right + extent
-							return pos;
+							const float dy = pos.y - closestY;
+							const float push = glm::sqrt(glm::max(0.0f, radius * radius - dy * dy));
+
+							if (delta.x < 0.0f) // moving left
+							{
+								leftTouch = 1;
+								pos.x = (rect.x + rect.z) + push; // block right + radius at contact
+								return pos;
+							}
+							else // moving right
+							{
+								rightTouch = 1;
+								pos.x = rect.x - push;         // block left - radius at contact
+								return pos;
+							}
 						}
-						else // moving right
+						else if (delta.y != 0.0f)
 						{
-							rightTouch = 1;
-							pos.x = (float)x - extentX;   // block left - extent
-							return pos;
+							const float dx = pos.x - closestX;
+							const float push = glm::sqrt(glm::max(0.0f, radius * radius - dx * dx));
+
+							if (delta.y < 0.0f) // moving up
+							{
+								upTouch = 1;
+								pos.y = (rect.y + rect.w) + push; // block top + radius at contact
+								return pos;
+							}
+							else // moving down
+							{
+								downTouch = 1;
+								pos.y = rect.y - push;          // block bottom - radius at contact
+								return pos;
+							}
 						}
 					}
-					else if (delta.y != 0.0f)
+					else
 					{
-						const float extentY = isCircle ? radius : (dimensions.y * 0.5f);
+						if (delta.x != 0.0f)
+						{
+							const float extentX = dimensions.x * 0.5f;
 
-						if (delta.y < 0.0f) // moving up
-						{
-							upTouch = 1;
-							pos.y = (y + 1.0f) + extentY; // block top + extent
-							return pos;
+							if (delta.x < 0.0f) // moving left
+							{
+								leftTouch = 1;
+								pos.x = (x + 1.0f) + extentX; // block right + extent
+								return pos;
+							}
+							else // moving right
+							{
+								rightTouch = 1;
+								pos.x = (float)x - extentX;   // block left - extent
+								return pos;
+							}
 						}
-						else // moving down
+						else if (delta.y != 0.0f)
 						{
-							downTouch = 1;
-							pos.y = (float)y - extentY;   // block bottom - extent
-							return pos;
+							const float extentY = dimensions.y * 0.5f;
+
+							if (delta.y < 0.0f) // moving up
+							{
+								upTouch = 1;
+								pos.y = (y + 1.0f) + extentY; // block top + extent
+								return pos;
+							}
+							else // moving down
+							{
+								downTouch = 1;
+								pos.y = (float)y - extentY;   // block bottom - extent
+								return pos;
+							}
 						}
 					}
 				}

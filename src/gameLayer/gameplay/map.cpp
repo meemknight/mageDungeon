@@ -140,7 +140,7 @@ void Map::renderWallShadows(gl2d::Renderer2D &renderer, AssetsManager &assetMana
 				bool wallTop = checkIsWall(x, y - 1);
 				bool wallRight = checkIsWall(x + 1, y);
 				bool wallTopRight = checkIsWall(x+1, y - 1);
-				glm::vec4 color = {1,1,1,0.3};
+				glm::vec4 color = {1,1,1,0.35};
 
 				if (wallTop && wallRight)
 				{
