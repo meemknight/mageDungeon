@@ -124,7 +124,7 @@ struct FlameWallSpell: public Spell
 		}
 		aim /= len;
 
-		if (auto wall = dynamic_cast<FlameWallProjectile *>(pptr.get()))
+		if (auto wall = dynamic_cast<ElementWallProjectile *>(pptr.get()))
 		{
 			wall->setupWall(aim);
 		}

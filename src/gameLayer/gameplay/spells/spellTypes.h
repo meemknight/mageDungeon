@@ -144,14 +144,14 @@ namespace SpellTypes
 		return ret;
 	}
 
-	inline FlameWallSpell getFlameWallSpell()
+	inline FlameWallSpell getFlameWallSpell(int element)
 	{
 		FlameWallSpell ret;
-		ret.element = Elements::Fire;
+		ret.element = element;
 		ret.maxFireCount = 1;
 		ret.triggerDelay = 0.1f;
-		ret.projectile = std::make_unique<FlameWallProjectile>();
-		ret.projectile->element = Elements::Fire;
+		ret.projectile = std::make_unique<ElementWallProjectile>(element);
+		ret.projectile->element = element;
 		ret.wallOffset = 1.2f;
 		return ret;
 	}
@@ -174,6 +174,7 @@ namespace SpellTypes
 		earthHomingMissle,
 		iceHomingMissle,
 		flameWall,
+		iceWall,
 
 		SPELLS_COUNT
 	};

@@ -26,6 +26,7 @@ namespace SpellTypes
 			{Elements::Water,Elements::Earth},	//earthHomingMissle,
 			{Elements::Water,Elements::Ice},	//iceHomingMissle,
 			{Elements::Fire,Elements::Fire},	//flameWall,
+			{Elements::Fire,Elements::Ice},	//iceWall,
 
 
 
@@ -103,7 +104,11 @@ namespace SpellTypes
 		break;
 
 		case flameWall:
-		return std::make_unique<FlameWallSpell>(getFlameWallSpell());
+		return std::make_unique<FlameWallSpell>(getFlameWallSpell(Elements::Fire));
+		break;
+
+		case iceWall:
+		return std::make_unique<FlameWallSpell>(getFlameWallSpell(Elements::Ice));
 		break;
 
 		case none:

@@ -353,7 +353,7 @@ struct TrapProjectile: public CloneableProjectile<TrapProjectile>
 
 };
 
-struct FlameWallProjectile: public CloneableProjectile<FlameWallProjectile>
+struct ElementWallProjectile: public CloneableProjectile<ElementWallProjectile>
 {
 	HitStats hitStats;
 	bool firstTime = true;
@@ -370,13 +370,36 @@ struct FlameWallProjectile: public CloneableProjectile<FlameWallProjectile>
 	float segmentSpacing = 0.75f;
 	ParticleSettings flameParticle;
 
-	FlameWallProjectile()
+	ElementWallProjectile()
 	{
-		hitStats.damage = 0.8f;
-		hitStats.pushBack = 0.4f;
-		timeAlieve = 10.0f;
-		physics.transform.isCircleCollider = false;
 		particleSystem.maxCount = 200;
+		setElementType(Elements::Fire);
+	}
+
+	ElementWallProjectile(int elementType)
+	{
+		particleSystem.maxCount = 200;
+		setElementType(elementType);
+	}
+
+	void setElementType(int elementType)
+	{
+		element = elementType;
+		physics.transform.isCircleCollider = false;
+		if (elementType == Elements::Ice)
+		{
+			hitStats.damage = 0.12f;
+			hitStats.pushBack = 1.4f;
+			timeAlieve = 18.0f;
+			hitTimerPenalty = 0.08f;
+		}
+		else
+		{
+			hitStats.damage = 0.8f;
+			hitStats.pushBack = 0.4f;
+			timeAlieve = 12.0f;
+			hitTimerPenalty = 0.15f;
+		}
 	}
 
 	void setupWall(glm::vec2 aimDir)
