@@ -575,7 +575,7 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 	{
 		for (int x = viewRectInt.x; x < viewRectInt.z; x++)
 		{
-
+			
 			auto current = getBlockUnsafe(x, y);
 			if (isWall(current.type))
 			{
@@ -613,10 +613,87 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 						wall.atlas.get(2, 1)
 					);
 				
-				}else
+				}
+				else
+
+					//thin walls
+					if (left && right && !top && !bottom)
+					{
+						renderer.renderRectangle({x,y - 1,1,1},
+							wall.texture,
+							color,
+							{},
+							0,
+							wall.atlas.get(2, 3)
+						);
+
+					}
+					else
+					if (bottom && top && !left && !right)
+					{
+						renderer.renderRectangle({x,y - 1,1,1},
+							wall.texture,
+							color,
+							{},
+							0,
+							wall.atlas.get(0, 1)
+						);
+
+					}else
+
+					//simple walls
+				if (bottom && top && !right)
+				{
+					//right wall
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(3, 1)
+					);
+
+				}else if (bottom && top && !left)
+				{
+					//right wall
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(1, 1)
+					);
+
+				}
+				else if (left && right && !top)
+				{
+					//top wall
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(2, 0)
+					);
+
+				}
+				else if (left && right && !bottom)
+				{
+					//bottom wall
+					renderer.renderRectangle({x,y - 1,1,1},
+						wall.texture,
+						color,
+						{},
+						0,
+						wall.atlas.get(2, 2)
+					);
+
+				}
+				else
 
 				if (left && top)
 				{
+					//bottom left corner
 					renderer.renderRectangle({x,y - 1,1,1},
 						wall.texture,
 						color,
@@ -658,20 +735,8 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 					);
 
 				}
-				else
 
 
-				if (left && right)
-				{
-					renderer.renderRectangle({x,y - 1,1,1},
-						wall.texture,
-						color,
-						{},
-						0,
-						wall.atlas.get(2, 3)
-					);
-
-				}
 				else if (left)
 				{
 					renderer.renderRectangle({x,y - 1,1,1},
@@ -691,17 +756,6 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 						0,
 						wall.atlas.get(1, 3)
 					);
-				}else
-				if (bottom && top)
-				{
-					renderer.renderRectangle({x,y - 1,1,1},
-						wall.texture,
-						color,
-						{},
-						0,
-						wall.atlas.get(0, 1)
-					);
-
 				}
 				else
 				if (bottom)
@@ -781,6 +835,7 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 						wall.atlas.get(4, 1)
 					);
 				}
+
 			}
 
 			else if (isChunkyTile(current.type))
