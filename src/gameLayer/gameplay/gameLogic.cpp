@@ -284,6 +284,56 @@ bool GameLogic::update(float deltaTime,
 	player.update(deltaTime);
 	player.render(renderer, assetsManager);
 
+	auto renderStatusIcons = [&](glm::vec4 aabb, const StatusEffects &effects)
+	{
+		struct StatusIcon
+		{
+			int element = 0;
+			float alpha = 1.0f;
+		};
+
+		StatusIcon icons[3];
+		int count = 0;
+
+		auto pushIcon = [&](float amount, int element)
+		{
+			if (amount <= 0.0f) { return; }
+			float alpha = 0.5f + 0.5f * std::min(amount / 2.0f, 1.0f);
+			icons[count++] = {element, alpha};
+		};
+
+		pushIcon(effects.fire, Elements::Fire);
+		pushIcon(effects.poison, Elements::Earth);
+		pushIcon(effects.chill, Elements::Ice);
+
+		if (count == 0) { return; }
+
+		float iconSize = PIXEL_SIZE * 8.0f;
+		float spacing = iconSize * 1.2f;
+		glm::vec2 base = {aabb.x + aabb.z * 0.5f, aabb.y - PIXEL_SIZE * 2.0f};
+
+		for (int i = 0; i < count; i++)
+		{
+			float offsetX = (i - (count - 1) * 0.5f) * spacing;
+			glm::vec4 rect = {
+				base.x + offsetX - iconSize * 0.5f,
+				base.y - iconSize,
+				iconSize,
+				iconSize
+			};
+			gl2d::Color4f color = {1, 1, 1, icons[i].alpha};
+			renderer.renderRectangle(rect, assetsManager.elements.texture, color, {}, 0,
+				assetsManager.elements.atlas.get(icons[i].element, 0));
+		}
+	};
+
+	for (auto &entity : entityHolder.entities)
+	{
+		renderStatusIcons(entity->physics.getAABB(), entity->statusEffects);
+	}
+
+	renderStatusIcons(player.physics.getAABB(), player.statusEffects);
+
 	projectiles.render(renderer, assetsManager, particlePostProcessRenderer);
 
 	particleSystem.render(renderer, particlePostProcessRenderer, {});
