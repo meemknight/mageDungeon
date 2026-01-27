@@ -162,7 +162,8 @@ bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParti
 	// Apply movement
 	if (glm::dot(moveDir, moveDir) > 0.0f)
 	{
-		physics.getPos() += moveDir * speed * deltaTime;
+		float finalSpeed = speed * statusSpeedMultiplier;
+		physics.getPos() += moveDir * finalSpeed * deltaTime;
 	}
 
 	animator.setAnimationBasedOnMovement(moveDir);
@@ -184,8 +185,9 @@ void BasicMeleEnemy::render(gl2d::Renderer2D &renderer, ParticlePostProcessRende
 
 	renderPos.y += PIXEL_SIZE * 10;
 
+	glm::vec4 tint = getStatusTint(statusEffects);
 	renderer.renderRectangle(renderPos, tileSet.texture,
-		Colors_White, {}, {}, tileSet.atlas.get(animator.positionX, animator.positionY,
+		tint, {}, {}, tileSet.atlas.get(animator.positionX, animator.positionY,
 		animator.flipX));
 
 	physics.renderCollider(renderer);

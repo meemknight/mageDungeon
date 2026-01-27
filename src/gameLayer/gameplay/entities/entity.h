@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <memory>
 #include <gameplay/particleSystem.h>
+#include <gameplay/statusEffects.h>
+#include <gameplay/damageViewerSystem.h>
 #include <random>
 #include <particles/particleCreator.h>
 #include <gameplay/characterAnimator.h>
@@ -86,6 +88,9 @@ struct Entity
 	PhysicalEntity physics{glm::vec2{12.f * PIXEL_SIZE, 12.f * PIXEL_SIZE}, true};
 	CharacterAnimator animator{glm::vec2(48.f * PIXEL_SIZE,48.f * PIXEL_SIZE)};
 	ParticleSystem particleSystem;
+	StatusEffects statusEffects;
+	StatusImmunities statusImmunities;
+	float statusSpeedMultiplier = 1.0f;
 
 	EntityLifeThings life;
 
@@ -143,6 +148,17 @@ struct EntityHolder
 		for (auto it = entities.begin(); it != entities.end(); )
 		{
 			Entity &p = **it;
+
+			auto statusTick = updateStatusEffects(p.statusEffects, p.statusImmunities, deltaTime);
+			p.statusSpeedMultiplier = statusTick.speedMultiplier;
+			if (statusTick.damage > 0.0f)
+			{
+				p.life.life -= statusTick.damage;
+				glm::vec2 damagePos = p.physics.getPos();
+				damagePos.y -= p.physics.transform.size.y * 0.6f;
+				getDamageViewerSystem().addDamage(statusTick.damage, damagePos);
+			}
+			updateStatusEffectParticles(p.statusEffects, mainParticleSystem, rng, p.physics.getPos(), deltaTime);
 
 			if ((p.life.life <= 0) ||  !p.update(deltaTime, map, mainParticleSystem, rng, player) ||
 				(p.life.life <= 0)

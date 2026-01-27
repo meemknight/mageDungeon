@@ -12,6 +12,7 @@
 #include <glm/gtx/hash.hpp>
 #include <randomStuff.h>
 #include <particles/particleCreator.h>
+#include <gameplay/statusEffects.h>
 
 #include <gameplay/elements.h>
 
@@ -152,6 +153,19 @@ bool GameLogic::update(float deltaTime,
 	glm::vec2 screenCenter = {renderer.windowW / 2.f, renderer.windowH / 2.f};
 	static bool usesController = 0;
 
+	{
+		auto statusTick = updateStatusEffects(player.statusEffects, player.statusImmunities, deltaTime);
+		player.statusSpeedMultiplier = statusTick.speedMultiplier;
+		if (statusTick.damage > 0.0f)
+		{
+			player.life -= statusTick.damage;
+			glm::vec2 damagePos = player.physics.getPos();
+			damagePos.y -= player.physics.transform.size.y * 0.6f;
+			getDamageViewerSystem().addDamage(statusTick.damage, damagePos);
+		}
+		updateStatusEffectParticles(player.statusEffects, particleSystem, rng, player.physics.getPos(), deltaTime);
+	}
+
 #pragma region input
 	{
 
@@ -192,7 +206,7 @@ bool GameLogic::update(float deltaTime,
 		if (glm::length(move) != 0)
 		{
 			move = glm::normalize(move);
-			move *= deltaTime * 6.f; //player speed
+			move *= deltaTime * 6.f * player.statusSpeedMultiplier; //player speed
 		}
 
 		player.physics.getPos() += move;

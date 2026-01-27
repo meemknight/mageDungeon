@@ -569,6 +569,62 @@ ParticleSettings getBobParticle(glm::vec4 startColor, glm::vec4 endColor)
 	return p;
 }
 
+ParticleSettings getStatusFireParticle(glm::vec4 startColor, glm::vec4 endColor)
+{
+	ParticleSettings p = getSmallSquareParticle(startColor, endColor);
+
+	p.onCreateCount = 3;
+	p.particleLifeTime = {0.2f, 0.4f};
+	p.velocityX = glm::vec2{-4, 4} * PIXEL_SIZE;
+	p.velocityY = glm::vec2{-14, -20} * PIXEL_SIZE;
+	p.dragX = glm::vec2{-20, -30} * PIXEL_SIZE;
+	p.dragY = glm::vec2{-25, -40} * PIXEL_SIZE;
+	
+	p.createApearence.size = glm::vec2{2, 3} * PIXEL_SIZE;
+	p.endApearence.size = glm::vec2{1, 2} * PIXEL_SIZE;
+
+	p.texture = getAssetManager().particleCircle;
+	return p;
+}
+
+ParticleSettings getStatusPoisonParticle(glm::vec4 startColor, glm::vec4 endColor)
+{
+	ParticleSettings p = getSmallSquareParticle(startColor, endColor);
+
+	p.onCreateCount = 2;
+	p.particleLifeTime = {0.35f, 0.6f};
+	p.velocityX = glm::vec2{-3, 3} * PIXEL_SIZE;
+	p.velocityY = glm::vec2{-6, -10} * PIXEL_SIZE;
+	p.dragX = glm::vec2{-6, -10} * PIXEL_SIZE;
+	p.dragY = glm::vec2{-8, -12} * PIXEL_SIZE;
+
+	p.createApearence.size = glm::vec2{3, 4} * PIXEL_SIZE;
+	p.endApearence.size = glm::vec2{2, 3} * PIXEL_SIZE;
+	p.texture = getAssetManager().particleSmoke;
+
+	return p;
+}
+
+ParticleSettings getStatusChillParticle(glm::vec4 startColor, glm::vec4 endColor)
+{
+	ParticleSettings p = getSmallSquareParticle(startColor, endColor);
+
+	p.onCreateCount = 2;
+	p.particleLifeTime = {0.25f, 0.5f};
+	p.velocityX = glm::vec2{-5, 5} * PIXEL_SIZE;
+	p.velocityY = glm::vec2{6, 14} * PIXEL_SIZE;
+	p.dragX = glm::vec2{-6, -10} * PIXEL_SIZE;
+	p.dragY = glm::vec2{-4, -8} * PIXEL_SIZE;
+
+	p.createApearence.size = glm::vec2{2, 3} * PIXEL_SIZE;
+	p.endApearence.size = glm::vec2{1, 2} * PIXEL_SIZE;
+	p.positionX = glm::vec2{-5, 5} * PIXEL_SIZE;
+	p.positionY = glm::vec2{-8, -3} * PIXEL_SIZE;
+	p.texture = getAssetManager().particleCircle;
+
+	return p;
+}
+
 ParticleEmissionSettings getBasicMagicMissleParticleEmision(int element, float sizeBias)
 {
 

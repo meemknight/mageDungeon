@@ -1,5 +1,6 @@
 #include "projectiles.h"
 #include <gameplay/damageViewerSystem.h>
+#include <gameplay/statusEffects.h>
 
 
 
@@ -20,6 +21,7 @@ bool basicProjectileHitEntitiesLogic(PhysicalEntity &physics,
 
 			e->life.computeHit(hitStats, projectileElement, e->element, projectileMoveDirection, pushBack);
 			e->physics.velocity += pushBack;
+			addStatusEffectFromElement(e->statusEffects, e->statusImmunities, projectileElement, 5.0f);
 
 			glm::vec2 damagePos = e->physics.getPos();
 			damagePos.y -= e->physics.transform.size.y * 0.6f;

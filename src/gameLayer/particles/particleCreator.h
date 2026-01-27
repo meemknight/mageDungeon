@@ -41,6 +41,10 @@ ParticleSettings getSpiralParticle(glm::vec4 startColor, glm::vec4 endColor);
 ParticleSettings getFigure8Particle(glm::vec4 startColor, glm::vec4 endColor);
 ParticleSettings getBobParticle(glm::vec4 startColor, glm::vec4 endColor);
 
+ParticleSettings getStatusFireParticle(glm::vec4 startColor, glm::vec4 endColor);
+ParticleSettings getStatusPoisonParticle(glm::vec4 startColor, glm::vec4 endColor);
+ParticleSettings getStatusChillParticle(glm::vec4 startColor, glm::vec4 endColor);
+
 
 
 ParticleEmissionSettings getBasicMagicMissleParticleEmision(int element, float sizeBias = 1);

@@ -16,8 +16,9 @@ void Player::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager)
 
 	renderPos.y += PIXEL_SIZE * 10;
 
+	glm::vec4 tint = getStatusTint(statusEffects);
 	renderer.renderRectangle(renderPos, assetManager.player.texture,
-		Colors_White, {}, {}, assetManager.player.atlas.get(animator.positionX, animator.positionY, 
+		tint, {}, {}, assetManager.player.atlas.get(animator.positionX, animator.positionY, 
 		animator.flipX));
 
 	physics.renderCollider(renderer);
