@@ -304,7 +304,7 @@ bool GameLogic::update(float deltaTime,
 				const auto &room = floorInfo.rooms[roomIndex];
 				if (room.enemySpawnPositions.empty()) { continue; }
 				if (isInsideRoom(room, player.physics.getPos(), avoidMargin)) { continue; }
- 				if (glm::distance(room.center(), player.physics.getPos()) < minPlayerDistance) { continue; }
+				if (glm::distance(glm::vec2(room.center()), player.physics.getPos()) < minPlayerDistance) { continue; }
 
 				int roomEnemyCount = 0;
 				for (auto &entity : entityHolder.entities)
