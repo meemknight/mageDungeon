@@ -34,6 +34,13 @@ ParticleSettings getDarkCurseEmberParticle(glm::vec4 startColor, glm::vec4 endCo
 ParticleSettings getTeleportPuffParticle(glm::vec4 startColor, glm::vec4 endColor);
 ParticleSettings getSmallSquareParticle(glm::vec4 startColor, glm::vec4 endColor);
 
+ParticleSettings getOrbitParticle(glm::vec4 startColor, glm::vec4 endColor);
+ParticleSettings getAtomParticle(glm::vec4 startColor, glm::vec4 endColor);
+ParticleSettings getZigZagParticle(glm::vec4 startColor, glm::vec4 endColor);
+ParticleSettings getSpiralParticle(glm::vec4 startColor, glm::vec4 endColor);
+ParticleSettings getFigure8Particle(glm::vec4 startColor, glm::vec4 endColor);
+ParticleSettings getBobParticle(glm::vec4 startColor, glm::vec4 endColor);
+
 
 
 ParticleEmissionSettings getBasicMagicMissleParticleEmision(int element, float sizeBias = 1);

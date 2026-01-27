@@ -11,6 +11,7 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 #include <randomStuff.h>
+#include <particles/particleCreator.h>
 
 #include <gameplay/elements.h>
 
@@ -86,6 +87,57 @@ bool GameLogic::update(float deltaTime,
 
 	ImGui::DragFloat2("Position", &player.physics.getPos()[0], 0.01);
 	ImGui::DragFloat("zoom", &zoom);
+
+	static bool particleUseVelocity = false;
+	ImGui::Checkbox("Particle Velocity", &particleUseVelocity);
+
+	auto spawnParticleTest = [&](ParticleSettings particle)
+	{
+		if (particleUseVelocity)
+		{
+			float speed = 40.0f * PIXEL_SIZE;
+			glm::vec2 screenCenterDebug = {renderer.windowW / 2.f, renderer.windowH / 2.f};
+			glm::vec2 dir = glm::vec2(platform::getRelMousePosition()) - screenCenterDebug;
+			if (glm::length(dir) <= 0.0001f)
+			{
+				dir = fireDirection;
+			}
+			if (glm::length(dir) <= 0.0001f)
+			{
+				dir = {1.0f, 0.0f};
+			}
+			dir = glm::normalize(dir);
+			particle.velocityX = {dir.x * speed, dir.x * speed};
+			particle.velocityY = {dir.y * speed, dir.y * speed};
+		}
+
+		particleSystem.emitParticles(particle, player.physics.getPos(), rng, player.physics.getPos());
+	};
+
+	if (ImGui::Button("Particle Orbit"))
+	{
+		spawnParticleTest(getOrbitParticle({0.6f, 0.9f, 1.0f, 0.9f}, {0.2f, 0.5f, 1.0f, 0.7f}));
+	}
+	if (ImGui::Button("Particle Atom"))
+	{
+		spawnParticleTest(getAtomParticle({1.0f, 0.7f, 0.3f, 0.9f}, {1.0f, 0.4f, 0.2f, 0.7f}));
+	}
+	if (ImGui::Button("Particle ZigZag"))
+	{
+		spawnParticleTest(getZigZagParticle({0.7f, 1.0f, 0.5f, 0.9f}, {0.3f, 0.8f, 0.4f, 0.7f}));
+	}
+	if (ImGui::Button("Particle Spiral"))
+	{
+		spawnParticleTest(getSpiralParticle({0.8f, 0.6f, 1.0f, 0.9f}, {0.4f, 0.2f, 0.9f, 0.7f}));
+	}
+	if (ImGui::Button("Particle Figure8"))
+	{
+		spawnParticleTest(getFigure8Particle({0.8f, 0.9f, 0.6f, 0.9f}, {0.5f, 0.8f, 0.3f, 0.7f}));
+	}
+	if (ImGui::Button("Particle Bob"))
+	{
+		spawnParticleTest(getBobParticle({0.9f, 0.7f, 0.5f, 0.9f}, {0.6f, 0.4f, 0.3f, 0.7f}));
+	}
 
 	if (ImGui::Button("Exit"))
 	{
@@ -616,7 +668,7 @@ bool GameLogic::update(float deltaTime,
 
 	//we want the first frame of the spell to happen in the same frame it was cast
 	spellsHolder.update(deltaTime, map, particleSystem,
-		projectiles, rng, player, fireDirection);
+		projectiles, rng, player, entityHolder, fireDirection);
 
 
 	renderer.flush();

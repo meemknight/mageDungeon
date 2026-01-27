@@ -168,6 +168,15 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline WaterSiphonSpell getWaterSiphonSpell()
+	{
+		WaterSiphonSpell ret;
+		ret.element = Elements::Water;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		return ret;
+	}
+
 	enum Spells
 	{
 		none,
@@ -188,6 +197,7 @@ namespace SpellTypes
 		flameWall,
 		iceWall,
 		boulder,
+		waterSiphon,
 
 		SPELLS_COUNT
 	};

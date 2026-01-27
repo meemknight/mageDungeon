@@ -28,6 +28,7 @@ namespace SpellTypes
 			{Elements::Fire,Elements::Fire},	//flameWall,
 			{Elements::Fire,Elements::Ice},	//iceWall,
 			{Elements::Fire,Elements::Water},	//boulder,
+			{Elements::Water,Elements::Water,Elements::Water},	//waterSiphon,
 
 
 
@@ -114,6 +115,10 @@ namespace SpellTypes
 
 		case boulder:
 		return std::make_unique<BasicMagicMissleSpell>(getBoulderSpell());
+		break;
+
+		case waterSiphon:
+		return std::make_unique<WaterSiphonSpell>(getWaterSiphonSpell());
 		break;
 
 		case none:

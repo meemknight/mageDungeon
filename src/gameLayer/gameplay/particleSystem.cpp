@@ -33,6 +33,14 @@ void ParticleSystem::emitParticles(const ParticleSettings &particle, glm::vec2 p
 		instance.rotationSpeed = rand(particle.rotationSpeed);
 		instance.rotationDrag = rand(particle.rotationDrag);
 
+		instance.animationType = particle.animationType;
+		instance.animationSpeed = rand(particle.animationSpeed);
+		instance.animationAcceleration = rand(particle.animationAcceleration);
+		instance.animationRotation = rand(particle.animationRotation);
+		instance.animationTime = rand(particle.animationPhase);
+		instance.animationScale = {rand(particle.animationScaleX), rand(particle.animationScaleY)};
+		instance.animationOffset = {};
+
 		instance.drag = {rand(particle.dragX), rand(particle.dragY)};
 
 		instance.velocity = {rand(particle.velocityX), rand(particle.velocityY)};
@@ -134,6 +142,85 @@ float wrapDegrees(float deg)
 	return deg;
 }
 
+constexpr float ANIMATION_PI = 3.14159265f;
+
+float triangleWave(float t)
+{
+	float phase = std::fmod(t, 2.0f * ANIMATION_PI);
+	if (phase < 0.0f) { phase += 2.0f * ANIMATION_PI; }
+	float norm = phase / (2.0f * ANIMATION_PI);
+	return 4.0f * std::abs(norm - 0.5f) - 1.0f;
+}
+
+glm::vec2 rotateVec(glm::vec2 v, float degrees)
+{
+	if (std::abs(degrees) <= 0.0001f) { return v; }
+	float rad = degrees * (ANIMATION_PI / 180.0f);
+	float cs = std::cos(rad);
+	float sn = std::sin(rad);
+	return {v.x * cs - v.y * sn, v.x * sn + v.y * cs};
+}
+
+glm::vec2 getAnimationOffset(const ParticleInstance &p)
+{
+	if (p.animationType == ParticleSettings::ANIMATION_TYPES::animationNone)
+	{
+		return {};
+	}
+
+	float t = p.animationTime;
+	glm::vec2 scale = p.animationScale;
+	glm::vec2 offset = {};
+
+	// animation patterns are purely visual offsets layered on top of physics
+
+	switch (p.animationType)
+	{
+		case ParticleSettings::ANIMATION_TYPES::animationCircle:
+		{
+			offset = {std::cos(t) * scale.x, std::sin(t) * scale.y};
+		}
+		break;
+		case ParticleSettings::ANIMATION_TYPES::animationAtom:
+		{
+			float radius = 0.5f + 0.5f * std::sin(t * 2.0f);
+			offset = {std::cos(t) * scale.x * radius, std::sin(t) * scale.y * radius};
+		}
+		break;
+		case ParticleSettings::ANIMATION_TYPES::animationZigZag:
+		{
+			float tri = triangleWave(t);
+			offset = {tri * scale.x, std::sin(t * 0.5f) * scale.y};
+		}
+		break;
+		case ParticleSettings::ANIMATION_TYPES::animationSpiral:
+		{
+			float radius = std::fmod(std::abs(t), 2.0f * ANIMATION_PI) / (2.0f * ANIMATION_PI);
+			offset = {std::cos(t) * scale.x * radius, std::sin(t) * scale.y * radius};
+		}
+		break;
+		case ParticleSettings::ANIMATION_TYPES::animationWave:
+		{
+			offset = {std::sin(t) * scale.x, std::cos(t * 0.5f) * scale.y};
+		}
+		break;
+		case ParticleSettings::ANIMATION_TYPES::animationFigure8:
+		{
+			offset = {std::sin(t) * scale.x, std::sin(t * 2.0f) * scale.y};
+		}
+		break;
+		case ParticleSettings::ANIMATION_TYPES::animationBob:
+		{
+			offset = {0.0f, std::sin(t) * scale.y};
+		}
+		break;
+		default:
+			break;
+	}
+
+	return rotateVec(offset, p.animationRotation);
+}
+
 void ParticleSystem::update(float deltaTime)
 {
 	if (particles.size() >= maxCount)
@@ -156,7 +243,7 @@ void ParticleSystem::update(float deltaTime)
 			continue;
 		}
 
-		//update
+		// update physics-driven motion (velocity + drag)
 
 		p.velocity = dampExp(p.velocity, glm::max(p.drag, glm::vec2(0.0f)), deltaTime);
 
@@ -167,6 +254,11 @@ void ParticleSystem::update(float deltaTime)
 
 		// optional: keep rotation in [0,360)
 		p.rotation = wrapDegrees(p.rotation);
+
+		// animation phase is applied on top of the physics position
+		p.animationSpeed += p.animationAcceleration * deltaTime;
+		p.animationTime += p.animationSpeed * deltaTime;
+		p.animationOffset = getAnimationOffset(p);
 
 
 	}
@@ -215,7 +307,9 @@ void ParticleSystem::render(gl2d::Renderer2D &renderer,
 		glm::vec4 finalColor = interpolate(p.colorEnd, p.colorStart, perc);
 		float finalSize = interpolate(p.sizeEnd, p.sizeStart, perc);
 
-		glm::vec4 aabb = {p.pos - glm::vec2(finalSize / 2.f), finalSize, finalSize};
+		// animation offset is visual-only and layered on top of physics
+		glm::vec2 renderPos = p.pos + p.animationOffset;
+		glm::vec4 aabb = {renderPos - glm::vec2(finalSize / 2.f), finalSize, finalSize};
 
 		if (p.followParent)
 		{
@@ -302,4 +396,28 @@ void ParticlePostProcessRenderer::finalRender(gl2d::Renderer2D &renderer)
 	renderer.renderRectangle({0,0, renderer.windowW, renderer.windowH}, fbo.texture, {1,1,1,2}, {}, {}, {0,0,1,1});
 	renderer.popCamera();
 
+}
+
+void ParticleSystem::killParticlesColliding(Map &map, glm::vec2 parentPos)
+{
+	for (int i = 0; i < particles.size(); i++)
+	{
+		auto &p = particles[i];
+		glm::vec2 worldPos = p.pos;
+		if (p.followParent)
+		{
+			worldPos += -p.parentPos + parentPos;
+		}
+
+		int tx = (int)std::floor(worldPos.x);
+		int ty = (int)std::floor(worldPos.y);
+
+		if (tx < 0 || ty < 0 || tx >= map.size.x || ty >= map.size.y ||
+			map.isCollidableAtPosSafe(tx, ty))
+		{
+			particles[i] = particles.back();
+			particles.pop_back();
+			--i;
+		}
+	}
 }

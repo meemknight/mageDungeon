@@ -325,7 +325,7 @@ ParticleSettings getLightningZapParticle(glm::vec4 startColor, glm::vec4 endColo
 }
 
 // ------------------------------------------------------------
-// 7) Dark curse embers (sinky + wavy, “evil”)
+// 7) Dark curse embers (sinky + wavy, ï¿½evilï¿½)
 // ------------------------------------------------------------
 ParticleSettings getDarkCurseEmberParticle(glm::vec4 startColor, glm::vec4 endColor)
 {
@@ -427,6 +427,144 @@ ParticleSettings getSmallSquareParticle(glm::vec4 startColor, glm::vec4 endColor
 	p.positionY = glm::vec2{-2, 2} *PIXEL_SIZE;
 
 	p.folowParent = false;
+
+	return p;
+}
+
+ParticleSettings getOrbitParticle(glm::vec4 startColor, glm::vec4 endColor)
+{
+	ParticleSettings p = getSmallSquareParticle(startColor, endColor);
+	
+	p.onCreateCount = 3;
+	p.particleLifeTime = {1.2f, 1.8f};
+	p.velocityX = {0.0f, 0.0f};
+	p.velocityY = {0.0f, 0.0f};
+	p.dragX = {0.0f, 0.0f};
+	p.dragY = {0.0f, 0.0f};
+	p.folowParent = false;
+
+	p.animationType = ParticleSettings::ANIMATION_TYPES::animationCircle;
+	p.animationSpeed = {-6.0f, 6.0f};
+	p.animationAcceleration = {-1.5f, 1.5f};
+	p.animationScaleX = {PIXEL_SIZE * 6.0f, PIXEL_SIZE * 14.0f};
+	p.animationScaleY = {PIXEL_SIZE * 6.0f, PIXEL_SIZE * 14.0f};
+	p.animationRotation = {-30.0f, 30.0f};
+	p.animationPhase = {0.0f, 6.28f};
+
+	return p;
+}
+
+ParticleSettings getAtomParticle(glm::vec4 startColor, glm::vec4 endColor)
+{
+	ParticleSettings p = getSmallSquareParticle(startColor, endColor);
+
+	p.onCreateCount = 2;
+	p.particleLifeTime = {1.0f, 1.6f};
+	p.velocityX = {0.0f, 0.0f};
+	p.velocityY = {0.0f, 0.0f};
+	p.dragX = {0.0f, 0.0f};
+	p.dragY = {0.0f, 0.0f};
+	p.folowParent = false;
+
+	p.animationType = ParticleSettings::ANIMATION_TYPES::animationAtom;
+	p.animationSpeed = {-8.0f, 8.0f};
+	p.animationAcceleration = {-2.0f, 2.0f};
+	p.animationScaleX = {PIXEL_SIZE * 5.0f, PIXEL_SIZE * 12.0f};
+	p.animationScaleY = {PIXEL_SIZE * 5.0f, PIXEL_SIZE * 12.0f};
+	p.animationRotation = {-45.0f, 45.0f};
+	p.animationPhase = {0.0f, 6.28f};
+
+	return p;
+}
+
+ParticleSettings getZigZagParticle(glm::vec4 startColor, glm::vec4 endColor)
+{
+	ParticleSettings p = getSmallSquareParticle(startColor, endColor);
+
+	p.onCreateCount = 3;
+	p.particleLifeTime = {0.9f, 1.5f};
+	p.velocityX = {0.0f, 0.0f};
+	p.velocityY = {0.0f, 0.0f};
+	p.dragX = {0.0f, 0.0f};
+	p.dragY = {0.0f, 0.0f};
+	p.folowParent = false;
+
+	p.animationType = ParticleSettings::ANIMATION_TYPES::animationZigZag;
+	p.animationSpeed = {-10.0f, 10.0f};
+	p.animationAcceleration = {-1.0f, 1.0f};
+	p.animationScaleX = {PIXEL_SIZE * 10.0f, PIXEL_SIZE * 18.0f};
+	p.animationScaleY = {PIXEL_SIZE * 2.0f, PIXEL_SIZE * 6.0f};
+	p.animationRotation = {-20.0f, 20.0f};
+	p.animationPhase = {0.0f, 6.28f};
+
+	return p;
+}
+
+ParticleSettings getSpiralParticle(glm::vec4 startColor, glm::vec4 endColor)
+{
+	ParticleSettings p = getSmallSquareParticle(startColor, endColor);
+
+	p.onCreateCount = 4;
+	p.particleLifeTime = {1.0f, 1.8f};
+	p.velocityX = {0.0f, 0.0f};
+	p.velocityY = {0.0f, 0.0f};
+	p.dragX = {0.0f, 0.0f};
+	p.dragY = {0.0f, 0.0f};
+	p.folowParent = false;
+
+	p.animationType = ParticleSettings::ANIMATION_TYPES::animationSpiral;
+	p.animationSpeed = {-6.0f, 6.0f};
+	p.animationAcceleration = {-1.5f, 1.5f};
+	p.animationScaleX = {PIXEL_SIZE * 8.0f, PIXEL_SIZE * 18.0f};
+	p.animationScaleY = {PIXEL_SIZE * 8.0f, PIXEL_SIZE * 18.0f};
+	p.animationRotation = {-30.0f, 30.0f};
+	p.animationPhase = {0.0f, 6.28f};
+
+	return p;
+}
+
+ParticleSettings getFigure8Particle(glm::vec4 startColor, glm::vec4 endColor)
+{
+	ParticleSettings p = getSmallSquareParticle(startColor, endColor);
+
+	p.onCreateCount = 3;
+	p.particleLifeTime = {1.0f, 1.6f};
+	p.velocityX = {0.0f, 0.0f};
+	p.velocityY = {0.0f, 0.0f};
+	p.dragX = {0.0f, 0.0f};
+	p.dragY = {0.0f, 0.0f};
+	p.folowParent = false;
+
+	p.animationType = ParticleSettings::ANIMATION_TYPES::animationFigure8;
+	p.animationSpeed = {-7.0f, 7.0f};
+	p.animationAcceleration = {-1.0f, 1.0f};
+	p.animationScaleX = {PIXEL_SIZE * 7.0f, PIXEL_SIZE * 15.0f};
+	p.animationScaleY = {PIXEL_SIZE * 5.0f, PIXEL_SIZE * 12.0f};
+	p.animationRotation = {-25.0f, 25.0f};
+	p.animationPhase = {0.0f, 6.28f};
+
+	return p;
+}
+
+ParticleSettings getBobParticle(glm::vec4 startColor, glm::vec4 endColor)
+{
+	ParticleSettings p = getSmallSquareParticle(startColor, endColor);
+
+	p.onCreateCount = 2;
+	p.particleLifeTime = {0.9f, 1.4f};
+	p.velocityX = {0.0f, 0.0f};
+	p.velocityY = {0.0f, 0.0f};
+	p.dragX = {0.0f, 0.0f};
+	p.dragY = {0.0f, 0.0f};
+	p.folowParent = false;
+
+	p.animationType = ParticleSettings::ANIMATION_TYPES::animationBob;
+	p.animationSpeed = {-6.0f, 6.0f};
+	p.animationAcceleration = {-1.0f, 1.0f};
+	p.animationScaleX = {0.0f, 0.0f};
+	p.animationScaleY = {PIXEL_SIZE * 4.0f, PIXEL_SIZE * 9.0f};
+	p.animationRotation = {-10.0f, 10.0f};
+	p.animationPhase = {0.0f, 6.28f};
 
 	return p;
 }

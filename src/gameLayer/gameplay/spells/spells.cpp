@@ -27,7 +27,7 @@ glm::vec2 randomlyDriftVector(glm::vec2 in, float driftDegrees, std::ranlux24_ba
 
 void SpellsHolder::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 	ProjectileHolder &projectileHolder, std::ranlux24_base &rng, Player &player,
-	glm::vec2 currentAimDir)
+	EntityHolder &entityHolder, glm::vec2 currentAimDir)
 {
 
 	for (auto it = spells.begin(); it != spells.end(); )
@@ -52,7 +52,7 @@ void SpellsHolder::update(float deltaTime, Map &map, ParticleSystem &mainParticl
 			for (int castRepeat = 0; castRepeat < p.elementsPerCast; castRepeat++)
 			{
 				if (!p.update(deltaTime, map, mainParticleSystem,
-					projectileHolder, rng, player,
+					projectileHolder, rng, player, entityHolder,
 					randomlyDriftVector(currentAimDir, p.driftAngleDegrees, rng)
 					))
 				{
@@ -81,7 +81,7 @@ void SpellsHolder::update(float deltaTime, Map &map, ParticleSystem &mainParticl
 				for (int castRepeat = 0; castRepeat < p.elementsPerCast; castRepeat++)
 				{
 					if (!p.update(deltaTime, map, mainParticleSystem,
-						projectileHolder, rng, player,
+						projectileHolder, rng, player, entityHolder,
 						randomlyDriftVector(currentAimDir, p.driftAngleDegrees, rng)
 						))
 					{

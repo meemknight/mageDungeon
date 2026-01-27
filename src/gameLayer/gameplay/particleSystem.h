@@ -25,6 +25,18 @@ struct ParticleSettings
 		delay2
 	};
 
+	enum ANIMATION_TYPES
+	{
+		animationNone = 0,
+		animationCircle,
+		animationAtom,
+		animationZigZag,
+		animationSpiral,
+		animationWave,
+		animationFigure8,
+		animationBob
+	};
+
 	short onCreateCount = 0;
 
 	//random offset
@@ -40,6 +52,15 @@ struct ParticleSettings
 	glm::vec2 rotation = {};
 	glm::vec2 rotationSpeed = {};
 	glm::vec2 rotationDrag = {};
+
+	// additional motion layered on top of physics (radians/sec, applied in render)
+	unsigned char animationType = ANIMATION_TYPES::animationNone;
+	glm::vec2 animationSpeed = {};
+	glm::vec2 animationAcceleration = {};
+	glm::vec2 animationScaleX = {};
+	glm::vec2 animationScaleY = {};
+	glm::vec2 animationRotation = {}; // degrees
+	glm::vec2 animationPhase = {}; // initial time/phase
 
 	ParticleApearence createApearence = {};
 	ParticleApearence endApearence = {};
@@ -91,6 +112,15 @@ struct ParticleInstance
 	gl2d::Texture texture = {};
 
 	bool followParent = true;
+
+	// animation state (offset is applied during render)
+	unsigned char animationType = ParticleSettings::ANIMATION_TYPES::animationNone;
+	float animationTime = 0;
+	float animationSpeed = 0;
+	float animationAcceleration = 0;
+	glm::vec2 animationScale = {};
+	float animationRotation = 0;
+	glm::vec2 animationOffset = {};
 };
 
 struct ParticlePostProcessRenderer
@@ -107,6 +137,8 @@ struct ParticlePostProcessRenderer
 
 ParticlePostProcessRenderer &getParticlePostProcessRenderer();
 
+struct Map;
+
 struct ParticleSystem
 {
 
@@ -122,6 +154,9 @@ struct ParticleSystem
 
 	void emitParticles(const ParticleSettings &particle, glm::vec2 pos, 
 		std::ranlux24_base &rng, glm::vec2 parentPos);
+
+	// removes particles that hit collidable tiles (parentPos needed for followParent)
+	void killParticlesColliding(Map &map, glm::vec2 parentPos);
 
 	void copyParticles(ParticleSystem &other, std::ranlux24_base &rng, glm::vec2 parentPos)
 	{
