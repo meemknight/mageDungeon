@@ -277,6 +277,66 @@ bool GameLogic::update(float deltaTime,
 
 	entityHolder.update(deltaTime, map, particleSystem, rng, player);
 	resolveEntityPush(entityHolder, player);
+
+	#pragma region temp enemy spawner
+	// temporary: spawn enemies for testing
+	{
+		static float spawnTimer = 0.0f;
+		spawnTimer -= deltaTime;
+
+		int maxEnemies = 30;
+		if (spawnTimer <= 0.0f && entityHolder.entities.size() < maxEnemies && !floorInfo.rooms.empty())
+		{
+			spawnTimer = 1.8f;
+			float avoidMargin = 3.0f;
+			float minPlayerDistance = 10.0f;
+			int maxRoomEnemies = 3;
+
+			auto isInsideRoom = [&](const FloorRoom &room, glm::vec2 pos, float margin)
+			{
+				return pos.x >= room.pos.x - margin && pos.x <= room.pos.x + room.size.x + margin &&
+					pos.y >= room.pos.y - margin && pos.y <= room.pos.y + room.size.y + margin;
+			};
+
+			for (int attempt = 0; attempt < 6; attempt++)
+			{
+				int roomIndex = getRandomInt(rng, 0, (int)floorInfo.rooms.size() - 1);
+				const auto &room = floorInfo.rooms[roomIndex];
+				if (room.enemySpawnPositions.empty()) { continue; }
+				if (isInsideRoom(room, player.physics.getPos(), avoidMargin)) { continue; }
+ 				if (glm::distance(room.center(), player.physics.getPos()) < minPlayerDistance) { continue; }
+
+				int roomEnemyCount = 0;
+				for (auto &entity : entityHolder.entities)
+				{
+					if (isInsideRoom(room, entity->physics.getPos(), 0.0f))
+					{
+						roomEnemyCount++;
+					}
+				}
+				if (roomEnemyCount >= maxRoomEnemies) { continue; }
+
+				glm::vec2 spawnPos = {};
+				bool placed = false;
+				for (int spawnAttempt = 0; spawnAttempt < 6; spawnAttempt++)
+				{
+					int spawnIndex = getRandomInt(rng, 0, (int)room.enemySpawnPositions.size() - 1);
+					spawnPos = room.enemySpawnPositions[spawnIndex];
+					if (glm::distance(spawnPos, player.physics.getPos()) < minPlayerDistance)
+					{
+						continue;
+					}
+					placed = true;
+					break;
+				}
+
+				if (!placed) { continue; }
+				entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), spawnPos);
+				break;
+			}
+		}
+	}
+	#pragma endregion
 	entityHolder.render(renderer, particlePostProcessRenderer);
 
 
