@@ -10,6 +10,7 @@
 #include <vector>
 #include <gameplay/damageViewerSystem.h>
 #include <worldGen/floorGen.h>
+#include <gameplay/wand.h>
 
 //this is an instance of the game.
 //This shouldn't load things like textures, those should be load outside
@@ -41,6 +42,7 @@ struct GameLogic
 	SpellSelectionState spellSelectionState;
 	DamageViewerSystem damageViewerSystem;
 	FloorInfo floorInfo;
+	Wand currentWand;
 
 	ParticleSystem particleSystem;
 	ParticlePostProcessRenderer particlePostProcessRenderer;

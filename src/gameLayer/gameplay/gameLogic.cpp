@@ -30,6 +30,8 @@ bool GameLogic::init()
 
 	floorGenerator.clear();
 
+	currentWand = makeStarterWand();
+
 	particlePostProcessRenderer.init();
 
 	if (floorInfo.playerSpawnPos)
@@ -422,9 +424,13 @@ bool GameLogic::update(float deltaTime,
 	{
 
 
+		int maxElements = currentWand.maxElementsPerCast;
+		if (maxElements < 1) { maxElements = 1; }
+		if (maxElements > SpellRecepie::MAX_ELEMENTS) { maxElements = SpellRecepie::MAX_ELEMENTS; }
+
 		auto tryAddElement = [&](int element)
 		{
-			spellRecepie.add(element, 4);
+			spellRecepie.add(element, maxElements);
 		};
 
 
@@ -483,8 +489,8 @@ bool GameLogic::update(float deltaTime,
 			glm::vec4 mainBox = {};
 			glm::ivec4 mainBoxFrame = {};
 			float selectLength = (selectorSize / 6.f) * 1.5f;
-			auto getDragDirection = [&](glm::vec2 cursorVector)
-			{
+				auto getDragDirection = [&](glm::vec2 cursorVector)
+				{
 				if (glm::length(cursorVector) < selectLength)
 				{
 					return 0;
@@ -563,8 +569,18 @@ bool GameLogic::update(float deltaTime,
 				bool hoveredUp = 0;
 				bool hoveredDown = 0;
 				bool hoveredLeft = 0;
-				bool hoveredRight = 0;
-				glm::vec2 cursorVector = cursorPos - selectionCenter;
+					bool hoveredRight = 0;
+					glm::vec2 cursorVector = cursorPos - selectionCenter;
+
+					bool upEnabled = currentWand.up.type == WandSlotType::Element;
+					bool downEnabled = currentWand.down.type == WandSlotType::Element;
+					bool leftEnabled = currentWand.left.type == WandSlotType::Element;
+					bool rightEnabled = currentWand.right.type == WandSlotType::Element;
+
+					int upElement = currentWand.up.element;
+					int downElement = currentWand.down.element;
+					int leftElement = currentWand.left.element;
+					int rightElement = currentWand.right.element;
 
 				if (selection.isClickSelection)
 				{
@@ -626,12 +642,12 @@ bool GameLogic::update(float deltaTime,
 					}
 				}
 
-				if (selection.isClickSelection)
-				{
-					if (hoveredUp && platform::isLMousePressed()) { selectedUp = true; }
-					if (hoveredDown && platform::isLMousePressed()) { selectedDown = true; }
-					if (hoveredLeft && platform::isLMousePressed()) { selectedLeft = true; }
-					if (hoveredRight && platform::isLMousePressed()) { selectedRight = true; }
+					if (selection.isClickSelection)
+					{
+						if (hoveredUp && platform::isLMousePressed()) { selectedUp = true; }
+						if (hoveredDown && platform::isLMousePressed()) { selectedDown = true; }
+						if (hoveredLeft && platform::isLMousePressed()) { selectedLeft = true; }
+						if (hoveredRight && platform::isLMousePressed()) { selectedRight = true; }
 
 					if (!selectedUp && !selectedDown && !selectedLeft && !selectedRight)
 					{
@@ -642,7 +658,7 @@ bool GameLogic::update(float deltaTime,
 						if (c.RStickButtonLeft.pressed) { selectedLeft = true; } else
 						if (c.RStickButtonRight.pressed) { selectedRight = true; }
 					}
-				}
+					}
 				else if (selection.isDrawing)
 				{
 					int dragDir = getDragDirection(cursorVector);
@@ -664,6 +680,11 @@ bool GameLogic::update(float deltaTime,
 						selectedLeft = dragDir == 3;
 						selectedRight = dragDir == 4;
 					}
+
+					if (!upEnabled) { hoveredUp = false; selectedUp = false; }
+					if (!downEnabled) { hoveredDown = false; selectedDown = false; }
+					if (!leftEnabled) { hoveredLeft = false; selectedLeft = false; }
+					if (!rightEnabled) { hoveredRight = false; selectedRight = false; }
 				}
 
 			#pragma endregion
@@ -686,14 +707,14 @@ bool GameLogic::update(float deltaTime,
 
 					auto updateCirclePiece = [&](
 						CirclePiece &c,
-						gl2d::Texture t, int element, float opacity, bool selected, bool hovered)
+						gl2d::Texture t, int element, float opacity, bool selected, bool hovered, bool enabled)
 					{
-						glm::vec3 color = elementToColor(element);
+						glm::vec3 color = enabled ? elementToColor(element) : glm::vec3{0.35f, 0.35f, 0.35f};
 
 						c.animationTime -= deltaTime * 2;
 						c.animationTime = glm::clamp(c.animationTime, 0.f, 1.f);
 
-						if (selected)
+						if (selected && enabled)
 						{
 							c.animationTime = 1.f;
 							tryAddElement(element);
@@ -704,7 +725,8 @@ bool GameLogic::update(float deltaTime,
 
 						glm::vec3 finalColor = glm::mix(color, glm::vec3{1,1,1}, glm::vec3(c.animationTime));
 
-						renderer.renderRectangle(mainBox, t, {finalColor, opacity});
+						float finalOpacity = enabled ? opacity : opacity * 0.4f;
+						renderer.renderRectangle(mainBox, t, {finalColor, finalOpacity});
 
 					};
 
@@ -713,10 +735,27 @@ bool GameLogic::update(float deltaTime,
 					static CirclePiece left;
 					static CirclePiece right;
 
-					updateCirclePiece(up, assetsManager.upCircle, Fire, opacity, selectedUp, hoveredUp);
-					updateCirclePiece(down, assetsManager.downCircle, Earth, opacity, selectedDown, hoveredDown);
-					updateCirclePiece(left, assetsManager.leftCircle, Ice, opacity, selectedLeft, hoveredLeft);
-					updateCirclePiece(right, assetsManager.rightCircle, Water, opacity, selectedRight, hoveredRight);
+					updateCirclePiece(up, assetsManager.upCircle, upElement, opacity, selectedUp, hoveredUp, upEnabled);
+					updateCirclePiece(down, assetsManager.downCircle, downElement, opacity, selectedDown, hoveredDown, downEnabled);
+					updateCirclePiece(left, assetsManager.leftCircle, leftElement, opacity, selectedLeft, hoveredLeft, leftEnabled);
+					updateCirclePiece(right, assetsManager.rightCircle, rightElement, opacity, selectedRight, hoveredRight, rightEnabled);
+
+					auto renderElementIcon = [&](int element, glm::vec2 dir)
+					{
+						float iconSize = PIXEL_SIZE * 14.0f * cameraZoom;
+						float offset = selectLength * 1.55f;
+						glm::vec2 center = selectionCenter + dir * offset;
+						glm::vec4 rect = {center.x - iconSize * 0.5f, center.y - iconSize * 0.5f,
+							iconSize, iconSize};
+						renderer.renderRectangle(rect, assetsManager.elements.texture,
+							{1, 1, 1, opacity}, {}, 0,
+							assetsManager.elements.atlas.get(element, 0));
+					};
+
+					if (upEnabled) { renderElementIcon(upElement, {0, -1}); }
+					if (downEnabled) { renderElementIcon(downElement, {0, 1}); }
+					if (leftEnabled) { renderElementIcon(leftElement, {-1, 0}); }
+					if (rightEnabled) { renderElementIcon(rightElement, {1, 0}); }
 
 
 				}
