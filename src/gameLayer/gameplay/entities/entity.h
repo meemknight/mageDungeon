@@ -205,20 +205,20 @@ inline void resolveEntityPush(EntityHolder &holder, Player &player)
 		return 0.5f * std::max(entity.transform.size.x, entity.transform.size.y);
 	};
 
-	auto applyPush = [&](PhysicalEntity &a, float weightA, PhysicalEntity &b, float weightB)
-	{
-		if (!a.transform.intersectTransform(b.transform))
+		auto applyPush = [&](PhysicalEntity &a, float weightA, PhysicalEntity &b, float weightB)
 		{
-			return;
-		}
+			if (!a.transform.intersectTransform(b.transform))
+			{
+				return;
+			}
 
-		glm::vec2 diff = b.getPos() - a.getPos();
-		float dist = glm::length(diff);
-		if (dist < 0.0001f)
-		{
-			diff = {1.0f, 0.0f};
-			dist = 1.0f;
-		}
+			glm::vec2 diff = b.getPos() - a.getPos();
+			float dist = glm::length(diff);
+			if (dist < 0.0001f)
+			{
+				diff = {1.0f, 0.0f};
+				dist = 0.0001f;
+			}
 
 		float overlap = (getRadius(a) + getRadius(b)) - dist;
 		if (overlap <= 0.0f)

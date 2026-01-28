@@ -326,6 +326,19 @@ bool GameLogic::update(float deltaTime,
 					{
 						continue;
 					}
+					bool occupied = false;
+					for (auto &entity : entityHolder.entities)
+					{
+						if (glm::distance(entity->physics.getPos(), spawnPos) < 0.4f)
+						{
+							occupied = true;
+							break;
+						}
+					}
+					if (occupied)
+					{
+						continue;
+					}
 					placed = true;
 					break;
 				}
