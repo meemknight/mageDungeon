@@ -22,6 +22,8 @@ struct AssetsManager
 	TileSet elements;
 	TileSet shadow;
 
+	TileSet wands;
+
 
 	gl2d::Texture upCircle;
 	gl2d::Texture downCircle;

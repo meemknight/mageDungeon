@@ -1,5 +1,6 @@
 #pragma once
 #include <glm/vec2.hpp>
+#include <glm/vec3.hpp>
 #include <vector>
 
 struct AssetsManager;
@@ -25,6 +26,7 @@ struct SleppSelectionInputLogic
 	{
 		glm::vec2 pos = {};
 		float timer = 0.0f;
+		glm::vec3 color = {0.5f, 0.5f, 0.5f};
 	};
 
 	struct CirclePiece
@@ -43,6 +45,12 @@ struct SleppSelectionInputLogic
 	CirclePiece downPiece;
 	CirclePiece leftPiece;
 	CirclePiece rightPiece;
+
+	// Trail color blending for smooth transitions between elements.
+	glm::vec3 trailColor = {0.5f, 0.5f, 0.5f};
+	glm::vec3 trailColorStart = {0.5f, 0.5f, 0.5f};
+	glm::vec3 trailTargetColor = {0.5f, 0.5f, 0.5f};
+	float trailColorTimer = 0.0f;
 
 	void update(float deltaTime, gl2d::Renderer2D &renderer,
 		AssetsManager &assetsManager,

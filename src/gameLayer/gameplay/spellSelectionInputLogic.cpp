@@ -66,6 +66,7 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 	glm::vec4 mainBox = {};
 	glm::ivec4 mainBoxFrame = {};
 	float selectLength = (selectorSize / 6.f) * 1.5f;
+	const glm::vec3 baseTrailColor = {0.5f, 0.5f, 0.5f};
 
 	auto getDragDirection = [&](glm::vec2 cursorVector)
 	{
@@ -78,11 +79,6 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 			return cursorVector.x > 0 ? 4 : 3;
 		}
 		return cursorVector.y > 0 ? 2 : 1;
-	};
-
-	auto detectTrailDirection = [&]()
-	{
-		return getDragDirection(cursorPos - mouseStart);
 	};
 
 	for (size_t i = 0; i < trail.size();)
@@ -118,11 +114,10 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 
 			trail.clear();
 			dragDirection = 0;
-		}
-
-		if (isDrawing)
-		{
-			trail.push_back({cursorPos, TRAIL_TIMER});
+			trailColor = baseTrailColor;
+			trailColorStart = baseTrailColor;
+			trailTargetColor = baseTrailColor;
+			trailColorTimer = 0.0f;
 		}
 
 		selectionCenter = isDrawing ? mouseStart : screenCenter;
@@ -142,6 +137,7 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		bool hoveredLeft = false;
 		bool hoveredRight = false;
 		glm::vec2 cursorVector = cursorPos - selectionCenter;
+		int currentDragDir = 0;
 
 		bool upEnabled = wand.up.type == WandSlotType::Element;
 		bool downEnabled = wand.down.type == WandSlotType::Element;
@@ -199,6 +195,7 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		else if (isDrawing)
 		{
 			int dragDir = getDragDirection(cursorVector);
+			currentDragDir = dragDir;
 
 			hoveredUp = dragDir == 1;
 			hoveredDown = dragDir == 2;
@@ -222,6 +219,62 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 			if (!downEnabled) { hoveredDown = false; selectedDown = false; }
 			if (!leftEnabled) { hoveredLeft = false; selectedLeft = false; }
 			if (!rightEnabled) { hoveredRight = false; selectedRight = false; }
+		}
+
+		glm::vec3 desiredTrailColor = baseTrailColor;
+		glm::vec3 instantTintColor = baseTrailColor;
+		bool trailTintActive = false;
+		if (isDrawing)
+		{
+			bool trailEnabled = false;
+			int trailElement = Elements::NoneElement;
+			switch (currentDragDir)
+			{
+				case 1:
+					trailEnabled = upEnabled;
+					trailElement = upElement;
+					break;
+				case 2:
+					trailEnabled = downEnabled;
+					trailElement = downElement;
+					break;
+				case 3:
+					trailEnabled = leftEnabled;
+					trailElement = leftElement;
+					break;
+				case 4:
+					trailEnabled = rightEnabled;
+					trailElement = rightElement;
+					break;
+			}
+			if (trailEnabled)
+			{
+				auto elementColor = elementToColor(trailElement);
+				desiredTrailColor = {elementColor.x, elementColor.y, elementColor.z};
+				instantTintColor = desiredTrailColor;
+				trailTintActive = true;
+			}
+		}
+
+		if (desiredTrailColor.x != trailTargetColor.x ||
+			desiredTrailColor.y != trailTargetColor.y ||
+			desiredTrailColor.z != trailTargetColor.z)
+		{
+			trailColorStart = trailColor;
+			trailTargetColor = desiredTrailColor;
+			trailColorTimer = 0.0f;
+		}
+
+		constexpr float TRAIL_COLOR_BLEND_TIME = 0.5f;
+		trailColorTimer = glm::clamp(trailColorTimer + deltaTime, 0.0f, TRAIL_COLOR_BLEND_TIME);
+		float trailBlend = TRAIL_COLOR_BLEND_TIME > 0.0f
+			? trailColorTimer / TRAIL_COLOR_BLEND_TIME
+			: 1.0f;
+		trailColor = glm::mix(trailColorStart, trailTargetColor, trailBlend);
+
+		if (isDrawing)
+		{
+			trail.push_back({cursorPos, TRAIL_TIMER, trailColor});
 		}
 
 		float opacity = 0.8f;
@@ -265,42 +318,18 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		if (leftEnabled) { renderElementIcon(leftElement, {-1, 0}); }
 		if (rightEnabled) { renderElementIcon(rightElement, {1, 0}); }
 
-		int trailDir = detectTrailDirection();
-		glm::vec4 trailColor = {0.5f, 0.5f, 0.5f, 1.0f};
-		bool trailEnabled = false;
-		int trailElement = 0;
-		switch (trailDir)
-		{
-			case 1:
-				trailEnabled = wand.up.type == WandSlotType::Element;
-				trailElement = wand.up.element;
-				break;
-			case 2:
-				trailEnabled = wand.down.type == WandSlotType::Element;
-				trailElement = wand.down.element;
-				break;
-			case 3:
-				trailEnabled = wand.left.type == WandSlotType::Element;
-				trailElement = wand.left.element;
-				break;
-			case 4:
-				trailEnabled = wand.right.type == WandSlotType::Element;
-				trailElement = wand.right.element;
-				break;
-		}
-		if (trailEnabled)
-		{
-			trailColor = elementToColor(trailElement);
-		}
-		trailColor.a = 0.7f;
-
 		int sizeInt = 4;
 		float trailSize = PIXEL_SIZE * sizeInt * cameraZoom;
 		for (const auto &point : trail)
 		{
 			float normalized = glm::clamp(point.timer / TRAIL_TIMER, 0.0f, 1.0f);
 			float fade = glm::pow(normalized, 0.6f);
-			glm::vec4 drawColor = trailColor;
+			glm::vec3 finalTrailColor = point.color;
+			if (trailTintActive)
+			{
+				finalTrailColor = glm::mix(finalTrailColor, instantTintColor, 0.5f);
+			}
+			glm::vec4 drawColor = {finalTrailColor.x, finalTrailColor.y, finalTrailColor.z, 0.7f};
 			drawColor.a *= fade;
 			glm::vec4 pos = {point.pos.x, point.pos.y, trailSize, trailSize};
 			renderer.renderRectangle(pos, drawColor);
@@ -314,6 +343,10 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		mouseStart = {};
 		trail.clear();
 		dragDirection = 0;
+		trailColor = baseTrailColor;
+		trailColorStart = baseTrailColor;
+		trailTargetColor = baseTrailColor;
+		trailColorTimer = 0.0f;
 
 		selectionCenter = screenCenter;
 		mainBox = {selectionCenter.x - selectorSize * 0.5f,

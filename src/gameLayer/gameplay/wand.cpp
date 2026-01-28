@@ -1,6 +1,7 @@
 #include "wand.h"
+#include <randomStuff.h>
 
-Wand makeDefaultWand()
+Wand makeTestWand()
 {
 	Wand wand;
 
@@ -15,11 +16,12 @@ Wand makeDefaultWand()
 }
 
 
-Wand makeStarterWand()
+Wand makeStarterWand(std::ranlux24_base &rng)
 {
 	Wand wand;
 
-	wand.up = {WandSlotType::Element, Elements::Ice};
+	int element = getRandomInt(rng, Elements::Fire, Elements::Ice);
+	wand.up = {WandSlotType::Element, element};
 	wand.maxElementsPerCast = 2;
 	wand.sanitize();
 
