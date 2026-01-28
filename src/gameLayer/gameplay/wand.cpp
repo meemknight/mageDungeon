@@ -19,7 +19,7 @@ Wand makeStarterWand()
 {
 	Wand wand;
 
-	wand.up = {WandSlotType::Element, Elements::Fire};
+	wand.up = {WandSlotType::Element, Elements::Ice};
 	wand.maxElementsPerCast = 2;
 	wand.sanitize();
 

@@ -7,39 +7,22 @@
 #include <gameplay/entities/entity.h>
 #include <gameplay/spells/spells.h>
 #include <gameplay/spells/spellTypes.h>
-#include <vector>
 #include <gameplay/damageViewerSystem.h>
 #include <worldGen/floorGen.h>
 #include <gameplay/wand.h>
+#include "spellSelectionInputLogic.h"
 
 //this is an instance of the game.
 //This shouldn't load things like textures, those should be load outside
 struct GameLogic
 {
-	struct SpellSelectionState
-	{
-		struct TrailPoint
-		{
-			glm::vec2 pos = {};
-			float timer = 0.0f;
-		};
-
-		bool executedFirstFrame = false;
-		bool isDrawing = false;
-		bool isClickSelection = false;
-		glm::vec2 mouseStart = {};
-		int dragDirection = 0;
-		std::vector<TrailPoint> trail;
-	};
-
-
 	Map map;
 	Player player;
 	ProjectileHolder projectiles;
 	EntityHolder entityHolder;
 	SpellsHolder spellsHolder;
 	SpellRecepie spellRecepie; //current spell recepie;
-	SpellSelectionState spellSelectionState;
+	SleppSelectionInputLogic spellSelectionInputLogic; //spell selection input and UI
 	DamageViewerSystem damageViewerSystem;
 	FloorInfo floorInfo;
 	Wand currentWand;
@@ -54,7 +37,7 @@ struct GameLogic
 
 	//returns false on fail
 	bool update(float deltaTime, gl2d::Renderer2D &renderer,
-		AssetsManager &assetsManager);
+		AssetsManager &assetsManager, platform::Input &input);
 
 	void close();
 
