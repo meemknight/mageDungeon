@@ -39,13 +39,13 @@ void addStatusEffect(StatusEffects &effects, const StatusImmunities &immunities,
 	switch (type)
 	{
 		case StatusType::Fire:
-			if (!immunities.fire) { effects.fire += amount; }
+			if (!immunities.fire) { effects.fire = std::max(effects.fire, amount); }
 			break;
 		case StatusType::Poison:
-			if (!immunities.poison) { effects.poison += amount; }
+			if (!immunities.poison) { effects.poison = std::max(effects.poison, amount); }
 			break;
 		case StatusType::Chill:
-			if (!immunities.chill) { effects.chill += amount; }
+			if (!immunities.chill) { effects.chill = std::max(effects.chill, amount); }
 			break;
 	}
 }

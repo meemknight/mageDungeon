@@ -30,6 +30,7 @@ struct FloorRoom
 	glm::ivec2 pos = {};
 	glm::ivec2 size = {};
 	std::vector<glm::vec2> enemySpawnPositions;
+	std::vector<glm::vec2> wandSpawnPositions; // optional item spawn points
 	bool isSpawnRoom = false;
 
 	glm::ivec2 center() const { return {pos.x + size.x / 2, pos.y + size.y / 2}; }

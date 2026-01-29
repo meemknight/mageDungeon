@@ -6,6 +6,7 @@
 #include <gl2d/gl2d.h>
 #include "assetsManager.h"
 #include "statusEffects.h"
+#include "wand.h"
 
 
 struct Player
@@ -19,7 +20,8 @@ struct Player
 	float life = 20.0f;
 	float maxLife = 20.0f;
 
-	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager);
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+		const Wand &wand, glm::vec2 aimDirection);
 
 	void update(float deltaTime);
 

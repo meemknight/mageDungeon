@@ -3,6 +3,8 @@
 #include <imgui.h>
 #include <platformInput.h>
 #include <gameLayer.h>
+#include <glui/glui.h>
+#include <imguiTools.h>
 #include <iostream>
 #include <gameplay/entities/entity.h>
 #include <gameplay/entities/enemyTypes.h>
@@ -24,11 +26,12 @@ bool GameLogic::init()
 
 	std::vector<FloorConnection> connections;
 
-	floorGenerator.generateDungeonFloor(70, 70, map, 12345, connections, true, floorInfo);
+	floorGenerator.generateDungeonFloor(140, 140, map, 1234, connections, true, floorInfo);
 
 	floorGenerator.clear();
 
-	currentWand = makeDefaultWand();
+	currentWand = getRandomWand(0, rng);
+	droppedItems.clear();
 
 	particlePostProcessRenderer.init();
 
@@ -65,7 +68,48 @@ bool GameLogic::init()
 			spawnPositions[index] = spawnPositions.back();
 			spawnPositions.pop_back();
 
-			entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), pos);
+		entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), pos);
+		}
+	}
+
+	// spawn a few wands in rooms
+	{
+		std::vector<glm::vec2> spawnPositions;
+		spawnPositions.reserve(32);
+
+		for (const auto &room : floorInfo.rooms)
+		{
+			if (room.isSpawnRoom)
+			{
+				continue;
+			}
+
+			const auto &roomSpawns = room.wandSpawnPositions.empty()
+				? room.enemySpawnPositions
+				: room.wandSpawnPositions;
+
+			for (const auto &pos : roomSpawns)
+			{
+				if (glm::distance(pos, player.physics.getPos()) < 3.0f)
+				{
+					continue;
+				}
+				spawnPositions.push_back(pos);
+			}
+		}
+
+		int maxSpawns = std::min(24, (int)spawnPositions.size());
+		int minSpawns = std::min(8, maxSpawns);
+		int spawnCount = maxSpawns > 0 ? getRandomInt(rng, minSpawns, maxSpawns) : 0;
+		for (int i = 0; i < spawnCount; i++)
+		{
+			int index = getRandomInt(rng, 0, (int)spawnPositions.size() - 1);
+			glm::vec2 pos = spawnPositions[index];
+			spawnPositions[index] = spawnPositions.back();
+			spawnPositions.pop_back();
+
+			int tier = getRandomInt(rng, 1, 3);
+			droppedItems.spawnWand(pos, getRandomWand(tier, rng), rng);
 		}
 	}
 
@@ -85,10 +129,83 @@ bool GameLogic::update(float deltaTime,
 
 #pragma region imgui
 	//ImGui::ShowDemoWindow();
-	ImGui::Begin("Game Debug");
+	if (input.buttons[platform::Button::F10].pressed)
+	{
+		ImGui::toggleImguiWindowOpen();
+	}
+	if (ImGui::isImguiWindowOpen())
+	{
+		ImGui::Begin("Game Debug");
 
 	ImGui::DragFloat2("Position", &player.physics.getPos()[0], 0.01);
 	ImGui::DragFloat("zoom", &zoom);
+	static int randomWandTier = 1;
+	ImGui::SliderInt("Random Wand Tier", &randomWandTier, 0, 5);
+	if (ImGui::Button("Random Wand"))
+	{
+		currentWand = getRandomWand(randomWandTier, rng);
+	}
+
+	ImGui::Separator();
+	ImGui::Text("Wand Elements");
+	ImGui::Text("Max Elements Per Cast: %d", currentWand.maxElementsPerCast);
+	int elementUses[Elements::Ice + 1] = {};
+	auto addElementUses = [&](const WandSlot &slot)
+	{
+		if (slot.type == WandSlotType::Element)
+		{
+			elementUses[slot.element] += slot.castCount;
+		}
+	};
+	addElementUses(currentWand.up);
+	addElementUses(currentWand.down);
+	addElementUses(currentWand.left);
+	addElementUses(currentWand.right);
+	addElementUses(currentWand.alwaysCast);
+
+	const char *elementNames[] = {"None", "Fire", "Water", "Earth", "Ice"};
+	for (int element = Elements::Fire; element <= Elements::Ice; element++)
+	{
+		if (elementUses[element] > 0)
+		{
+			ImGui::Text("%s: %d", elementNames[element], elementUses[element]);
+		}
+	}
+	if (currentWand.alwaysCast.type == WandSlotType::Element)
+	{
+		ImGui::Text("Always Cast: %s x%d", elementNames[currentWand.alwaysCast.element],
+			currentWand.alwaysCast.castCount);
+	}
+	else if (currentWand.alwaysCast.type == WandSlotType::Empty)
+	{
+		ImGui::Text("Always Cast: Empty");
+	}
+	else
+	{
+		ImGui::Text("Always Cast: Disabled");
+	}
+
+	ImGui::Separator();
+	ImGui::Text("Wand Slots");
+	const char *slotNames[] = {"Up", "Down", "Left", "Right"};
+	const WandSlot *slots[] = {&currentWand.up, &currentWand.down, &currentWand.left, &currentWand.right};
+	for (int i = 0; i < 4; i++)
+	{
+		auto &slot = *slots[i];
+		if (slot.type == WandSlotType::Element)
+		{
+			ImGui::Text("%s: %s x%d", slotNames[i], elementNames[slot.element], slot.castCount);
+		}
+		else if (slot.type == WandSlotType::Empty)
+		{
+			ImGui::Text("%s: Empty", slotNames[i]);
+		}
+		else
+		{
+			ImGui::Text("%s: Disabled", slotNames[i]);
+		}
+	}
+	ImGui::Separator();
 
 	static bool particleUseVelocity = false;
 	ImGui::Checkbox("Particle Velocity", &particleUseVelocity);
@@ -146,7 +263,8 @@ bool GameLogic::update(float deltaTime,
 		exitDungeon = true;
 	}
 
-	ImGui::End();
+		ImGui::End();
+	}
 #pragma endregion
 
 	glm::vec2 cursorPos = platform::getRelMousePosition();
@@ -213,6 +331,10 @@ bool GameLogic::update(float deltaTime,
 		player.physics.getPos() += move;
 		player.animator.setAnimationBasedOnMovement(move);
 
+		bool swapWand = input.buttons[platform::Button::E].pressed ||
+			input.controller.buttons[platform::Controller::A].pressed;
+		droppedItems.trySwapWithPlayer(player.physics.getPos(), currentWand, swapWand);
+
 		//fire dirrection
 		{
 			if (!usesController)
@@ -257,6 +379,7 @@ bool GameLogic::update(float deltaTime,
 
 	particleSystem.update(deltaTime);
 	damageViewerSystem.update(deltaTime);
+	droppedItems.update(deltaTime);
 
 #pragma endregion
 
@@ -275,6 +398,7 @@ bool GameLogic::update(float deltaTime,
 	map.renderWallShadows(renderer, assetsManager);
 
 	spellsHolder.renderBeforeEntities(renderer, particlePostProcessRenderer);
+	droppedItems.render(renderer, assetsManager);
 
 	entityHolder.update(deltaTime, map, particleSystem, rng, player);
 	resolveEntityPush(entityHolder, player);
@@ -356,7 +480,7 @@ bool GameLogic::update(float deltaTime,
 
 	//renderer.renderRectangle(player.physical.getAABB(), Colors_Red);
 	player.update(deltaTime);
-	player.render(renderer, assetsManager);
+	player.render(renderer, assetsManager, currentWand, fireDirection);
 
 	auto renderStatusIcons = [&](glm::vec4 aabb, const StatusEffects &effects)
 	{
@@ -418,6 +542,60 @@ bool GameLogic::update(float deltaTime,
 	damageViewerSystem.render(renderer, assetsManager.font);
 
 #pragma endregion
+
+	// current wand display
+	{
+		float cameraZoom = renderer.currentCamera.zoom;
+		renderer.pushCamera();
+		glui::Frame screenFrame({0, 0, renderer.windowW, renderer.windowH});
+
+		int size = (int)(PIXEL_SIZE * 16 * cameraZoom);
+		int padding = (int)(PIXEL_SIZE * 3 * cameraZoom);
+		auto wandBox = glui::Box().xLeft(padding).yTop(padding)
+			.xDimensionPixels(size).yDimensionPixels(size)();
+
+		renderer.renderRectangle(wandBox, assetsManager.wands.texture, {1, 1, 1, 1}, {}, 0,
+			assetsManager.wands.atlas.get(currentWand.wandSprite, 0));
+
+		int slotSize = (int)(PIXEL_SIZE * 8 * cameraZoom);
+		int slotSpacing = (int)(PIXEL_SIZE * 2 * cameraZoom);
+		float outlineWidth = PIXEL_SIZE * cameraZoom;
+		if (outlineWidth < 1.0f) { outlineWidth = 1.0f; }
+
+		glm::vec2 slotStart = {wandBox.x, wandBox.y + wandBox.w + padding};
+
+		auto renderWandSlot = [&](const WandSlot &slot, glm::vec4 box, bool alwaysCast)
+		{
+			if (slot.type == WandSlotType::Element)
+			{
+				renderer.renderRectangle(box, assetsManager.elements.texture, {1, 1, 1, 1}, {}, 0,
+					assetsManager.elements.atlas.get(slot.element, 0));
+			}
+			else
+			{
+				glm::vec4 fill = slot.type == WandSlotType::Empty
+					? glm::vec4{0.35f, 0.35f, 0.35f, 0.25f}
+					: glm::vec4{0.15f, 0.15f, 0.15f, 0.2f};
+				renderer.renderRectangle(box, fill);
+				renderer.renderRectangleOutline(box, {0.6f, 0.6f, 0.6f, 0.8f}, outlineWidth);
+			}
+
+			if (alwaysCast)
+			{
+				renderer.renderRectangleOutline(box, {1.0f, 0.85f, 0.3f, 0.9f}, outlineWidth);
+			}
+		};
+
+		const WandSlot *slots[] = {&currentWand.up, &currentWand.left, &currentWand.right,
+			&currentWand.down, &currentWand.alwaysCast};
+		for (int i = 0; i < 5; i++)
+		{
+			glm::vec4 slotBox = {slotStart.x + i * (slotSize + slotSpacing), slotStart.y,
+				(float)slotSize, (float)slotSize};
+			renderWandSlot(*slots[i], slotBox, i == 4);
+		}
+		renderer.popCamera();
+	}
 
 	// magic ui
 	{

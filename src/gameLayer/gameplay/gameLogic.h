@@ -10,6 +10,7 @@
 #include <gameplay/damageViewerSystem.h>
 #include <worldGen/floorGen.h>
 #include <gameplay/wand.h>
+#include <gameplay/droppedItems.h>
 #include "spellSelectionInputLogic.h"
 
 //this is an instance of the game.
@@ -26,6 +27,7 @@ struct GameLogic
 	DamageViewerSystem damageViewerSystem;
 	FloorInfo floorInfo;
 	Wand currentWand;
+	DroppedItemSystem droppedItems; // dropped items like wands
 
 	ParticleSystem particleSystem;
 	ParticlePostProcessRenderer particlePostProcessRenderer;

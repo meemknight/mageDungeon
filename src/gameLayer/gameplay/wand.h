@@ -15,6 +15,7 @@ struct WandSlot
 {
 	WandSlotType type = WandSlotType::Empty;
 	int element = Elements::NoneElement;
+	int castCount = 1;
 };
 
 struct Wand
@@ -27,7 +28,7 @@ struct Wand
 	WandSlot alwaysCast = WandSlot{WandSlotType::Disabled};
 
 	int maxMana = 4;
-	float manaChargeSpeed = 0.8;
+	float manaChargeSpeed = 0.5f;
 
 	// Max elements allowed per cast (1..7).
 	int maxElementsPerCast = 4;
@@ -116,3 +117,4 @@ struct Wand
 
 Wand makeTestWand();
 Wand makeStarterWand(std::ranlux24_base &rng);
+Wand getRandomWand(int tier, std::ranlux24_base &rng);

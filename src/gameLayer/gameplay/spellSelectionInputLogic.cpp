@@ -9,6 +9,7 @@
 #include <glui/glui.h>
 #include <platformInput.h>
 #include <gameLayer.h>
+#include <cstdio>
 
 void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &renderer,
 	AssetsManager &assetsManager,
@@ -23,19 +24,105 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 	const auto &controller = input.controller;
 	glm::vec2 cursorPos = {static_cast<float>(input.mouseX), static_cast<float>(input.mouseY)};
 
-	auto tryAddElement = [&](int element)
+	auto getMaxElements = [&]()
 	{
 		int maxElements = wand.maxElementsPerCast;
 		if (maxElements < 1) { maxElements = 1; }
 		if (maxElements > SpellRecepie::MAX_ELEMENTS) { maxElements = SpellRecepie::MAX_ELEMENTS; }
-		spellRecepie.add(element, maxElements);
+		return maxElements;
 	};
 
+	auto resetCastState = [&]()
+	{
+		remainingUp = wand.up.type == WandSlotType::Element ? wand.up.castCount : 0;
+		remainingDown = wand.down.type == WandSlotType::Element ? wand.down.castCount : 0;
+		remainingLeft = wand.left.type == WandSlotType::Element ? wand.left.castCount : 0;
+		remainingRight = wand.right.type == WandSlotType::Element ? wand.right.castCount : 0;
+		remainingAlwaysCast = wand.alwaysCast.type == WandSlotType::Element ? 1 : 0;
+		alwaysCastUsedThisCast = false;
+	};
+
+	auto slotEqual = [](const WandSlot &a, const WandSlot &b)
+	{
+		return a.type == b.type && a.element == b.element && a.castCount == b.castCount;
+	};
+
+	auto wandEqual = [&](const Wand &a, const Wand &b)
+	{
+		return slotEqual(a.up, b.up) && slotEqual(a.down, b.down) &&
+			slotEqual(a.left, b.left) && slotEqual(a.right, b.right) &&
+			slotEqual(a.alwaysCast, b.alwaysCast) &&
+			a.maxMana == b.maxMana && a.manaChargeSpeed == b.manaChargeSpeed &&
+			a.maxElementsPerCast == b.maxElementsPerCast && a.wandSprite == b.wandSprite;
+	};
+
+	bool wandChanged = !hasWandState || !wandEqual(lastWand, wand);
+	if (wandChanged)
+	{
+		lastWand = wand;
+		hasWandState = true;
+		spellRecepie.clear();
+		resetCastState();
+	}
+
+	if (!manaInitialized || wandChanged)
+	{
+		currentMana = (float)wand.maxMana;
+		manaInitialized = true;
+		castCooldownTimer = 0.0f;
+	}
+
+	currentMana += wand.manaChargeSpeed * deltaTime;
+	currentMana = glm::clamp(currentMana, 0.0f, (float)wand.maxMana);
+	castCooldownTimer = std::max(0.0f, castCooldownTimer - deltaTime);
+
+	auto applyAlwaysCast = [&]()
+	{
+		if (wand.alwaysCast.type != WandSlotType::Element) { return; }
+		if (alwaysCastUsedThisCast) { return; }
+		if (spellRecepie.count > 0) { return; }
+
+		int maxElements = getMaxElements();
+		if (spellRecepie.add(wand.alwaysCast.element, maxElements))
+		{
+			alwaysCastUsedThisCast = true;
+		}
+	};
+
+	applyAlwaysCast();
+
+	auto tryUseSlotElement = [&](int element, int &remaining)
+	{
+		int maxElements = getMaxElements();
+		if (remaining <= 0) { return false; }
+		if (currentMana < 1.0f) { return false; }
+		if (spellRecepie.count >= maxElements) { return false; }
+		if (spellRecepie.add(element, maxElements))
+		{
+			remaining--;
+			currentMana -= 1.0f;
+			if (currentMana < 0.0f) { currentMana = 0.0f; }
+			return true;
+		}
+		return false;
+	};
+
+	constexpr float CAST_COOLDOWN = 0.4f;
 	if (input.rMouse.pressed || controller.RTButton.pressed)
 	{
-		auto spell = SpellTypes::getSpellFromRecepie(spellRecepie);
-		spellsHolder.addSpell(std::move(spell), player.physics.getPos(), fireDirection);
-		spellRecepie.clear();
+		if (castCooldownTimer > 0.0f)
+		{
+			// still on cooldown
+		}
+		else
+		{
+			auto spell = SpellTypes::getSpellFromRecepie(spellRecepie);
+			spellsHolder.addSpell(std::move(spell), player.physics.getPos(), fireDirection);
+			spellRecepie.clear();
+			resetCastState();
+			applyAlwaysCast();
+			castCooldownTimer = CAST_COOLDOWN;
+		}
 	}
 
 	float cameraZoom = renderer.currentCamera.zoom;
@@ -139,10 +226,16 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		glm::vec2 cursorVector = cursorPos - selectionCenter;
 		int currentDragDir = 0;
 
+		int maxElements = getMaxElements();
+		bool hasMana = currentMana >= 1.0f;
 		bool upEnabled = wand.up.type == WandSlotType::Element;
 		bool downEnabled = wand.down.type == WandSlotType::Element;
 		bool leftEnabled = wand.left.type == WandSlotType::Element;
 		bool rightEnabled = wand.right.type == WandSlotType::Element;
+		bool upSelectable = upEnabled && remainingUp > 0 && hasMana;
+		bool downSelectable = downEnabled && remainingDown > 0 && hasMana;
+		bool leftSelectable = leftEnabled && remainingLeft > 0 && hasMana;
+		bool rightSelectable = rightEnabled && remainingRight > 0 && hasMana;
 
 		int upElement = wand.up.element;
 		int downElement = wand.down.element;
@@ -215,11 +308,16 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 				selectedRight = dragDir == 4;
 			}
 
-			if (!upEnabled) { hoveredUp = false; selectedUp = false; }
-			if (!downEnabled) { hoveredDown = false; selectedDown = false; }
-			if (!leftEnabled) { hoveredLeft = false; selectedLeft = false; }
-			if (!rightEnabled) { hoveredRight = false; selectedRight = false; }
+			if (!upSelectable) { hoveredUp = false; selectedUp = false; }
+			if (!downSelectable) { hoveredDown = false; selectedDown = false; }
+			if (!leftSelectable) { hoveredLeft = false; selectedLeft = false; }
+			if (!rightSelectable) { hoveredRight = false; selectedRight = false; }
 		}
+
+		if (!upSelectable) { hoveredUp = false; selectedUp = false; }
+		if (!downSelectable) { hoveredDown = false; selectedDown = false; }
+		if (!leftSelectable) { hoveredLeft = false; selectedLeft = false; }
+		if (!rightSelectable) { hoveredRight = false; selectedRight = false; }
 
 		glm::vec3 desiredTrailColor = baseTrailColor;
 		glm::vec3 instantTintColor = baseTrailColor;
@@ -231,22 +329,22 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 			switch (currentDragDir)
 			{
 				case 1:
-					trailEnabled = upEnabled;
-					trailElement = upElement;
-					break;
-				case 2:
-					trailEnabled = downEnabled;
-					trailElement = downElement;
-					break;
-				case 3:
-					trailEnabled = leftEnabled;
-					trailElement = leftElement;
-					break;
-				case 4:
-					trailEnabled = rightEnabled;
-					trailElement = rightElement;
-					break;
-			}
+				trailEnabled = upSelectable;
+				trailElement = upElement;
+				break;
+			case 2:
+				trailEnabled = downSelectable;
+				trailElement = downElement;
+				break;
+			case 3:
+				trailEnabled = leftSelectable;
+				trailElement = leftElement;
+				break;
+			case 4:
+				trailEnabled = rightSelectable;
+				trailElement = rightElement;
+				break;
+		}
 			if (trailEnabled)
 			{
 				auto elementColor = elementToColor(trailElement);
@@ -280,28 +378,39 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		float opacity = 0.8f;
 
 		auto updateCirclePiece = [&](CirclePiece &c, gl2d::Texture t, int element,
-			float opacityValue, bool selected, bool hovered, bool enabled)
+			float opacityValue, bool selected, bool hovered, bool enabled, bool selectable, int &remaining)
 		{
 			glm::vec3 color = enabled ? elementToColor(element) : glm::vec3{0.35f, 0.35f, 0.35f};
+			if (enabled && !selectable)
+			{
+				color = glm::mix(color, glm::vec3{0.2f, 0.2f, 0.2f}, 0.6f);
+			}
 			c.animationTime -= deltaTime * 2;
 			c.animationTime = glm::clamp(c.animationTime, 0.f, 1.f);
-			if (selected && enabled)
+			if (selected && selectable)
 			{
-				c.animationTime = 1.f;
-				tryAddElement(element);
+				if (tryUseSlotElement(element, remaining))
+				{
+					c.animationTime = 1.f;
+				}
 			}
 			if (hovered) { c.animationTime = std::max(c.animationTime, 0.5f); }
 			glm::vec3 finalColor = glm::mix(color, glm::vec3{1, 1, 1}, glm::vec3(c.animationTime));
 			float finalOpacity = enabled ? opacityValue : opacityValue * 0.4f;
+			if (enabled && !selectable) { finalOpacity *= 0.6f; }
 			renderer.renderRectangle(mainBox, t, {finalColor, finalOpacity});
 		};
 
-		updateCirclePiece(upPiece, assetsManager.upCircle, upElement, opacity, selectedUp, hoveredUp, upEnabled);
-		updateCirclePiece(downPiece, assetsManager.downCircle, downElement, opacity, selectedDown, hoveredDown, downEnabled);
-		updateCirclePiece(leftPiece, assetsManager.leftCircle, leftElement, opacity, selectedLeft, hoveredLeft, leftEnabled);
-		updateCirclePiece(rightPiece, assetsManager.rightCircle, rightElement, opacity, selectedRight, hoveredRight, rightEnabled);
+		updateCirclePiece(upPiece, assetsManager.upCircle, upElement, opacity, selectedUp, hoveredUp,
+			upEnabled, upSelectable, remainingUp);
+		updateCirclePiece(downPiece, assetsManager.downCircle, downElement, opacity, selectedDown, hoveredDown,
+			downEnabled, downSelectable, remainingDown);
+		updateCirclePiece(leftPiece, assetsManager.leftCircle, leftElement, opacity, selectedLeft, hoveredLeft,
+			leftEnabled, leftSelectable, remainingLeft);
+		updateCirclePiece(rightPiece, assetsManager.rightCircle, rightElement, opacity, selectedRight, hoveredRight,
+			rightEnabled, rightSelectable, remainingRight);
 
-		auto renderElementIcon = [&](int element, glm::vec2 dir)
+		auto renderElementIcon = [&](int element, glm::vec2 dir, float iconOpacity, int remaining)
 		{
 			float iconSize = PIXEL_SIZE * 14.0f * cameraZoom;
 			float offset = selectLength * 1.55f;
@@ -309,14 +418,23 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 			glm::vec4 rect = {center.x - iconSize * 0.5f, center.y - iconSize * 0.5f,
 				iconSize, iconSize};
 			renderer.renderRectangle(rect, assetsManager.elements.texture,
-				{1, 1, 1, opacity}, {}, 0,
+				{1, 1, 1, iconOpacity}, {}, 0,
 				assetsManager.elements.atlas.get(element, 0));
+
+			if (remaining >= 0)
+			{
+				char countText[8] = {};
+				snprintf(countText, sizeof(countText), "%d", remaining);
+				glm::vec2 textPos = {center.x + iconSize * 0.6f, center.y + iconSize * 0.35f};
+				renderer.renderText(textPos, countText, assetsManager.font,
+					{1, 1, 1, iconOpacity}, iconSize * 0.9f, 4, 3, false);
+			}
 		};
 
-		if (upEnabled) { renderElementIcon(upElement, {0, -1}); }
-		if (downEnabled) { renderElementIcon(downElement, {0, 1}); }
-		if (leftEnabled) { renderElementIcon(leftElement, {-1, 0}); }
-		if (rightEnabled) { renderElementIcon(rightElement, {1, 0}); }
+		if (upEnabled) { renderElementIcon(upElement, {0, -1}, upSelectable ? opacity : opacity * 0.4f, remainingUp); }
+		if (downEnabled) { renderElementIcon(downElement, {0, 1}, downSelectable ? opacity : opacity * 0.4f, remainingDown); }
+		if (leftEnabled) { renderElementIcon(leftElement, {-1, 0}, leftSelectable ? opacity : opacity * 0.4f, remainingLeft); }
+		if (rightEnabled) { renderElementIcon(rightElement, {1, 0}, rightSelectable ? opacity : opacity * 0.4f, remainingRight); }
 
 		int sizeInt = 4;
 		float trailSize = PIXEL_SIZE * sizeInt * cameraZoom;
@@ -365,12 +483,193 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		elementBox.y -= PIXEL_SIZE * 16 * cameraZoom;
 		elementBox.x -= PIXEL_SIZE * 8 * cameraZoom;
 
-		for (int i = 0; i < spellRecepie.count; i++)
+		int maxElements = getMaxElements();
+		int totalSlots = selectionActive ? maxElements : spellRecepie.count;
+		for (int i = 0; i < totalSlots; i++)
 		{
-			renderer.renderRectangle(elementBox, elementToColor(spellRecepie.elements[i]));
+			if (i < spellRecepie.count)
+			{
+				renderer.renderRectangle(elementBox, elementToColor(spellRecepie.elements[i]));
+			}
+			else
+			{
+				renderer.renderRectangle(elementBox, {0.1f, 0.1f, 0.1f, 0.5f});
+				renderer.renderRectangleOutline(elementBox, {0.6f, 0.6f, 0.6f, 0.6f},
+					PIXEL_SIZE * 0.8f * cameraZoom);
+			}
 			elementBox.x += elementSize * 1.5f;
 		}
 	}
 
+	// mana bar (right side)
+	int manaSlots = wand.maxMana;
+	if (manaSlots < 1) { manaSlots = 1; }
+	float segmentSize = PIXEL_SIZE * 6 * cameraZoom;
+	float segmentSpacing = PIXEL_SIZE * 2 * cameraZoom;
+	float barRight = renderer.windowW - PIXEL_SIZE * 6 * cameraZoom;
+	float barY = PIXEL_SIZE * 10 * cameraZoom;
+	float outlineWidth = PIXEL_SIZE * cameraZoom;
+	if (outlineWidth < 1.0f) { outlineWidth = 1.0f; }
+
+	glm::vec4 background = {0.05f, 0.08f, 0.15f, 0.6f};
+	glm::vec4 fillColor = {0.2f, 0.5f, 1.0f, 0.9f};
+	glm::vec4 outlineColor = {0.12f, 0.25f, 0.55f, 0.9f};
+
+	float barWidth = manaSlots * segmentSize + (manaSlots - 1) * segmentSpacing;
+	for (int i = 0; i < manaSlots; i++)
+	{
+		float segmentX = barRight - (i + 1) * segmentSize - i * segmentSpacing;
+		glm::vec4 segment = {segmentX, barY, segmentSize, segmentSize};
+		renderer.renderRectangle(segment, background);
+		renderer.renderRectangleOutline(segment, outlineColor, outlineWidth);
+
+		float fill = glm::clamp(currentMana - i, 0.0f, 1.0f);
+		if (fill > 0.0f)
+		{
+			float fillWidth = segment.z * fill;
+			glm::vec4 fillRect = {segment.x + (segment.z - fillWidth), segment.y,
+				fillWidth, segment.w};
+			renderer.renderRectangle(fillRect, fillColor);
+		}
+	}
+
+	// max elements per cast (right side, under mana)
+	{
+		int maxElements = getMaxElements();
+		float boxSize = segmentSize * 0.7f;
+		float boxSpacing = PIXEL_SIZE * 1.2f * cameraZoom;
+		float rowWidth = maxElements * boxSize + (maxElements - 1) * boxSpacing;
+		float rowX = barRight - rowWidth;
+		float rowY = barY + segmentSize + PIXEL_SIZE * 6 * cameraZoom;
+		float outlineWidthSmall = PIXEL_SIZE * 0.6f * cameraZoom;
+		if (outlineWidthSmall < PIXEL_SIZE * 0.3f) { outlineWidthSmall = PIXEL_SIZE * 0.3f; }
+
+		for (int i = 0; i < maxElements; i++)
+		{
+			glm::vec4 box = {rowX + i * (boxSize + boxSpacing), rowY, boxSize, boxSize};
+			renderer.renderRectangle(box, {0.08f, 0.08f, 0.08f, 0.5f});
+			renderer.renderRectangleOutline(box, {0.6f, 0.6f, 0.6f, 0.7f}, outlineWidthSmall);
+		}
+	}
+
+	// wand ring (right side, under mana)
+	{
+		glm::vec2 ringCenter = {barRight - barWidth * 0.62f,
+			barY + segmentSize + PIXEL_SIZE * 32 * cameraZoom};
+		float ringSize = segmentSize * 6.1f;
+		float ringOffset = ringSize * 0.4f;
+		float iconSize = ringSize * 0.34f;
+		float textSize = iconSize * 0.55f;
+		float textOffset = iconSize * 0.6f;
+
+		glm::vec4 ringRect = {ringCenter.x - ringSize * 0.5f, ringCenter.y - ringSize * 0.5f,
+			ringSize, ringSize};
+
+		auto renderRingPiece = [&](gl2d::Texture t, const WandSlot &slot, int remaining)
+		{
+			bool hasElement = slot.type == WandSlotType::Element;
+			glm::vec3 baseColor = hasElement ? elementToColor(slot.element) : glm::vec3{0.25f, 0.25f, 0.25f};
+			if (hasElement && remaining <= 0)
+			{
+				baseColor = glm::mix(baseColor, glm::vec3{0.2f, 0.2f, 0.2f}, 0.6f);
+			}
+			float opacity = hasElement ? 0.9f : 0.4f;
+			renderer.renderRectangle(ringRect, t, {baseColor, opacity});
+		};
+
+		renderRingPiece(assetsManager.upCircle, wand.up, remainingUp);
+		renderRingPiece(assetsManager.downCircle, wand.down, remainingDown);
+		renderRingPiece(assetsManager.leftCircle, wand.left, remainingLeft);
+		renderRingPiece(assetsManager.rightCircle, wand.right, remainingRight);
+
+		auto renderRingIcon = [&](const WandSlot &slot, int remaining, glm::vec2 dir)
+		{
+			if (slot.type != WandSlotType::Element) { return; }
+			glm::vec2 center = ringCenter + dir * ringOffset;
+			glm::vec4 iconRect = {center.x - iconSize * 0.5f, center.y - iconSize * 0.5f,
+				iconSize, iconSize};
+			renderer.renderRectangle(iconRect, assetsManager.elements.texture,
+				{1, 1, 1, 0.9f}, {}, 0,
+				assetsManager.elements.atlas.get(slot.element, 0));
+
+			char countText[8] = {};
+			snprintf(countText, sizeof(countText), "%d", std::max(0, remaining));
+			glm::vec2 textPos = {center.x + textOffset, center.y + textSize * 0.35f};
+			float textAlpha = remaining > 0 ? 0.9f : 0.5f;
+			renderer.renderText(textPos, countText, assetsManager.font,
+				{1, 1, 1, textAlpha}, textSize, 4, 3, false);
+		};
+
+		renderRingIcon(wand.up, remainingUp, {0, -1});
+		renderRingIcon(wand.down, remainingDown, {0, 1});
+		renderRingIcon(wand.left, remainingLeft, {-1, 0});
+		renderRingIcon(wand.right, remainingRight, {1, 0});
+
+		if (wand.alwaysCast.type == WandSlotType::Element)
+		{
+			float centerSize = ringSize * 0.38f;
+			glm::vec4 centerRect = {ringCenter.x - centerSize * 0.5f, ringCenter.y - centerSize * 0.5f,
+				centerSize, centerSize};
+			glm::vec3 elementColor = elementToColor(wand.alwaysCast.element);
+			renderer.renderRectangle(centerRect, {elementColor, 0.35f});
+			renderer.renderRectangle(centerRect, assetsManager.elements.texture,
+				{1, 1, 1, 0.9f}, {}, 0,
+				assetsManager.elements.atlas.get(wand.alwaysCast.element, 0));
+		}
+	}
+
 	renderer.popCamera();
+
+	// mana bar under player while selecting
+	if (selectionActive)
+	{
+		int manaSlots = wand.maxMana;
+		if (manaSlots < 1) { manaSlots = 1; }
+		float segmentSize = PIXEL_SIZE * 3.5f;
+		float segmentSpacing = PIXEL_SIZE * 1.0f;
+		float outlineWidth = PIXEL_SIZE * 0.4f;
+		if (outlineWidth < PIXEL_SIZE * 0.2f) { outlineWidth = PIXEL_SIZE * 0.2f; }
+
+		glm::vec4 background = {0.05f, 0.08f, 0.15f, 0.6f};
+		glm::vec4 fillColor = {0.2f, 0.5f, 1.0f, 0.9f};
+		glm::vec4 outlineColor = {0.12f, 0.25f, 0.55f, 0.9f};
+
+		float totalWidth = manaSlots * segmentSize + (manaSlots - 1) * segmentSpacing;
+		glm::vec2 basePos = player.physics.getPos();
+		float barX = basePos.x - totalWidth * 0.5f;
+		float barY = basePos.y + player.physics.transform.size.y * 0.5f + PIXEL_SIZE * 2.5f;
+
+		for (int i = 0; i < manaSlots; i++)
+		{
+			float segmentX = barX + totalWidth - (i + 1) * segmentSize - i * segmentSpacing;
+			glm::vec4 segment = {segmentX, barY, segmentSize, segmentSize};
+			renderer.renderRectangle(segment, background);
+			renderer.renderRectangleOutline(segment, outlineColor, outlineWidth);
+
+			float fill = glm::clamp(currentMana - i, 0.0f, 1.0f);
+			if (fill > 0.0f)
+			{
+				float fillWidth = segment.z * fill;
+				glm::vec4 fillRect = {segment.x + (segment.z - fillWidth), segment.y,
+					fillWidth, segment.w};
+				renderer.renderRectangle(fillRect, fillColor);
+			}
+		}
+
+		if (castCooldownTimer > 0.0f)
+		{
+			float cooldownWidth = totalWidth;
+			float cooldownHeight = PIXEL_SIZE * 1.4f;
+			float cooldownY = barY + segmentSize + PIXEL_SIZE * 1.6f;
+			float cooldownRatio = glm::clamp(castCooldownTimer / CAST_COOLDOWN, 0.0f, 1.0f);
+			glm::vec4 cooldownRect = {barX, cooldownY, cooldownWidth, cooldownHeight};
+			renderer.renderRectangle(cooldownRect, {0.1f, 0.1f, 0.1f, 0.5f});
+			renderer.renderRectangleOutline(cooldownRect, {0.4f, 0.4f, 0.4f, 0.7f},
+				PIXEL_SIZE * 0.3f);
+
+			float fillWidth = cooldownWidth * cooldownRatio;
+			glm::vec4 fillRect = {barX, cooldownY, fillWidth, cooldownHeight};
+			renderer.renderRectangle(fillRect, {0.9f, 0.9f, 0.9f, 0.8f});
+		}
+	}
 }

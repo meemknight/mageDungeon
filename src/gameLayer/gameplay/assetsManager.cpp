@@ -135,7 +135,7 @@ void AssetsManager::loadAllAssets()
 	s = shadow.texture.GetSize();
 	shadow.atlas = gl2d::TextureAtlasPadding(2, 3, s.x, s.y);
 
-	wands.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "map/items/wands.png", 16);
+	wands.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "items/wands.png", 16);
 	s = wands.texture.GetSize();
 	wands.atlas = gl2d::TextureAtlasPadding(32, 1, s.x, s.y);
 

@@ -2,12 +2,12 @@
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <vector>
+#include <gameplay/wand.h>
 
 struct AssetsManager;
 struct Player;
 struct SpellsHolder;
 struct SpellRecepie;
-struct Wand;
 
 namespace platform
 {
@@ -51,6 +51,19 @@ struct SleppSelectionInputLogic
 	glm::vec3 trailColorStart = {0.5f, 0.5f, 0.5f};
 	glm::vec3 trailTargetColor = {0.5f, 0.5f, 0.5f};
 	float trailColorTimer = 0.0f;
+
+	// Per-cast mana and slot use tracking.
+	float currentMana = 0.0f;
+	bool manaInitialized = false;
+	bool alwaysCastUsedThisCast = false;
+	float castCooldownTimer = 0.0f;
+	int remainingUp = 0;
+	int remainingDown = 0;
+	int remainingLeft = 0;
+	int remainingRight = 0;
+	int remainingAlwaysCast = 0;
+	Wand lastWand = {};
+	bool hasWandState = false;
 
 	void update(float deltaTime, gl2d::Renderer2D &renderer,
 		AssetsManager &assetsManager,

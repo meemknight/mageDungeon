@@ -1,5 +1,6 @@
 #include "map.h"
 #include <imgui.h>
+#include <imguiTools.h>
 
 void Map::create(int sizeX, int sizeY)
 {
@@ -555,9 +556,12 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 
 	static float opacity = 1;
 
-	ImGui::Begin("Game Debug");
-	ImGui::SliderFloat("Opacity", &opacity, 0, 1);
-	ImGui::End();
+	if (ImGui::isImguiWindowOpen())
+	{
+		ImGui::Begin("Game Debug");
+		ImGui::SliderFloat("Opacity", &opacity, 0, 1);
+		ImGui::End();
+	}
 
 	glm::vec4 color = {1,1,1,opacity};
 

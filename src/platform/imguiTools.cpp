@@ -5,6 +5,8 @@
 #include <IconsForkAwesome.h>
 #include <imgui_internal.h>
 
+static bool gImguiWindowOpen = true;
+
 
 bool ImGui::colouredButton(const char *label, glm::vec4 color, const ImVec2 &size_arg)
 {
@@ -12,6 +14,16 @@ bool ImGui::colouredButton(const char *label, glm::vec4 color, const ImVec2 &siz
 	auto rez = ::ImGui::Button(label, size_arg);
 	::ImGui::PopStyleColor();
 	return rez;
+}
+
+bool ImGui::isImguiWindowOpen()
+{
+	return gImguiWindowOpen;
+}
+
+void ImGui::toggleImguiWindowOpen()
+{
+	gImguiWindowOpen = !gImguiWindowOpen;
 }
 
 void ImGui::addErrorSymbol()

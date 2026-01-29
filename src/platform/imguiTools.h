@@ -35,6 +35,9 @@ namespace ImGui
 
 	bool ColorEdit4Swatches(const char *label, float col[4], ImGuiColorEditFlags flags);
 
+	bool isImguiWindowOpen();
+	void toggleImguiWindowOpen();
+
 	bool BeginChildFrameColoured(ImGuiID id,
 		glm::vec4 color, const ImVec2 &size, ImGuiWindowFlags extra_flags);
 

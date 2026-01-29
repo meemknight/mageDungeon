@@ -29,6 +29,7 @@ namespace platform
 			Tab,
 			LeftShift,
 			LeftAlt,
+			F10,
 			BUTTONS_COUNT, //
 		};
 

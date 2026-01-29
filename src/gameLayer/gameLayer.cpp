@@ -80,7 +80,6 @@ bool gameLogic(float deltaTime, platform::Input &input, SDL_Renderer *sdlRendere
 
 	if (game.inGame)
 	{
-
 		if (!game.update(deltaTime,
 			renderer, assetsManager, input))
 		{
