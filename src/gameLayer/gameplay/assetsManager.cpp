@@ -147,6 +147,6 @@ void AssetsManager::loadAllAssets()
 	particleCircle.loadFromFile(RESOURCES_PATH "circle.png");
 	particleSmoke.loadFromFile(RESOURCES_PATH "smoke.png");
 	target.loadFromFile(RESOURCES_PATH "target.png");
-
+	thorn.loadFromFile(RESOURCES_PATH "thorn.png");
 
 }

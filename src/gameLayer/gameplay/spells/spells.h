@@ -8,6 +8,7 @@
 #include <gameplay/elements.h>
 #include <gameplay/entities/entity.h>
 #include <particles/particleCreator.h>
+#include <cmath>
 
 struct Spell
 {
@@ -107,6 +108,52 @@ struct BasicMagicMissleSpell: public Spell
 
 		return true;
 	};
+};
+
+// Triple earth shot that fires fixed-angle ricocheting projectiles.
+struct TripleEarthRicochetSpell: public Spell
+{
+	std::unique_ptr<Projectile> projectile;
+	float throwVelocity = 13.5f;
+	float angleA = -30.0f;
+	float angleB = 230.0f;
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		float len = glm::length(currentAimDir);
+		if (len <= 0.0001f)
+		{
+			len = glm::length(createAimDir);
+			currentAimDir = len <= 0.0001f ? glm::vec2{1.0f, 0.0f} : createAimDir;
+		}
+		currentAimDir /= glm::length(currentAimDir);
+
+		auto rotateVec = [&](glm::vec2 v, float degrees)
+		{
+			float rad = degrees * (3.1415926f / 180.0f);
+			float cs = std::cos(rad);
+			float sn = std::sin(rad);
+			return glm::vec2{v.x * cs - v.y * sn, v.x * sn + v.y * cs};
+		};
+
+		glm::vec2 dirs[] = {
+			currentAimDir,
+			rotateVec(currentAimDir, angleA),
+			rotateVec(currentAimDir, angleB)
+		};
+
+		for (auto &dir : dirs)
+		{
+			auto pptr = projectile->clone();
+			pptr->element = element;
+			pptr->physics.velocity = dir * throwVelocity;
+			projectileHolder.addProjectileAsPtr(std::move(pptr), player.physics.getPos());
+		}
+
+		return true;
+	}
 };
 
 struct FlameWallSpell: public Spell

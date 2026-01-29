@@ -168,6 +168,62 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline TripleEarthRicochetSpell getEarthRicochetSpell()
+	{
+		TripleEarthRicochetSpell ret;
+		ret.element = Elements::Earth;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<RicochetProjectile>();
+		ret.projectile->element = Elements::Earth;
+		ret.throwVelocity = 14.5f;
+		ret.angleA = -30.0f;
+		ret.angleB = 30.0f;
+		return ret;
+	}
+
+	inline BasicMagicMissleSpell getEarthRicochetVolleySpell(int element, int shots, float damage,
+		float delay, float driftDegrees)
+	{
+		BasicMagicMissleSpell ret;
+		ret.element = element;
+		ret.maxFireCount = shots;
+		ret.triggerDelay = delay;
+		ret.driftAngleDegrees = driftDegrees;
+		ret.projectile = std::make_unique<RicochetProjectile>();
+		ret.projectile->element = element;
+		ret.throwVelocity = 14.5f;
+
+		if (auto ricochet = dynamic_cast<RicochetProjectile *>(ret.projectile.get()))
+		{
+			ricochet->setDamage(damage);
+		}
+
+		return ret;
+	}
+
+	inline BasicMagicMissleSpell getEarthRicochetIceSpell()
+	{
+		return getEarthRicochetVolleySpell(Elements::Ice, 6, 4.0f, 0.2f, 6.0f);
+	}
+
+	inline BasicMagicMissleSpell getEarthRicochetWaterSpell()
+	{
+		return getEarthRicochetVolleySpell(Elements::Water, 24, 1.0f, 0.2f, 6.0f);
+	}
+
+	inline BasicMagicMissleSpell getEarthThornSpell()
+	{
+		BasicMagicMissleSpell ret;
+		ret.element = Elements::Earth;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<EarthThornBoltProjectile>();
+		ret.projectile->element = Elements::Earth;
+		ret.throwVelocity = 7.5f;
+		return ret;
+	}
+
 	inline BasicMagicMissleSpell getBigIceBlockSpell()
 	{
 		BasicMagicMissleSpell ret;
@@ -177,6 +233,18 @@ namespace SpellTypes
 		ret.projectile = std::make_unique<BigIceBlockProjectile>();
 		ret.projectile->element = Elements::Ice;
 		ret.throwVelocity = 7.0f;
+		return ret;
+	}
+
+	inline BasicMagicMissleSpell getFastMagicBoltSpell(int element)
+	{
+		BasicMagicMissleSpell ret;
+		ret.element = element;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<FastMagicBoltProjectile>();
+		ret.projectile->element = element;
+		ret.throwVelocity = 6.5f;
 		return ret;
 	}
 
@@ -197,6 +265,7 @@ namespace SpellTypes
 		waterBolt,
 		waterHomingMissle,
 		earthBolt,
+		earthThorn,
 		iceBolt,
 		dragonsBreath,
 		iceTrap,
@@ -206,10 +275,15 @@ namespace SpellTypes
 		fireHomingMissle,
 		earthHomingMissle,
 		iceHomingMissle,
+		fastFireBolt,
+		fastIceBolt,
 		flameWall,
 		iceWall,
 		boulder,
 		waterSiphon,
+		earthRicochet,
+		earthRicochetIce,
+		earthRicochetWater,
 		bigIceBlock,
 
 		SPELLS_COUNT

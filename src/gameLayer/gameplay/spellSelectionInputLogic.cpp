@@ -68,7 +68,7 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 
 	if (!manaInitialized || wandChanged)
 	{
-		currentMana = (float)wand.maxMana;
+		currentMana = 0.0f;
 		manaInitialized = true;
 		castCooldownTimer = 0.0f;
 	}
@@ -533,20 +533,21 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		}
 	}
 
+	int maxElements = getMaxElements();
+	float maxElementsBoxSize = segmentSize * 0.7f;
+	float maxElementsBoxSpacing = PIXEL_SIZE * 1.2f * cameraZoom;
+	float maxElementsRowWidth = maxElements * maxElementsBoxSize + (maxElements - 1) * maxElementsBoxSpacing;
+	float maxElementsRowX = barRight - maxElementsRowWidth;
+	float maxElementsRowY = barY + segmentSize + PIXEL_SIZE * 6 * cameraZoom;
+	float outlineWidthSmall = PIXEL_SIZE * 0.6f * cameraZoom;
+	if (outlineWidthSmall < PIXEL_SIZE * 0.3f) { outlineWidthSmall = PIXEL_SIZE * 0.3f; }
+
 	// max elements per cast (right side, under mana)
 	{
-		int maxElements = getMaxElements();
-		float boxSize = segmentSize * 0.7f;
-		float boxSpacing = PIXEL_SIZE * 1.2f * cameraZoom;
-		float rowWidth = maxElements * boxSize + (maxElements - 1) * boxSpacing;
-		float rowX = barRight - rowWidth;
-		float rowY = barY + segmentSize + PIXEL_SIZE * 6 * cameraZoom;
-		float outlineWidthSmall = PIXEL_SIZE * 0.6f * cameraZoom;
-		if (outlineWidthSmall < PIXEL_SIZE * 0.3f) { outlineWidthSmall = PIXEL_SIZE * 0.3f; }
-
 		for (int i = 0; i < maxElements; i++)
 		{
-			glm::vec4 box = {rowX + i * (boxSize + boxSpacing), rowY, boxSize, boxSize};
+			glm::vec4 box = {maxElementsRowX + i * (maxElementsBoxSize + maxElementsBoxSpacing),
+				maxElementsRowY, maxElementsBoxSize, maxElementsBoxSize};
 			renderer.renderRectangle(box, {0.08f, 0.08f, 0.08f, 0.5f});
 			renderer.renderRectangleOutline(box, {0.6f, 0.6f, 0.6f, 0.7f}, outlineWidthSmall);
 		}
@@ -554,8 +555,8 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 
 	// wand ring (right side, under mana)
 	{
-		glm::vec2 ringCenter = {barRight - barWidth * 0.62f,
-			barY + segmentSize + PIXEL_SIZE * 32 * cameraZoom};
+		glm::vec2 ringCenter = {maxElementsRowX + maxElementsRowWidth * 0.5f - PIXEL_SIZE * 18 * cameraZoom,
+			maxElementsRowY + maxElementsBoxSize + PIXEL_SIZE * 24 * cameraZoom};
 		float ringSize = segmentSize * 6.1f;
 		float ringOffset = ringSize * 0.4f;
 		float iconSize = ringSize * 0.34f;

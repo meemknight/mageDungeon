@@ -16,6 +16,7 @@ namespace SpellTypes
 			{Elements::Water},	//waterBolt,
 			{Elements::Water,Elements::Water},	//waterHomingMissle,
 			{Elements::Earth},	//earthBolt,
+			{Elements::Earth,Elements::Earth},	//earthThorn,
 			{Elements::Ice},	//iceBolt,
 			{Elements::Fire,Elements::Fire,Elements::Fire},	//dragonsBreath,
 			{Elements::Ice,Elements::Ice},	//iceTrap,
@@ -25,10 +26,15 @@ namespace SpellTypes
 			{Elements::Water,Elements::Fire},	//fireHomingMissle,
 			{Elements::Water,Elements::Earth},	//earthHomingMissle,
 			{Elements::Water,Elements::Ice},	//iceHomingMissle,
+			{Elements::Water,Elements::Fire,Elements::Fire},	//fastFireBolt,
+			{Elements::Water,Elements::Ice,Elements::Ice},	//fastIceBolt,
 			{Elements::Fire,Elements::Fire},	//flameWall,
 			{Elements::Fire,Elements::Ice},	//iceWall,
 			{Elements::Fire,Elements::Water},	//boulder,
 			{Elements::Water,Elements::Water,Elements::Water},	//waterSiphon,
+			{Elements::Earth,Elements::Earth,Elements::Earth},	//earthRicochet,
+			{Elements::Earth,Elements::Earth,Elements::Earth,Elements::Ice},	//earthRicochetIce,
+			{Elements::Earth,Elements::Earth,Elements::Earth,Elements::Water},	//earthRicochetWater,
 			{Elements::Ice,Elements::Ice,Elements::Ice},	//bigIceBlock,
 
 
@@ -78,8 +84,20 @@ namespace SpellTypes
 		return std::make_unique<BasicMagicMissleSpell>(getHomingMissleSpell(Elements::Ice));
 		break;
 
+		case fastFireBolt:
+		return std::make_unique<BasicMagicMissleSpell>(getFastMagicBoltSpell(Elements::Fire));
+		break;
+
+		case fastIceBolt:
+		return std::make_unique<BasicMagicMissleSpell>(getFastMagicBoltSpell(Elements::Ice));
+		break;
+
 		case earthBolt:
 		return std::make_unique<BasicMagicMissleSpell>(getBasicMagicMissleSpell(Elements::Earth));
+		break;
+
+		case earthThorn:
+		return std::make_unique<BasicMagicMissleSpell>(getEarthThornSpell());
 		break;
 
 		case iceBolt:
@@ -120,6 +138,18 @@ namespace SpellTypes
 
 		case waterSiphon:
 		return std::make_unique<WaterSiphonSpell>(getWaterSiphonSpell());
+		break;
+
+		case earthRicochet:
+		return std::make_unique<TripleEarthRicochetSpell>(getEarthRicochetSpell());
+		break;
+
+		case earthRicochetIce:
+		return std::make_unique<BasicMagicMissleSpell>(getEarthRicochetIceSpell());
+		break;
+
+		case earthRicochetWater:
+		return std::make_unique<BasicMagicMissleSpell>(getEarthRicochetWaterSpell());
 		break;
 
 		case bigIceBlock:
