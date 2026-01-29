@@ -20,6 +20,7 @@ struct GameLogic
 	Map map;
 	Player player;
 	ProjectileHolder projectiles;
+	StandbyProjectileSystem standbyProjectiles; // orbiting projectiles that wait and fire
 	EntityHolder entityHolder;
 	SpellsHolder spellsHolder;
 	SpellRecepie spellRecepie; //current spell recepie;

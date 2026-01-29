@@ -373,9 +373,8 @@ bool GameLogic::update(float deltaTime,
 
 	player.physics.updateMove();
 
-
+	standbyProjectiles.update(deltaTime, map, projectiles, rng, player, entityHolder, fireDirection);
 	projectiles.update(deltaTime, map, particleSystem, rng, entityHolder);
-
 
 	particleSystem.update(deltaTime);
 	damageViewerSystem.update(deltaTime);
@@ -532,6 +531,7 @@ bool GameLogic::update(float deltaTime,
 
 	renderStatusIcons(player.physics.getAABB(), player.statusEffects);
 
+	standbyProjectiles.render(renderer, particlePostProcessRenderer);
 	projectiles.render(renderer, assetsManager, particlePostProcessRenderer);
 
 	particleSystem.render(renderer, particlePostProcessRenderer, {});

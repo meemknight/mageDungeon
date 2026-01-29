@@ -17,6 +17,11 @@ namespace SpellTypes
 			{Elements::Water,Elements::Water},	//waterHomingMissle,
 			{Elements::Earth},	//earthBolt,
 			{Elements::Earth,Elements::Earth},	//earthThorn,
+			{Elements::Earth,Elements::Fire},	//fireStandby,
+			{Elements::Earth,Elements::Water},	//waterStandby,
+			{Elements::Earth,Elements::Water,Elements::Water},	//waterHomingStandby,
+			{Elements::Earth,Elements::Ice,Elements::Ice},	//iceStandby,
+			{Elements::Earth,Elements::Water,Elements::Earth,Elements::Water},	//earthWaterThorn,
 			{Elements::Ice},	//iceBolt,
 			{Elements::Fire,Elements::Fire,Elements::Fire},	//dragonsBreath,
 			{Elements::Ice,Elements::Ice},	//iceTrap,
@@ -98,6 +103,26 @@ namespace SpellTypes
 
 		case earthThorn:
 		return std::make_unique<BasicMagicMissleSpell>(getEarthThornSpell());
+		break;
+
+		case fireStandby:
+		return std::make_unique<StandbyProjectilesSpell>(getFireStandbySpell());
+		break;
+
+		case waterStandby:
+		return std::make_unique<StandbyProjectilesSpell>(getWaterStandbySpell());
+		break;
+
+		case waterHomingStandby:
+		return std::make_unique<StandbyProjectilesSpell>(getWaterHomingStandbySpell());
+		break;
+
+		case iceStandby:
+		return std::make_unique<DualStandbyProjectilesSpell>(getIceStandbySpell());
+		break;
+
+		case earthWaterThorn:
+		return std::make_unique<BasicMagicMissleSpell>(getEarthWaterThornSpell());
 		break;
 
 		case iceBolt:

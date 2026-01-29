@@ -18,6 +18,9 @@ struct AssetsManager
 
 	TileSet player;
 	TileSet skeleton;
+	TileSet waterSlime;
+	TileSet fireSlime;
+
 
 	TileSet elements;
 	TileSet shadow;

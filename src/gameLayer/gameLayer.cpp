@@ -43,6 +43,11 @@ ProjectileHolder &getProjectileHolder()
 	return game.projectiles;
 }
 
+StandbyProjectileSystem &getStandbyProjectilesSystem()
+{
+	return game.standbyProjectiles;
+}
+
 gl2d::Renderer2D &getRenderer()
 {
 	return renderer;

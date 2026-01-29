@@ -4,6 +4,7 @@
 #include <gameplay/statusEffects.h>
 #include <gameplay/assetsManager.h>
 #include <gameplay/aStar.h>
+#include <gameplay/player.h>
 
 
 
@@ -39,6 +40,214 @@ bool basicProjectileHitEntitiesLogic(PhysicalEntity &physics,
 	return false;
 }
 
+void StandbyProjectileSystem::addProjectileAsPtr(std::unique_ptr<Projectile> projectile,
+	float customLifetime, float customThrowVelocity, const ParticleEmissionSettings *customEmission)
+{
+	if (!projectile)
+	{
+		return;
+	}
+
+	StandbyProjectileEntry entry;
+	entry.projectile = std::move(projectile);
+	entry.projectile->physics.velocity = {};
+	entry.timeLeft = customLifetime > 0.0f ? customLifetime : standbyLifetime;
+	entry.throwVelocity = customThrowVelocity;
+	entry.hasCustomEmission = customEmission != nullptr;
+	if (customEmission)
+	{
+		entry.customEmission = *customEmission;
+	}
+	entry.initialized = false;
+
+	if (standbyProjectiles.empty())
+	{
+		standbyProjectiles.push_back(std::move(entry));
+		insertIndex = 1;
+		return;
+	}
+
+	int maxIndex = (int)standbyProjectiles.size();
+	int index = insertIndex;
+	if (index < 0) { index = 0; }
+	if (index > maxIndex) { index = maxIndex; }
+
+	standbyProjectiles.insert(standbyProjectiles.begin() + index, std::move(entry));
+	insertIndex = index + 2;
+	if (insertIndex > (int)standbyProjectiles.size())
+	{
+		insertIndex = 1;
+	}
+}
+
+void StandbyProjectileSystem::update(float deltaTime, Map &map, ProjectileHolder &projectileHolder,
+	std::ranlux24_base &rng, Player &player, EntityHolder &entityHolder, glm::vec2 aimDir)
+{
+	if (fireCooldown > 0.0f)
+	{
+		fireCooldown = std::max(0.0f, fireCooldown - deltaTime);
+	}
+
+	for (int i = 0; i < (int)standbyProjectiles.size(); )
+	{
+		auto &entry = standbyProjectiles[i];
+		entry.timeLeft -= deltaTime;
+		if (entry.timeLeft <= 0.0f)
+		{
+			standbyProjectiles[i] = std::move(standbyProjectiles.back());
+			standbyProjectiles.pop_back();
+			continue;
+		}
+		++i;
+	}
+
+	if (!standbyProjectiles.empty())
+	{
+		int maxIndex = (int)standbyProjectiles.size();
+		if (insertIndex > maxIndex) { insertIndex = 1; }
+	}
+	else
+	{
+		insertIndex = 1;
+	}
+
+	if (standbyProjectiles.empty())
+	{
+		return;
+	}
+
+	glm::vec2 playerPos = player.physics.getPos();
+	float aimLen = glm::length(aimDir);
+	if (aimLen <= 0.0001f)
+	{
+		aimDir = {1.0f, 0.0f};
+	}
+	else
+	{
+		aimDir /= aimLen;
+	}
+
+	const float twoPi = 6.2831853f;
+	float baseAngle = std::atan2(aimDir.y, aimDir.x);
+	float angleStep = twoPi / (float)standbyProjectiles.size();
+
+	for (int i = 0; i < (int)standbyProjectiles.size(); i++)
+	{
+		auto &entry = standbyProjectiles[i];
+		float angle = baseAngle + angleStep * (float)i;
+		glm::vec2 offset = {std::cos(angle) * ringRadius, std::sin(angle) * ringRadius};
+		glm::vec2 ringPos = playerPos + offset;
+		entry.projectile->physics.teleport(ringPos);
+
+		if (!entry.initialized)
+		{
+			float sizeBias = entry.projectile->physics.transform.size.x / (PIXEL_SIZE * 8.0f);
+			if (entry.hasCustomEmission)
+			{
+				entry.particleEmmision = entry.customEmission;
+				entry.particleEmmision.sustain.createApearence.size *= sizeBias;
+				entry.particleEmmision.sustain.endApearence.size *= sizeBias;
+				entry.particleEmmision.release.createApearence.size *= sizeBias;
+				entry.particleEmmision.release.endApearence.size *= sizeBias;
+				entry.particleEmmision.create.createApearence.size *= sizeBias;
+				entry.particleEmmision.create.endApearence.size *= sizeBias;
+			}
+			else
+			{
+				entry.particleEmmision = getBasicMagicMissleParticleEmision(entry.projectile->element, sizeBias);
+			}
+			entry.particleTimer = getRandomFloat(rng, 0.0f, entry.particleEmmision.emitTimer);
+			entry.initialized = true;
+		}
+
+		entry.particleTimer -= deltaTime;
+		while (entry.particleTimer <= 0.0f)
+		{
+			entry.particleTimer += entry.particleEmmision.emitTimer;
+			entry.projectile->particleSystem.emitParticles(entry.particleEmmision.sustain, ringPos, rng, ringPos);
+		}
+
+		entry.projectile->particleSystem.update(deltaTime);
+	}
+
+	if (fireCooldown > 0.0f)
+	{
+		return;
+	}
+
+	glm::vec2 targetPos = {};
+	bool hasTarget = false;
+	float bestDist2 = fireRange * fireRange;
+
+	for (auto &e : entityHolder.entities)
+	{
+		glm::vec2 diff = e->physics.getPos() - playerPos;
+		float dist2 = glm::dot(diff, diff);
+		if (dist2 > bestDist2)
+		{
+			continue;
+		}
+
+		if (!HasLineOfSightGrid(map, playerPos, e->physics.getPos()))
+		{
+			continue;
+		}
+
+		bestDist2 = dist2;
+		targetPos = e->physics.getPos();
+		hasTarget = true;
+	}
+
+	if (!hasTarget)
+	{
+		return;
+	}
+
+	glm::vec2 targetDir = targetPos - playerPos;
+	float targetLen = glm::length(targetDir);
+	if (targetLen <= 0.0001f)
+	{
+		targetDir = {1.0f, 0.0f};
+	}
+	else
+	{
+		targetDir /= targetLen;
+	}
+
+	int bestIndex = 0;
+	float bestTime = standbyProjectiles[0].timeLeft;
+	for (int i = 1; i < (int)standbyProjectiles.size(); i++)
+	{
+		if (standbyProjectiles[i].timeLeft < bestTime)
+		{
+			bestTime = standbyProjectiles[i].timeLeft;
+			bestIndex = i;
+		}
+	}
+
+	StandbyProjectileEntry firedEntry = std::move(standbyProjectiles[bestIndex]);
+	if (bestIndex != (int)standbyProjectiles.size() - 1)
+	{
+		standbyProjectiles[bestIndex] = std::move(standbyProjectiles.back());
+	}
+	standbyProjectiles.pop_back();
+
+	firedEntry.projectile->physics.teleport(playerPos);
+	firedEntry.projectile->physics.velocity = targetDir * firedEntry.throwVelocity;
+	projectileHolder.addProjectileDeferredAsPtr(std::move(firedEntry.projectile), playerPos);
+	fireCooldown = fireCooldownDuration;
+}
+
+void StandbyProjectileSystem::render(gl2d::Renderer2D &renderer,
+	ParticlePostProcessRenderer &particlePostProcessRenderer)
+{
+	for (auto &entry : standbyProjectiles)
+	{
+		entry.projectile->particleSystem.render(renderer, particlePostProcessRenderer,
+			entry.projectile->physics.getPos());
+	}
+}
+
 BasicMagicMissle::BasicMagicMissle()
 {
 	hitStats.damage = 2;
@@ -62,7 +271,20 @@ bool BasicMagicMissle::update(float deltaTime, Map &map, ParticleSystem &mainPar
 	if (firstTime)
 	{
 		firstTime = 0;
-		particleEmmision = getBasicMagicMissleParticleEmision(element, particleSizeBias);
+		if (hasCustomEmission)
+		{
+			particleEmmision = customEmission;
+			particleEmmision.sustain.createApearence.size *= particleSizeBias;
+			particleEmmision.sustain.endApearence.size *= particleSizeBias;
+			particleEmmision.release.createApearence.size *= particleSizeBias;
+			particleEmmision.release.endApearence.size *= particleSizeBias;
+			particleEmmision.create.createApearence.size *= particleSizeBias;
+			particleEmmision.create.endApearence.size *= particleSizeBias;
+		}
+		else
+		{
+			particleEmmision = getBasicMagicMissleParticleEmision(element, particleSizeBias);
+		}
 		particleSystem.emitParticles(particleEmmision.create, physics.getPos(), rng, physics.getPos());
 	}
 
@@ -303,6 +525,101 @@ void EarthThornBoltProjectile::render(gl2d::Renderer2D &renderer, AssetsManager 
 }
 
 void EarthThornBoltProjectile::onDestroy(std::ranlux24_base &rng)
+{
+}
+
+EarthWaterThornBoltProjectile::EarthWaterThornBoltProjectile()
+{
+	hitStats.damage = 30.0f;
+	hitStats.pushBack = 3.0f;
+	element = Elements::Earth;
+	timeAlieve = 6.0f;
+	baseColliderSize = {PIXEL_SIZE * 7.5f, PIXEL_SIZE * 7.5f};
+	physics.transform.size = baseColliderSize;
+	physics.transform.isCircleCollider = true;
+	particleSystem.maxCount = 120;
+	storedDamage = maxStoredDamage;
+}
+
+void EarthWaterThornBoltProjectile::updateVisualScale()
+{
+	float ratio = maxStoredDamage > 0 ? (float)storedDamage / (float)maxStoredDamage : 0.0f;
+	ratio = glm::clamp(ratio, 0.0f, 1.0f);
+	float scale = minScale + (1.0f - minScale) * ratio;
+
+	physics.transform.size = baseColliderSize * scale;
+
+	particleEmmision = baseEmmision;
+	particleEmmision.sustain.createApearence.size *= scale;
+	particleEmmision.sustain.endApearence.size *= scale;
+	particleEmmision.release.createApearence.size *= scale;
+	particleEmmision.release.endApearence.size *= scale;
+	particleEmmision.create.createApearence.size *= scale;
+	particleEmmision.create.endApearence.size *= scale;
+}
+
+bool EarthWaterThornBoltProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+	std::ranlux24_base &rng, EntityHolder &entityHolder)
+{
+	if (firstTime)
+	{
+		firstTime = false;
+		baseEmmision = getBasicMagicMissleParticleEmision(element, particleSizeBias);
+		particleEmmision = baseEmmision;
+		updateVisualScale();
+		particleSystem.emitParticles(particleEmmision.create, physics.getPos(), rng, physics.getPos());
+	}
+
+	trailTimer -= deltaTime;
+	if (trailTimer <= 0.0f)
+	{
+		trailTimer += trailInterval;
+		particleSystem.emitParticles(particleEmmision.sustain, physics.getPos(), rng, physics.getPos());
+
+		if (storedDamage > 0)
+		{
+			auto thorn = std::make_unique<ThornProjectile>();
+			thorn->element = element;
+			glm::vec2 offset = {getRandomFloat(rng, -spawnOffset, spawnOffset),
+				getRandomFloat(rng, -spawnOffset, spawnOffset)};
+			getProjectileHolder().addProjectileDeferredAsPtr(std::move(thorn), physics.getPos() + offset);
+			storedDamage = std::max(0, storedDamage - 1);
+			hitStats.damage = (float)storedDamage;
+			updateVisualScale();
+
+			if (storedDamage <= 0)
+			{
+				particleSystem.emitParticles(particleEmmision.release, physics.getPos(), rng, physics.getPos());
+				return false;
+			}
+		}
+	}
+
+	if (basicProjectileHitEntitiesLogic(physics, physics.velocity,
+		element, entityHolder, hitStats))
+	{
+		particleSystem.emitParticles(particleEmmision.release, physics.getPos(), rng, physics.getPos());
+		return false;
+	}
+
+	if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+	{
+		particleSystem.emitParticles(particleEmmision.release, physics.getPos(), rng, physics.getPos());
+		return false;
+	}
+
+	particleSystem.update(deltaTime);
+	return true;
+}
+
+void EarthWaterThornBoltProjectile::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+	ParticlePostProcessRenderer &particlePostProcessRenderer)
+{
+	particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+	physics.renderCollider(renderer);
+}
+
+void EarthWaterThornBoltProjectile::onDestroy(std::ranlux24_base &rng)
 {
 }
 
@@ -796,4 +1113,268 @@ void BigIceBlockProjectile::onDestroy(std::ranlux24_base &rng)
 		shard->physics.velocity = dir * shardSpeed;
 		getProjectileHolder().addProjectileDeferredAsPtr(std::move(shard), physics.getPos());
 	}
+}
+
+ElementWallProjectile::ElementWallProjectile()
+{
+	particleSystem.maxCount = 200;
+	setElementType(Elements::Fire);
+}
+
+ElementWallProjectile::ElementWallProjectile(int elementType)
+{
+	particleSystem.maxCount = 200;
+	setElementType(elementType);
+}
+
+void ElementWallProjectile::setElementType(int elementType)
+{
+	element = elementType;
+	physics.transform.isCircleCollider = false;
+	if (elementType == Elements::Ice)
+	{
+		hitStats.damage = 0.12f;
+		hitStats.pushBack = 1.4f;
+		timeAlieve = 18.0f;
+		hitTimerPenalty = 0.08f;
+	}
+	else
+	{
+		hitStats.damage = 0.8f;
+		hitStats.pushBack = 0.4f;
+		timeAlieve = 12.0f;
+		hitTimerPenalty = 0.15f;
+	}
+}
+
+void ElementWallProjectile::setupWall(glm::vec2 aimDir)
+{
+	float len = glm::length(aimDir);
+	if (len <= 0.0001f)
+	{
+		aimDir = {1.0f, 0.0f};
+		len = 1.0f;
+	}
+	wallNormal = aimDir / len;
+	physics.transform.isCircleCollider = false;
+	physics.transform.size = {wallLength, wallLength};
+}
+
+bool ElementWallProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+	std::ranlux24_base &rng, EntityHolder &entityHolder)
+{
+	if (firstTime)
+	{
+		firstTime = false;
+		flameParticle = getSmallSquareParticle(elementToSecondaryColor(element), elementToColor(element));
+		flameParticle.onCreateCount = 3;
+		flameParticle.particleLifeTime = {0.45f, 1.1f};
+		flameParticle.createApearence.size = {0.2f, 0.32f};
+		flameParticle.endApearence.size = {0.1f, 0.22f};
+		flameParticle.folowParent = false;
+	}
+
+	particleTimer -= deltaTime;
+	while (particleTimer <= 0.0f)
+	{
+		particleTimer += particleInterval;
+		glm::vec2 axis = glm::vec2(-wallNormal.y, wallNormal.x);
+		float along = getRandomFloat(rng, -wallLength * 0.5f, wallLength * 0.5f);
+		float across = getRandomFloat(rng, -wallThickness * 0.4f, wallThickness * 0.4f);
+		glm::vec2 spawnPos = physics.getPos() + axis * along + wallNormal * across;
+		particleSystem.emitParticles(flameParticle, spawnPos, rng, physics.getPos());
+	}
+
+	tickTimer -= deltaTime;
+	if (tickTimer <= 0.0f)
+	{
+		tickTimer += tickInterval;
+		int hitCount = 0;
+		glm::vec2 axis = glm::vec2(-wallNormal.y, wallNormal.x);
+		for (auto &e : entityHolder.entities)
+		{
+			glm::vec2 diff = e->physics.getPos() - physics.getPos();
+			float along = glm::dot(diff, axis);
+			float across = glm::dot(diff, wallNormal);
+			if (std::abs(along) > wallLength * 0.5f + e->physics.transform.size.y * 0.5f)
+			{
+				continue;
+			}
+			if (std::abs(across) > wallThickness * 0.5f + e->physics.transform.size.x * 0.5f)
+			{
+				continue;
+			}
+
+			glm::vec2 pushBack = {};
+			glm::vec2 hitDir = wallNormal;
+			if (glm::length(hitDir) <= 0.0001f)
+			{
+				hitDir = e->physics.getPos() - physics.getPos();
+			}
+			e->life.computeHit(hitStats, element, e->element, {hitDir}, pushBack);
+			e->physics.velocity += pushBack;
+			glm::vec2 damagePos = e->physics.getPos();
+			damagePos.y -= e->physics.transform.size.y * 0.6f;
+			getDamageViewerSystem().addDamage(hitStats.damage, damagePos);
+			hitCount++;
+		}
+
+		if (hitCount > 0)
+		{
+			timeAlieve -= hitTimerPenalty * hitCount;
+		}
+	}
+
+	particleSystem.update(deltaTime);
+	return true;
+}
+
+void ElementWallProjectile::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+	ParticlePostProcessRenderer &particlePostProcessRenderer)
+{
+	particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+	glm::vec2 axis = glm::vec2(-wallNormal.y, wallNormal.x);
+	float axisLen = glm::length(axis);
+	if (axisLen <= 0.0001f)
+	{
+		axis = {1.0f, 0.0f};
+		axisLen = 1.0f;
+	}
+	axis /= axisLen;
+
+	float segmentLength = wallLength / (float)segmentCount;
+	for (int i = 0; i < segmentCount; i++)
+	{
+		float t = (i + 0.5f) / (float)segmentCount;
+		float along = (t - 0.5f) * wallLength;
+		glm::vec2 center = physics.getPos() + axis * along;
+		glm::vec4 rect = {center.x - segmentLength * 0.5f, center.y - wallThickness * 0.5f,
+			segmentLength, wallThickness};
+		renderer.renderRectangleOutline(rect, Colors_Blue, 0.02f);
+	}
+}
+
+void ElementWallProjectile::onDestroy(std::ranlux24_base &rng)
+{
+}
+
+HomingMagicMissle::HomingMagicMissle()
+{
+	hitStats.damage = 2;
+	hitStats.pushBack = 5.2f;
+}
+
+HomingMagicMissle::HomingMagicMissle(HitStats hitStats)
+{
+	this->hitStats = hitStats;
+}
+
+HomingMagicMissle::HomingMagicMissle(HitStats hitStats, float particleSizeBias)
+{
+	this->hitStats = hitStats;
+	this->particleSizeBias = particleSizeBias;
+}
+
+bool HomingMagicMissle::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+	std::ranlux24_base &rng, EntityHolder &entityHolder)
+{
+	auto safeNormalize = [](glm::vec2 v)
+	{
+		float len = glm::length(v);
+		if (len <= 0.00001f) { return glm::vec2(0.0f); }
+		return v / len;
+	};
+
+	if (firstTime)
+	{
+		firstTime = 0;
+		travelSpeed = glm::length(physics.velocity);
+		if (travelSpeed <= 0.00001f) { travelSpeed = 0.00001f; }
+
+		glm::vec4 startColor = elementToColor(element);
+		startColor.a = 0.3f;
+		glm::vec4 endColor = {0.7f, 0.3f, 0.95f, 0.3f};
+
+		particleEmmision.sustain = getBasicMagicMissleParticle(startColor, endColor);
+		particleEmmision.release = getBasicMagicMissleParticle(startColor, endColor);
+		particleEmmision.release.particleLifeTime *= 2.0f;
+		particleEmmision.emitTimer = 0.01f;
+
+		particleEmmision.sustain.createApearence.size *= particleSizeBias;
+		particleEmmision.sustain.endApearence.size *= particleSizeBias;
+		particleEmmision.release.createApearence.size *= particleSizeBias;
+		particleEmmision.release.endApearence.size *= particleSizeBias;
+		particleEmmision.create = particleEmmision.sustain;
+
+		particleEmmision.sustain.folowParent = false;
+		particleEmmision.release.folowParent = false;
+		particleEmmision.create.folowParent = false;
+
+		particleSystem.emitParticles(particleEmmision.create, physics.getPos(), rng, physics.getPos());
+	}
+
+	glm::vec2 toTarget = {};
+	float bestDist2 = homingRange * homingRange;
+	bool hasTarget = false;
+
+	for (auto &e : entityHolder.entities)
+	{
+		glm::vec2 diff = e->physics.getPos() - physics.getPos();
+		float dist2 = glm::dot(diff, diff);
+		if (dist2 < bestDist2)
+		{
+			bestDist2 = dist2;
+			toTarget = diff;
+			hasTarget = true;
+		}
+	}
+
+	if (hasTarget)
+	{
+		glm::vec2 desiredDir = safeNormalize(toTarget);
+		float currentSpeed = glm::length(physics.velocity);
+		float speed = currentSpeed > 0.00001f ? currentSpeed : travelSpeed;
+		glm::vec2 currentDir = currentSpeed > 0.00001f ? (physics.velocity / currentSpeed) : desiredDir;
+
+		float turn = glm::clamp(homingTurnRate * deltaTime, 0.0f, 1.0f);
+		glm::vec2 newDir = safeNormalize(glm::mix(currentDir, desiredDir, turn));
+		if (glm::length(newDir) > 0.00001f)
+		{
+			physics.velocity = newDir * speed;
+		}
+	}
+
+	particleTimer -= deltaTime;
+	if (particleTimer < 0)
+	{
+		particleTimer += particleEmmision.emitTimer;
+		particleSystem.emitParticles(particleEmmision.sustain, physics.getPos(), rng, physics.getPos());
+	}
+
+	if (basicProjectileHitEntitiesLogic(physics, physics.velocity,
+		element, entityHolder, hitStats))
+	{
+		return false;
+	}
+
+	if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+	{
+		particleSystem.emitParticles(particleEmmision.release, physics.getPos(), rng, physics.getPos());
+		return false;
+	}
+
+	particleSystem.update(deltaTime);
+
+	return true;
+}
+
+void HomingMagicMissle::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+	ParticlePostProcessRenderer &particlePostProcessRenderer)
+{
+	particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+	physics.renderCollider(renderer);
+}
+
+void HomingMagicMissle::onDestroy(std::ranlux24_base &rng)
+{
 }

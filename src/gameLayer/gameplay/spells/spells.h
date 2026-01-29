@@ -114,6 +114,87 @@ struct BasicMagicMissleSpell: public Spell
 	};
 };
 
+// Spawns projectiles into the standby ring around the player.
+struct StandbyProjectilesSpell: public Spell
+{
+	// **configuration variables**
+	std::unique_ptr<Projectile> projectile;
+	int standbyCount = 3;
+	float standbyLifetime = 14.0f;
+	float throwVelocity = 10.0f;
+	bool hasStandbyEmission = false;
+	ParticleEmissionSettings standbyEmission;
+
+	// **state variables**
+	// (none)
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		auto &standbySystem = getStandbyProjectilesSystem();
+		for (int i = 0; i < standbyCount; i++)
+		{
+			auto pptr = projectile->clone();
+			pptr->element = element;
+			standbySystem.addProjectileAsPtr(std::move(pptr), standbyLifetime,
+				throwVelocity, hasStandbyEmission ? &standbyEmission : nullptr);
+		}
+
+		return true;
+	}
+};
+
+// Spawns two sets of projectiles into the standby ring.
+struct DualStandbyProjectilesSpell: public Spell
+{
+	// **configuration variables**
+	std::unique_ptr<Projectile> primaryProjectile;
+	std::unique_ptr<Projectile> secondaryProjectile;
+	int primaryCount = 3;
+	int secondaryCount = 3;
+	float primaryStandbyLifetime = 14.0f;
+	float secondaryStandbyLifetime = 14.0f;
+	float primaryThrowVelocity = 10.0f;
+	float secondaryThrowVelocity = 10.0f;
+	bool hasPrimaryEmission = false;
+	ParticleEmissionSettings primaryEmission;
+	bool hasSecondaryEmission = false;
+	ParticleEmissionSettings secondaryEmission;
+
+	// **state variables**
+	// (none)
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		auto &standbySystem = getStandbyProjectilesSystem();
+		if (primaryProjectile)
+		{
+			for (int i = 0; i < primaryCount; i++)
+			{
+				auto pptr = primaryProjectile->clone();
+				pptr->element = element;
+				standbySystem.addProjectileAsPtr(std::move(pptr), primaryStandbyLifetime,
+					primaryThrowVelocity, hasPrimaryEmission ? &primaryEmission : nullptr);
+			}
+		}
+		if (secondaryProjectile)
+		{
+			for (int i = 0; i < secondaryCount; i++)
+			{
+				auto pptr = secondaryProjectile->clone();
+				pptr->element = element;
+				standbySystem.addProjectileAsPtr(std::move(pptr), secondaryStandbyLifetime,
+					secondaryThrowVelocity, hasSecondaryEmission ? &secondaryEmission : nullptr);
+			}
+		}
+
+		return true;
+	}
+};
+
 // Triple earth shot that fires fixed-angle ricocheting projectiles.
 struct TripleEarthRicochetSpell: public Spell
 {

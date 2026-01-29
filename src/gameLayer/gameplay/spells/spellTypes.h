@@ -224,6 +224,149 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline StandbyProjectilesSpell getFireStandbySpell()
+	{
+		StandbyProjectilesSpell ret;
+		HitStats hitStats;
+		hitStats.damage = 2.5f;
+		hitStats.pushBack = 4.6f;
+		ret.element = Elements::Fire;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<BasicMagicMissle>(hitStats);
+		ret.projectile->element = Elements::Fire;
+		ret.standbyCount = 3;
+		ret.throwVelocity = 10.0f;
+		ret.standbyLifetime = 14.0f;
+		return ret;
+	}
+
+	inline StandbyProjectilesSpell getWaterStandbySpell()
+	{
+		StandbyProjectilesSpell ret;
+		HitStats hitStats;
+		hitStats.damage = 2.5f;
+		hitStats.pushBack = 4.6f;
+		ret.element = Elements::Water;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<BasicMagicMissle>(hitStats);
+		ret.projectile->element = Elements::Water;
+		ret.standbyCount = 3;
+		ret.throwVelocity = 10.0f;
+		ret.standbyLifetime = 14.0f;
+		return ret;
+	}
+
+	inline StandbyProjectilesSpell getWaterHomingStandbySpell()
+	{
+		StandbyProjectilesSpell ret;
+		HitStats hitStats;
+		hitStats.damage = 7.0f;
+		hitStats.pushBack = 5.2f;
+		ret.element = Elements::Water;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<HomingMagicMissle>(hitStats);
+		ret.projectile->element = Elements::Water;
+		ret.projectile->timeAlieve = 18.0f;
+		ret.standbyCount = 4;
+		ret.throwVelocity = 10.0f;
+		ret.standbyLifetime = 18.0f;
+
+		glm::vec4 startColor = elementToColor(Elements::Water); startColor.a = 0.3f;
+		glm::vec4 endColor = {0.7f, 0.3f, 0.95f, 0.3f};
+		ret.hasStandbyEmission = true;
+		ret.standbyEmission.sustain = getBasicMagicMissleParticle(startColor, endColor);
+		ret.standbyEmission.release = getBasicMagicMissleParticle(startColor, endColor);
+		ret.standbyEmission.release.particleLifeTime *= 2.0f;
+		ret.standbyEmission.emitTimer = 0.01f;
+		ret.standbyEmission.sustain.folowParent = true;
+		ret.standbyEmission.release.folowParent = true;
+		ret.standbyEmission.create = ret.standbyEmission.sustain;
+		ret.standbyEmission.create.folowParent = true;
+		return ret;
+	}
+
+	inline DualStandbyProjectilesSpell getIceStandbySpell()
+	{
+		DualStandbyProjectilesSpell ret;
+		ret.element = Elements::Ice;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+
+		HitStats frostStats;
+		frostStats.damage = 6.0f;
+		frostStats.pushBack = 5.2f;
+		auto frostProjectile = std::make_unique<BasicMagicMissle>(frostStats, 1.25f);
+		frostProjectile->element = Elements::Ice;
+		frostProjectile->physics.transform.size *= 1.2f;
+
+		HitStats snowStats;
+		snowStats.damage = 3.0f;
+		snowStats.pushBack = 4.6f;
+		auto snowProjectile = std::make_unique<BasicMagicMissle>(snowStats, 0.7f);
+		snowProjectile->element = Elements::Ice;
+		snowProjectile->physics.transform.size *= 0.7f;
+
+		glm::vec4 frostStart = elementToSecondaryColor(Elements::Ice); frostStart.a = 0.35f;
+		glm::vec4 frostEnd = elementToColor(Elements::Ice); frostEnd.a = 0.25f;
+		ParticleEmissionSettings frostEmission;
+		frostEmission.sustain = getBasicMagicMissleParticle(frostStart, frostEnd);
+		frostEmission.release = getBasicMagicMissleParticle(frostStart, frostEnd);
+		frostEmission.release.particleLifeTime *= 2.0f;
+		frostEmission.emitTimer = 0.01f;
+		frostEmission.sustain.folowParent = true;
+		frostEmission.release.folowParent = true;
+		frostEmission.create = frostEmission.sustain;
+		frostEmission.create.folowParent = true;
+
+		glm::vec4 snowStart = {0.95f, 0.97f, 1.0f, 0.35f};
+		glm::vec4 snowEnd = {0.7f, 0.82f, 0.92f, 0.2f};
+		ParticleEmissionSettings snowEmission;
+		snowEmission.sustain = getBasicMagicMissleParticle(snowStart, snowEnd);
+		snowEmission.release = getBasicMagicMissleParticle(snowStart, snowEnd);
+		snowEmission.release.particleLifeTime *= 2.0f;
+		snowEmission.emitTimer = 0.01f;
+		snowEmission.sustain.folowParent = true;
+		snowEmission.release.folowParent = true;
+		snowEmission.create = snowEmission.sustain;
+		snowEmission.create.folowParent = true;
+
+		frostProjectile->hasCustomEmission = true;
+		frostProjectile->customEmission = frostEmission;
+		snowProjectile->hasCustomEmission = true;
+		snowProjectile->customEmission = snowEmission;
+
+		ret.primaryProjectile = std::move(frostProjectile);
+		ret.primaryCount = 3;
+		ret.primaryStandbyLifetime = 14.0f;
+		ret.primaryThrowVelocity = 10.0f;
+		ret.hasPrimaryEmission = true;
+		ret.primaryEmission = frostEmission;
+
+		ret.secondaryProjectile = std::move(snowProjectile);
+		ret.secondaryCount = 3;
+		ret.secondaryStandbyLifetime = 14.0f;
+		ret.secondaryThrowVelocity = 10.0f;
+		ret.hasSecondaryEmission = true;
+		ret.secondaryEmission = snowEmission;
+
+		return ret;
+	}
+
+	inline BasicMagicMissleSpell getEarthWaterThornSpell()
+	{
+		BasicMagicMissleSpell ret;
+		ret.element = Elements::Earth;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<EarthWaterThornBoltProjectile>();
+		ret.projectile->element = Elements::Earth;
+		ret.throwVelocity = 7.5f;
+		return ret;
+	}
+
 	inline BasicMagicMissleSpell getBigIceBlockSpell()
 	{
 		BasicMagicMissleSpell ret;
@@ -266,6 +409,11 @@ namespace SpellTypes
 		waterHomingMissle,
 		earthBolt,
 		earthThorn,
+		fireStandby,
+		waterStandby,
+		waterHomingStandby,
+		iceStandby,
+		earthWaterThorn,
 		iceBolt,
 		dragonsBreath,
 		iceTrap,
