@@ -557,43 +557,6 @@ bool GameLogic::update(float deltaTime,
 		renderer.renderRectangle(wandBox, assetsManager.wands.texture, {1, 1, 1, 1}, {}, 0,
 			assetsManager.wands.atlas.get(currentWand.wandSprite, 0));
 
-		int slotSize = (int)(PIXEL_SIZE * 8 * cameraZoom);
-		int slotSpacing = (int)(PIXEL_SIZE * 2 * cameraZoom);
-		float outlineWidth = PIXEL_SIZE * cameraZoom;
-		if (outlineWidth < 1.0f) { outlineWidth = 1.0f; }
-
-		glm::vec2 slotStart = {wandBox.x, wandBox.y + wandBox.w + padding};
-
-		auto renderWandSlot = [&](const WandSlot &slot, glm::vec4 box, bool alwaysCast)
-		{
-			if (slot.type == WandSlotType::Element)
-			{
-				renderer.renderRectangle(box, assetsManager.elements.texture, {1, 1, 1, 1}, {}, 0,
-					assetsManager.elements.atlas.get(slot.element, 0));
-			}
-			else
-			{
-				glm::vec4 fill = slot.type == WandSlotType::Empty
-					? glm::vec4{0.35f, 0.35f, 0.35f, 0.25f}
-					: glm::vec4{0.15f, 0.15f, 0.15f, 0.2f};
-				renderer.renderRectangle(box, fill);
-				renderer.renderRectangleOutline(box, {0.6f, 0.6f, 0.6f, 0.8f}, outlineWidth);
-			}
-
-			if (alwaysCast)
-			{
-				renderer.renderRectangleOutline(box, {1.0f, 0.85f, 0.3f, 0.9f}, outlineWidth);
-			}
-		};
-
-		const WandSlot *slots[] = {&currentWand.up, &currentWand.left, &currentWand.right,
-			&currentWand.down, &currentWand.alwaysCast};
-		for (int i = 0; i < 5; i++)
-		{
-			glm::vec4 slotBox = {slotStart.x + i * (slotSize + slotSpacing), slotStart.y,
-				(float)slotSize, (float)slotSize};
-			renderWandSlot(*slots[i], slotBox, i == 4);
-		}
 		renderer.popCamera();
 	}
 

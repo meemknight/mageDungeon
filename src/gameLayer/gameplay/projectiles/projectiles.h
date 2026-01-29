@@ -9,6 +9,7 @@
 #include "gameplay/particleSystem.h"
 #include <gameplay/damageViewerSystem.h>
 #include <random>
+#include <randomStuff.h>
 #include <particles/particleCreator.h>
 #include <gameplay/entities/entity.h>
 
@@ -77,6 +78,7 @@ struct ProjectileHolder
 {
 
 	std::vector<std::unique_ptr<Projectile>> projectiles;
+	std::vector<std::unique_ptr<Projectile>> pendingProjectiles;
 
 	template <typename T>
 	void addProjectile(T projectile, glm::vec2 pos)
@@ -92,6 +94,12 @@ struct ProjectileHolder
 	{
 		p->physics.teleport(pos);
 		projectiles.push_back(std::move(p));
+	}
+
+	void addProjectileDeferredAsPtr(std::unique_ptr<Projectile> p, glm::vec2 pos)
+	{
+		p->physics.teleport(pos);
+		pendingProjectiles.push_back(std::move(p));
 	}
 
 	void update(float deltaTime,
@@ -123,6 +131,15 @@ struct ProjectileHolder
 
 			++it;
 		}
+
+		if (!pendingProjectiles.empty())
+		{
+			for (auto &p : pendingProjectiles)
+			{
+				projectiles.push_back(std::move(p));
+			}
+			pendingProjectiles.clear();
+		}
 	}
 
 	void render(gl2d::Renderer2D &renderer,
@@ -136,6 +153,9 @@ struct ProjectileHolder
 	}
 
 };
+
+// Access the active projectile holder for spawning burst projectiles.
+ProjectileHolder &getProjectileHolder();
 
 // CRTP mixin that implements clone() for any Derived
 template <class Derived, class Base = Projectile>
@@ -460,6 +480,140 @@ struct BoulderProjectile: public CloneableProjectile<BoulderProjectile>
 		burstParticle.velocityX = {-0.6f, 0.6f};
 		burstParticle.velocityY = {-0.6f, 0.6f};
 		particleSystem.emitParticles(burstParticle, physics.getPos(), rng, physics.getPos());
+	}
+};
+
+// Heavy ice block projectile that bursts into icy shards on impact.
+struct BigIceBlockProjectile: public CloneableProjectile<BigIceBlockProjectile>
+{
+	HitStats hitStats;
+	bool firstTime = true;
+	float trailTimer = 0.0f;
+	float trailInterval = 0.07f;
+	ParticleSettings bigParticle;
+	ParticleSettings trailParticle;
+	bool shouldBurst = false;
+
+	BigIceBlockProjectile()
+	{
+		hitStats.damage = 14.0f;
+		hitStats.pushBack = 6.0f;
+		element = Elements::Ice;
+		timeAlieve = 6.0f;
+		physics.transform.size = {PIXEL_SIZE * 10.0f, PIXEL_SIZE * 10.0f};
+		physics.transform.isCircleCollider = true;
+		particleSystem.maxCount = 160;
+	}
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng, EntityHolder &entityHolder) override
+	{
+		if (firstTime)
+		{
+			firstTime = false;
+			glm::vec4 startColor = {0.65f, 0.85f, 1.0f, 0.95f};
+			glm::vec4 endColor = {0.35f, 0.65f, 1.0f, 0.9f};
+
+			bigParticle = getSmallSquareParticle(startColor, endColor);
+			bigParticle.onCreateCount = 1;
+			bigParticle.folowParent = true;
+			bigParticle.particleLifeTime = {timeAlieve + 0.2f, timeAlieve + 0.2f};
+			bigParticle.createApearence.size = {0.85f, 1.05f};
+			bigParticle.endApearence.size = {0.85f, 1.05f};
+			bigParticle.velocityX = {0.0f, 0.0f};
+			bigParticle.velocityY = {0.0f, 0.0f};
+
+			trailParticle = getFrostShardParticle(startColor, endColor);
+			trailParticle.onCreateCount = 1;
+			trailParticle.folowParent = false;
+			trailParticle.particleLifeTime = {0.25f, 0.4f};
+			trailParticle.createApearence.size = {0.12f, 0.22f};
+			trailParticle.endApearence.size = {0.05f, 0.12f};
+			trailParticle.velocityX = {0.0f, 0.0f};
+			trailParticle.velocityY = {0.0f, 0.0f};
+
+			particleSystem.emitParticles(bigParticle, physics.getPos(), rng, physics.getPos());
+		}
+
+		trailTimer -= deltaTime;
+		if (trailTimer <= 0.0f)
+		{
+			trailTimer += trailInterval;
+			particleSystem.emitParticles(trailParticle, physics.getPos(), rng, physics.getPos());
+		}
+
+		if (basicProjectileHitEntitiesLogic(physics, physics.velocity,
+			element, entityHolder, hitStats))
+		{
+			shouldBurst = true;
+			return false;
+		}
+
+		if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+		{
+			shouldBurst = true;
+			return false;
+		}
+
+		particleSystem.update(deltaTime);
+		return true;
+	}
+
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+		ParticlePostProcessRenderer &particlePostProcessRenderer) override
+	{
+		glm::vec4 aabb = physics.getAABB();
+		renderer.renderRectangle(aabb, {0.6f, 0.8f, 1.0f, 0.9f});
+		particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+	}
+
+	void onDestroy(std::ranlux24_base &rng) override
+	{
+		if (!shouldBurst)
+		{
+			return;
+		}
+
+		for (auto &p : particleSystem.particles)
+		{
+			if (p.durationRemaining > 0.35f)
+			{
+				p.durationRemaining = 0.25f;
+				p.durationTotal = 0.25f;
+			}
+		}
+
+		glm::vec4 startColor = {0.75f, 0.9f, 1.0f, 0.9f};
+		glm::vec4 endColor = {0.4f, 0.7f, 1.0f, 0.9f};
+		auto burstParticle = getFrostShardParticle(startColor, endColor);
+		burstParticle.onCreateCount = 10;
+		burstParticle.folowParent = false;
+		burstParticle.particleLifeTime = {0.35f, 0.55f};
+		burstParticle.createApearence.size = {0.18f, 0.3f};
+		burstParticle.endApearence.size = {0.08f, 0.2f};
+		burstParticle.velocityX = {-0.7f, 0.7f};
+		burstParticle.velocityY = {-0.7f, 0.7f};
+		particleSystem.emitParticles(burstParticle, physics.getPos(), rng, physics.getPos());
+
+		HitStats shardHit;
+		shardHit.damage = 1.0f;
+		shardHit.pushBack = 2.0f;
+		const int shardCount = 12;
+		const float shardSpeed = 7.0f;
+		const float twoPi = 6.2831853f;
+
+		for (int i = 0; i < shardCount; i++)
+		{
+			float angle = (twoPi / (float)shardCount) * i + getRandomFloat(rng, -0.15f, 0.15f);
+			glm::vec2 dir = {std::cos(angle), std::sin(angle)};
+
+			auto shard = std::make_unique<BasicMagicMissle>(shardHit, 0.6f);
+			shard->element = Elements::Ice;
+			shard->timeAlieve = 1.2f;
+			shard->physics.transform.size = {PIXEL_SIZE * 6.0f, PIXEL_SIZE * 6.0f};
+			shard->physics.velocity = dir * shardSpeed;
+			getProjectileHolder().addProjectileDeferredAsPtr(std::move(shard), physics.getPos());
+		}
 	}
 };
 

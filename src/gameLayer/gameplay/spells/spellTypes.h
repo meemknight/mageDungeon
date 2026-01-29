@@ -168,6 +168,18 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline BasicMagicMissleSpell getBigIceBlockSpell()
+	{
+		BasicMagicMissleSpell ret;
+		ret.element = Elements::Ice;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<BigIceBlockProjectile>();
+		ret.projectile->element = Elements::Ice;
+		ret.throwVelocity = 7.0f;
+		return ret;
+	}
+
 	inline WaterSiphonSpell getWaterSiphonSpell()
 	{
 		WaterSiphonSpell ret;
@@ -198,6 +210,7 @@ namespace SpellTypes
 		iceWall,
 		boulder,
 		waterSiphon,
+		bigIceBlock,
 
 		SPELLS_COUNT
 	};

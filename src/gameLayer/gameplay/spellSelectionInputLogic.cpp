@@ -23,6 +23,7 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 {
 	const auto &controller = input.controller;
 	glm::vec2 cursorPos = {static_cast<float>(input.mouseX), static_cast<float>(input.mouseY)};
+	constexpr float CAST_COOLDOWN = 0.4f;
 
 	auto getMaxElements = [&]()
 	{
@@ -107,7 +108,6 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		return false;
 	};
 
-	constexpr float CAST_COOLDOWN = 0.4f;
 	if (input.rMouse.pressed || controller.RTButton.pressed)
 	{
 		if (castCooldownTimer > 0.0f)
@@ -656,20 +656,33 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 			}
 		}
 
-		if (castCooldownTimer > 0.0f)
-		{
-			float cooldownWidth = totalWidth;
-			float cooldownHeight = PIXEL_SIZE * 1.4f;
-			float cooldownY = barY + segmentSize + PIXEL_SIZE * 1.6f;
-			float cooldownRatio = glm::clamp(castCooldownTimer / CAST_COOLDOWN, 0.0f, 1.0f);
-			glm::vec4 cooldownRect = {barX, cooldownY, cooldownWidth, cooldownHeight};
-			renderer.renderRectangle(cooldownRect, {0.1f, 0.1f, 0.1f, 0.5f});
-			renderer.renderRectangleOutline(cooldownRect, {0.4f, 0.4f, 0.4f, 0.7f},
-				PIXEL_SIZE * 0.3f);
+	}
 
-			float fillWidth = cooldownWidth * cooldownRatio;
-			glm::vec4 fillRect = {barX, cooldownY, fillWidth, cooldownHeight};
-			renderer.renderRectangle(fillRect, {0.9f, 0.9f, 0.9f, 0.8f});
-		}
+	if (castCooldownTimer > 0.0f)
+	{
+		int manaSlots = wand.maxMana;
+		if (manaSlots < 1) { manaSlots = 1; }
+		float segmentSize = PIXEL_SIZE * 3.5f;
+		float segmentSpacing = PIXEL_SIZE * 1.0f;
+		float totalWidth = manaSlots * segmentSize + (manaSlots - 1) * segmentSpacing;
+
+		glm::vec2 basePos = player.physics.getPos();
+		float barX = basePos.x - totalWidth * 0.5f;
+		float barY = basePos.y + player.physics.transform.size.y * 0.5f + PIXEL_SIZE * 2.5f;
+
+		float cooldownWidth = totalWidth;
+		float cooldownHeight = PIXEL_SIZE * 1.4f;
+		float cooldownY = selectionActive
+			? barY + segmentSize + PIXEL_SIZE * 1.6f
+			: barY + PIXEL_SIZE * 1.6f;
+		float cooldownRatio = glm::clamp(castCooldownTimer / CAST_COOLDOWN, 0.0f, 1.0f);
+		glm::vec4 cooldownRect = {barX, cooldownY, cooldownWidth, cooldownHeight};
+		renderer.renderRectangle(cooldownRect, {0.1f, 0.1f, 0.1f, 0.5f});
+		renderer.renderRectangleOutline(cooldownRect, {0.4f, 0.4f, 0.4f, 0.7f},
+			PIXEL_SIZE * 0.3f);
+
+		float fillWidth = cooldownWidth * cooldownRatio;
+		glm::vec4 fillRect = {barX, cooldownY, fillWidth, cooldownHeight};
+		renderer.renderRectangle(fillRect, {0.9f, 0.9f, 0.9f, 0.8f});
 	}
 }

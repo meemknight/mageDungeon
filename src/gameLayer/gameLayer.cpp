@@ -38,6 +38,11 @@ DamageViewerSystem &getDamageViewerSystem()
 	return game.damageViewerSystem;
 }
 
+ProjectileHolder &getProjectileHolder()
+{
+	return game.projectiles;
+}
+
 gl2d::Renderer2D &getRenderer()
 {
 	return renderer;

@@ -29,6 +29,7 @@ namespace SpellTypes
 			{Elements::Fire,Elements::Ice},	//iceWall,
 			{Elements::Fire,Elements::Water},	//boulder,
 			{Elements::Water,Elements::Water,Elements::Water},	//waterSiphon,
+			{Elements::Ice,Elements::Ice,Elements::Ice},	//bigIceBlock,
 
 
 
@@ -119,6 +120,10 @@ namespace SpellTypes
 
 		case waterSiphon:
 		return std::make_unique<WaterSiphonSpell>(getWaterSiphonSpell());
+		break;
+
+		case bigIceBlock:
+		return std::make_unique<BasicMagicMissleSpell>(getBigIceBlockSpell());
 		break;
 
 		case none:
