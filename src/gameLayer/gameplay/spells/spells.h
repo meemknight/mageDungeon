@@ -92,8 +92,12 @@ struct BasicMagicMissleSpell: public Spell
 		Spell::maxFireCount = 1;
 	}
 
+	// **configuration variables**
 	std::unique_ptr<Projectile> projectile;
 	float throwVelocity = 10;
+
+	// **state variables**
+	// (none)
 
 	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
@@ -113,10 +117,14 @@ struct BasicMagicMissleSpell: public Spell
 // Triple earth shot that fires fixed-angle ricocheting projectiles.
 struct TripleEarthRicochetSpell: public Spell
 {
+	// **configuration variables**
 	std::unique_ptr<Projectile> projectile;
 	float throwVelocity = 13.5f;
 	float angleA = -30.0f;
-	float angleB = 230.0f;
+	float angleB = 30.0f;
+
+	// **state variables**
+	// (none)
 
 	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
@@ -158,8 +166,12 @@ struct TripleEarthRicochetSpell: public Spell
 
 struct FlameWallSpell: public Spell
 {
+	// **configuration variables**
 	std::unique_ptr<Projectile> projectile;
 	float wallOffset = 1.2f;
+
+	// **state variables**
+	// (none)
 
 	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
@@ -190,19 +202,22 @@ struct FlameWallSpell: public Spell
 
 struct WaterSiphonSpell: public Spell
 {
-	ParticleSystem particleSystem;
+	// **configuration variables**
 	HitStats hitStats;
 	float range = 13.0f;
 	float beamWidth = 0.6f;
-	float particleTimer = 0.0f;
 	float particleInterval = 0.03f;
-	float tickTimer = 0.0f;
 	float tickInterval = 0.12f;
 	float particleSpeed = 10.0f;
-	float damageRampTimer = 0.0f;
 	float minDamage = 0.1f;
 	float maxDamage = 2.5f;
 	float rampDuration = 0.5f;
+
+	// **state variables**
+	ParticleSystem particleSystem;
+	float particleTimer = 0.0f;
+	float tickTimer = 0.0f;
+	float damageRampTimer = 0.0f;
 	bool initialized = false;
 	glm::vec2 origin = {};
 	glm::vec2 aimDir = {1.0f, 0.0f};
