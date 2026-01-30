@@ -145,3 +145,6 @@ Wand getRandomWand(int tier, std::ranlux24_base &rng);
 
 // Returns a display name for a wand sprite.
 const char *getWandSpriteName(int sprite);
+
+// When true, quick casts fire immediately instead of just loading.
+constexpr bool kQuickCastInstant = true;

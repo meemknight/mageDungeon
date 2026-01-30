@@ -55,6 +55,7 @@ struct GameLogic
 	bool draggingStone = false;
 	int quickActionEditIndex = -1;
 	float wandHoverTimer = 0.0f;
+	float wandFailTimer = 0.0f;
 	DroppedItemSystem droppedItems; // dropped items like wands
 
 	ParticleSystem particleSystem;

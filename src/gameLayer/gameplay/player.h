@@ -23,6 +23,8 @@ struct Player
 	glm::vec2 aimDirection = {1.0f, 0.0f};
 	// 0..1, how strongly the player is aiming
 	float aimStrength = 0.0f;
+	// shake timer for failed casts
+	float wandFailTimer = 0.0f;
 
 	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
 		const Wand &wand, glm::vec2 aimDirection);

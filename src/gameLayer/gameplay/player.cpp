@@ -108,6 +108,11 @@ void Player::update(float deltaTime)
 {
 
 	animator.update(deltaTime, 0.12, 6);
+	if (wandFailTimer > 0.0f)
+	{
+		wandFailTimer -= deltaTime;
+		if (wandFailTimer < 0.0f) { wandFailTimer = 0.0f; }
+	}
 
 	
 

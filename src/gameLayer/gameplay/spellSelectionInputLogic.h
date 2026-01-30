@@ -61,6 +61,9 @@ struct SleppSelectionInputLogic
 	bool alwaysCastUsedThisCast = false;
 	float castCooldownTimer = 0.0f;
 	bool pauseManaCharge = false; // set true to skip mana charge this frame
+	bool noManaFeedback = false; // set when input tries to use mana without enough
+	float noManaDisplayTimer = 0.0f;
+	float noManaShakeTimer = 0.0f;
 	int remainingUp = 0;
 	int remainingDown = 0;
 	int remainingLeft = 0;

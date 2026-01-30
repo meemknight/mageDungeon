@@ -25,6 +25,9 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 	const Wand &wand,
 	platform::Input &input)
 {
+	noManaFeedback = false;
+	noManaDisplayTimer = std::max(0.0f, noManaDisplayTimer - deltaTime);
+	noManaShakeTimer = std::max(0.0f, noManaShakeTimer - deltaTime);
 	const auto &controller = input.controller;
 	glm::vec2 cursorPos = {static_cast<float>(input.mouseX), static_cast<float>(input.mouseY)};
 	constexpr float CAST_COOLDOWN = 0.7f;
@@ -102,7 +105,7 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 	{
 		int maxElements = getMaxElements();
 		if (remaining <= 0) { return false; }
-		if (currentMana < 1.0f) { return false; }
+		if (currentMana < 1.0f) { noManaFeedback = true; return false; }
 		if (spellRecepie.count >= maxElements) { return false; }
 		if (spellRecepie.add(element, maxElements))
 		{
@@ -175,18 +178,22 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		return false;
 	};
 
-	auto tryQuickCast = [&](const QuickAction &action)
+	auto tryQuickCast = [&](const QuickAction &action) -> bool
 	{
 		int maxElements = getMaxElements();
 		int alwaysCastCount = wand.alwaysCast.type == WandSlotType::Element ? 1 : 0;
-		if (action.count + alwaysCastCount > maxElements) { return; }
-		if (action.count <= 0 && alwaysCastCount == 0) { return; }
+		if (action.count + alwaysCastCount > maxElements) { return false; }
+		if (action.count <= 0 && alwaysCastCount == 0) { return false; }
 		SpellRecepie fullRecipe = buildQuickRecipe(action);
-		if (fullRecipe.count == 0 || fullRecipe.count > maxElements) { return; }
-		if (spellRecepie.count > fullRecipe.count) { return; }
+		if (fullRecipe.count == 0 || fullRecipe.count > maxElements) { return false; }
+		if (spellRecepie.count > fullRecipe.count) { return false; }
 		for (int i = 0; i < spellRecepie.count; i++)
 		{
-			if (spellRecepie.elements[i] != fullRecipe.elements[i]) { return; }
+			if (spellRecepie.elements[i] != fullRecipe.elements[i]) { return false; }
+		}
+		if (spellRecepie.count == fullRecipe.count)
+		{
+			return true;
 		}
 
 		float tempMana = currentMana;
@@ -198,11 +205,11 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 
 		for (int i = spellRecepie.count; i < fullRecipe.count; i++)
 		{
-			if (tempRecipe.count >= maxElements) { return; }
-			if (tempMana < 1.0f) { return; }
+			if (tempRecipe.count >= maxElements) { return false; }
+			if (tempMana < 1.0f) { noManaFeedback = true; return false; }
 			if (!tryConsumeElement(fullRecipe.elements[i], tempUp, tempDown, tempLeft, tempRight))
 			{
-				return;
+				return false;
 			}
 			tempRecipe.add(fullRecipe.elements[i], maxElements);
 			tempMana -= 1.0f;
@@ -210,8 +217,9 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 
 		for (int i = spellRecepie.count; i < fullRecipe.count; i++)
 		{
-			if (!tryApplyElement(fullRecipe.elements[i])) { return; }
+			if (!tryApplyElement(fullRecipe.elements[i])) { return false; }
 		}
+		return spellRecepie.count == fullRecipe.count;
 	};
 
 	int quickIndex = -1;
@@ -221,7 +229,24 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 	if (controller.buttons[platform::Controller::Right].pressed) { quickIndex = 3; }
 	if (quickIndex >= 0)
 	{
-		tryQuickCast(wand.quickActions[quickIndex]);
+		bool quickReady = tryQuickCast(wand.quickActions[quickIndex]);
+		if (kQuickCastInstant && quickReady)
+		{
+			if (spellRecepie.count > 0)
+			{
+				auto spell = SpellTypes::getSpellFromRecepie(spellRecepie);
+				spellsHolder.addSpell(std::move(spell), player.physics.getPos(), fireDirection);
+				spellRecepie.clear();
+				resetCastState();
+				applyAlwaysCast();
+				castCooldownTimer = CAST_COOLDOWN;
+			}
+		}
+	}
+	if (noManaFeedback)
+	{
+		noManaDisplayTimer = 0.5f;
+		noManaShakeTimer = 0.2f;
 	}
 
 	if (input.rMouse.held || controller.RTButton.held)
@@ -765,9 +790,7 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 			float quickRingSize = ringSize * 0.82f;
 			float quickRingOffset = quickRingSize * 0.4f;
 			float quickIconSize = quickRingSize * 0.34f;
-			float quickTextSize = quickIconSize * 0.55f;
-			float quickTextOffset = quickIconSize * 0.6f;
-			glm::vec2 quickCenter = ringCenter + glm::vec2(0.0f, ringSize * 0.95f);
+			glm::vec2 quickCenter = ringCenter + glm::vec2(0.0f, ringSize * 1.12f);
 			glm::vec4 quickRingRect = {quickCenter.x - quickRingSize * 0.5f, quickCenter.y - quickRingSize * 0.5f,
 				quickRingSize, quickRingSize};
 
@@ -784,8 +807,7 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 				int element = Elements::NoneElement;
 				int count = 0;
 				if (!getQuickInfo(action, element, count)) { return; }
-				glm::vec3 baseColor = elementToColor(element);
-				renderer.renderRectangle(quickRingRect, t, {baseColor, 0.9f});
+				renderer.renderRectangle(quickRingRect, t, {0.25f, 0.25f, 0.25f, 0.85f});
 			};
 
 			renderQuickPiece(assetsManager.upCircle, wand.quickActions[0]);
@@ -799,17 +821,42 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 				int count = 0;
 				if (!getQuickInfo(action, element, count)) { return; }
 				glm::vec2 center = quickCenter + dir * quickRingOffset;
-				glm::vec4 iconRect = {center.x - quickIconSize * 0.5f, center.y - quickIconSize * 0.5f,
-					quickIconSize, quickIconSize};
-				renderer.renderRectangle(iconRect, assetsManager.elements.texture,
-					{1, 1, 1, 0.9f}, {}, 0,
-					assetsManager.elements.atlas.get(element, 0));
-
-				char countText[8] = {};
-				snprintf(countText, sizeof(countText), "%d", count);
-				glm::vec2 textPos = {center.x + quickTextOffset, center.y + quickTextSize * 0.35f};
-				renderer.renderText(textPos, countText, assetsManager.font,
-					{1, 1, 1, 0.85f}, quickTextSize, 4, 3, false);
+				int maxElements = getMaxElements();
+				if (maxElements < 1) { maxElements = 1; }
+				float boxSize = quickIconSize * 0.18f;
+				float boxGap = boxSize * 0.4f;
+				float totalWidth = maxElements * boxSize + (maxElements - 1) * boxGap;
+				float startX = center.x - totalWidth * 0.5f;
+				float y = center.y + boxSize * 0.2f;
+				for (int i = 0; i < maxElements; i++)
+				{
+					glm::vec4 boxRect = {startX + i * (boxSize + boxGap), y, boxSize, boxSize};
+					if (i < count)
+					{
+						int elementIndex = i;
+						if (hasAlwaysCast)
+						{
+							if (i == 0)
+							{
+								renderer.renderRectangle(boxRect, elementToColor(wand.alwaysCast.element));
+								continue;
+							}
+							elementIndex = i - 1;
+						}
+						if (elementIndex >= 0 && elementIndex < action.count)
+						{
+							renderer.renderRectangle(boxRect, elementToColor(action.elements[elementIndex]));
+						}
+						else
+						{
+							renderer.renderRectangle(boxRect, {0.2f, 0.2f, 0.2f, 0.7f});
+						}
+					}
+					else
+					{
+						renderer.renderRectangle(boxRect, {0.2f, 0.2f, 0.2f, 0.7f});
+					}
+				}
 			};
 
 			renderQuickIcon(wand.quickActions[0], {0, -1});
@@ -821,8 +868,9 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 
 	renderer.popCamera();
 
-	// mana bar under player while selecting
-	if (selectionActive)
+	bool showManaBar = selectionActive || noManaDisplayTimer > 0.0f;
+	// mana bar under player while selecting or failing due to no mana
+	if (showManaBar)
 	{
 		int manaSlots = wand.maxMana;
 		if (manaSlots < 1) { manaSlots = 1; }
@@ -839,6 +887,13 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		glm::vec2 basePos = player.physics.getPos();
 		float barX = basePos.x - totalWidth * 0.5f;
 		float barY = basePos.y + player.physics.transform.size.y * 0.5f + PIXEL_SIZE * 2.5f;
+		if (noManaShakeTimer > 0.0f)
+		{
+			float strength = std::min(1.0f, noManaShakeTimer / 0.2f);
+			float phase = (0.2f - noManaShakeTimer) * 40.0f;
+			float shake = std::sin(phase) * (PIXEL_SIZE * 1.4f) * strength;
+			barX += shake;
+		}
 
 		for (int i = 0; i < manaSlots; i++)
 		{
@@ -873,7 +928,7 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 
 		float cooldownWidth = totalWidth;
 		float cooldownHeight = PIXEL_SIZE * 1.4f;
-		float cooldownY = selectionActive
+		float cooldownY = showManaBar
 			? barY + segmentSize + PIXEL_SIZE * 1.6f
 			: barY + PIXEL_SIZE * 1.6f;
 		float cooldownRatio = glm::clamp(castCooldownTimer / CAST_COOLDOWN, 0.0f, 1.0f);

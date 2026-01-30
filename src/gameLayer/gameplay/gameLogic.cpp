@@ -577,6 +577,7 @@ bool GameLogic::update(float deltaTime,
 	// pause gameplay updates while inventory is open
 	float simDelta = inventoryOpen ? 0.0f : deltaTime;
 	wandHoverTimer += deltaTime;
+	wandFailTimer = std::max(0.0f, wandFailTimer - deltaTime);
 
 	{
 		auto statusTick = updateStatusEffects(player.statusEffects, player.statusImmunities, simDelta);
@@ -1038,6 +1039,11 @@ bool GameLogic::update(float deltaTime,
 			spellSelectionLogic[activeWandIndex].update(simDelta, renderer, assetsManager,
 				spellRecepies[activeWandIndex], spellsHolder, map, projectiles, entityHolder,
 				player, fireDirection, usesController, currentWand, input);
+			if (spellSelectionLogic[activeWandIndex].noManaFeedback)
+			{
+				player.wandFailTimer = 0.2f;
+				spellSelectionLogic[activeWandIndex].noManaFeedback = false;
+			}
 		}
 	}
 
@@ -1130,7 +1136,7 @@ bool GameLogic::update(float deltaTime,
 			float nameSize = PIXEL_SIZE * 8.0f * uiZoom;
 			const char *wandName = getWandSpriteName(wands[activeWandIndex].wandSprite);
 			renderer.renderText(namePos, wandName, assetsManager.font,
-				{0.2f, 0.15f, 0.08f, 0.9f}, nameSize, 4, 3, true);
+				{0.95f, 0.95f, 0.95f, 0.95f}, nameSize, 4, 3, true);
 		}
 		if (clickedSlot >= 0)
 		{
@@ -1176,7 +1182,15 @@ bool GameLogic::update(float deltaTime,
 		};
 
 		int ringHoverSlot = getRingIndex(ringCenter);
-		int quickHoverSlot = getRingIndex(quickRingCenter);
+		int quickHoverSlot = -1;
+		for (int i = 0; i < 4; i++)
+		{
+			if (isInsideRect(quickRingSlotRects[i], cursorPos))
+			{
+				quickHoverSlot = i;
+				break;
+			}
+		}
 
 		float stoneSize = PIXEL_SIZE * 10.0f * uiZoom;
 		float stoneSpacing = stoneSize * 1.25f;
@@ -1293,39 +1307,36 @@ bool GameLogic::update(float deltaTime,
 			bool canAddMore = editAction ? (usedElements < maxElements) : false;
 
 			float ringTop = ringCenter.y - ringSize * 0.5f;
-			float slotBoxSize = iconSize * 0.36f;
-			float slotGap = slotBoxSize * 0.4f;
-			float slotRowWidth = slotBoxSize * 4.0f + slotGap * 3.0f;
-			float slotRowX = ringCenter.x - slotRowWidth * 0.5f;
-			float slotRowY = ringTop - slotBoxSize * 1.2f;
-
-			const WandSlot *slots[4] = {&inventoryWand.up, &inventoryWand.down, &inventoryWand.left, &inventoryWand.right};
-			for (int i = 0; i < 4; i++)
-			{
-				glm::vec4 boxRect = {slotRowX + i * (slotBoxSize + slotGap), slotRowY, slotBoxSize, slotBoxSize};
-				glm::vec4 boxColor = {0.4f, 0.4f, 0.4f, 0.6f};
-				if (slots[i]->type == WandSlotType::Disabled)
-				{
-					boxColor = {0.18f, 0.18f, 0.18f, 0.85f};
-				}
-				else if (slots[i]->type == WandSlotType::Element)
-				{
-					boxColor = elementToColor(slots[i]->element);
-					boxColor.a = 0.8f;
-				}
-				renderer.renderRectangle(boxRect, boxColor);
-			}
-
 			int manaSlots = std::max(1, inventoryWand.maxMana);
-			float manaBoxSize = slotBoxSize * 0.85f;
+			float manaBoxSize = iconSize * 0.30f;
 			float manaGap = manaBoxSize * 0.35f;
 			float manaRowWidth = manaBoxSize * manaSlots + manaGap * (manaSlots - 1);
 			float manaRowX = ringCenter.x - manaRowWidth * 0.5f;
-			float manaRowY = slotRowY - manaBoxSize * 1.4f;
+			float manaRowY = ringTop - manaBoxSize * 1.6f;
 			for (int i = 0; i < manaSlots; i++)
 			{
 				glm::vec4 boxRect = {manaRowX + i * (manaBoxSize + manaGap), manaRowY, manaBoxSize, manaBoxSize};
-				renderer.renderRectangle(boxRect, {0.2f, 0.2f, 0.22f, 0.6f});
+				renderer.renderRectangle(boxRect, {0.22f, 0.45f, 0.95f, 0.75f});
+			}
+
+			int maxCastCount = std::max(1, inventoryWand.maxElementsPerCast);
+			float castBoxSize = manaBoxSize * 0.9f;
+			float castGap = castBoxSize * 0.35f;
+			float castRowWidth = castBoxSize * maxCastCount + castGap * (maxCastCount - 1);
+			float castRowX = ringCenter.x - castRowWidth * 0.5f;
+			float castRowY = manaRowY - castBoxSize * 1.4f;
+			SpellRecepie &currentSpell = spellRecepies[activeWandIndex];
+			for (int i = 0; i < maxCastCount; i++)
+			{
+				glm::vec4 boxRect = {castRowX + i * (castBoxSize + castGap), castRowY, castBoxSize, castBoxSize};
+				if (i < currentSpell.count)
+				{
+					renderer.renderRectangle(boxRect, elementToColor(currentSpell.elements[i]));
+				}
+				else
+				{
+					renderer.renderRectangle(boxRect, {0.5f, 0.5f, 0.52f, 0.75f});
+				}
 			}
 
 			auto consumeRemainingForElement = [&](int element, int &ru, int &rd, int &rl, int &rr)
@@ -1379,6 +1390,12 @@ bool GameLogic::update(float deltaTime,
 				if (input.lMouse.pressed && ringHoverSlot >= 0) { selectSlot = ringHoverSlot; }
 				if (selectSlot >= 0 && canAddMore)
 				{
+					if (spellSelectionLogic[activeWandIndex].currentMana < 1.0f)
+					{
+						wandFailTimer = 0.2f;
+					}
+					else
+					{
 					WandSlot *slot = getWandSlot(inventoryWand, selectSlot);
 					int *remainingPtr = nullptr;
 					switch (selectSlot)
@@ -1395,6 +1412,7 @@ bool GameLogic::update(float deltaTime,
 						{
 							recomputeRemaining();
 						}
+					}
 					}
 				}
 			}
