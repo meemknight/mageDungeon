@@ -60,6 +60,7 @@ struct SleppSelectionInputLogic
 	bool manaInitialized = false;
 	bool alwaysCastUsedThisCast = false;
 	float castCooldownTimer = 0.0f;
+	bool pauseManaCharge = false; // set true to skip mana charge this frame
 	int remainingUp = 0;
 	int remainingDown = 0;
 	int remainingLeft = 0;
@@ -67,6 +68,9 @@ struct SleppSelectionInputLogic
 	int remainingAlwaysCast = 0;
 	Wand lastWand = {};
 	bool hasWandState = false;
+
+	// resets loaded spells and selection state for a wand
+	void resetSelectionForWand(const Wand &wand, SpellRecepie &spellRecepie, bool resetMana);
 
 	void update(float deltaTime, gl2d::Renderer2D &renderer,
 		AssetsManager &assetsManager,

@@ -33,7 +33,25 @@ bool GameLogic::init()
 
 	floorGenerator.clear();
 
-	currentWand = getRandomWand(0, rng);
+	wands[0] = getRandomWand(0, rng);
+	hasWand[0] = true;
+	hasWand[1] = false;
+	activeWandIndex = 0;
+	spellRecepies[0].clear();
+	spellRecepies[1].clear();
+	spellSelectionLogic[0] = {};
+	spellSelectionLogic[1] = {};
+	stoneInventory.clear();
+	for (int wandIndex = 0; wandIndex < 2; wandIndex++)
+	{
+		for (int slotIndex = 0; slotIndex < 4; slotIndex++)
+		{
+			wandStoneSlots[wandIndex][slotIndex] = {};
+		}
+	}
+	draggingStoneIndex = -1;
+	draggingStoneOffset = {};
+	draggingStone = false;
 	droppedItems.clear();
 	summons.clear();
 
@@ -133,6 +151,142 @@ bool GameLogic::update(float deltaTime,
 	platform::Input &input)
 {
 	bool exitDungeon = false;
+	if (!hasWand[activeWandIndex])
+	{
+		activeWandIndex = hasWand[0] ? 0 : 1;
+	}
+
+	auto getWandSlot = [&](Wand &wand, int slotIndex) -> WandSlot *
+	{
+		switch (slotIndex)
+		{
+			case 0: return &wand.up;
+			case 1: return &wand.down;
+			case 2: return &wand.left;
+			case 3: return &wand.right;
+			default: return nullptr;
+		}
+	};
+
+	auto clearWandSlot = [&](WandSlot &slot)
+	{
+		slot.type = WandSlotType::Empty;
+		slot.element = Elements::NoneElement;
+		slot.castCount = 1;
+	};
+
+	auto clearStoneSlots = [&](int wandIndex)
+	{
+		for (int slotIndex = 0; slotIndex < 4; slotIndex++)
+		{
+			wandStoneSlots[wandIndex][slotIndex] = {};
+		}
+	};
+
+	auto returnStonesFromWand = [&](int wandIndex, Wand &targetWand)
+	{
+		for (int slotIndex = 0; slotIndex < 4; slotIndex++)
+		{
+			auto &stoneSlot = wandStoneSlots[wandIndex][slotIndex];
+			if (!stoneSlot.hasStone) { continue; }
+			stoneInventory.push_back(stoneSlot.stone);
+			stoneSlot = {};
+			if (auto *slot = getWandSlot(targetWand, slotIndex))
+			{
+				clearWandSlot(*slot);
+			}
+		}
+	};
+
+	auto applyStoneToSlot = [&](int wandIndex, int slotIndex, const MagicStone &stone)
+	{
+		auto *slot = getWandSlot(wands[wandIndex], slotIndex);
+		if (!slot) { return false; }
+		if (slot->type != WandSlotType::Empty) { return false; }
+		wandStoneSlots[wandIndex][slotIndex].hasStone = true;
+		wandStoneSlots[wandIndex][slotIndex].stone = stone;
+		slot->type = WandSlotType::Element;
+		slot->element = stone.element;
+		slot->castCount = stone.uses;
+		return true;
+	};
+
+	auto switchActiveWand = [&](int newIndex, bool pauseManaCharge)
+	{
+		if (newIndex < 0 || newIndex > 1) { return; }
+		if (!hasWand[newIndex]) { return; }
+		if (newIndex == activeWandIndex) { return; }
+		int oldIndex = activeWandIndex;
+		returnStonesFromWand(oldIndex, wands[oldIndex]);
+		draggingStoneIndex = -1;
+		draggingStoneOffset = {};
+		draggingStone = false;
+		activeWandIndex = newIndex;
+		spellSelectionLogic[oldIndex].resetSelectionForWand(
+			wands[oldIndex], spellRecepies[oldIndex], false);
+		spellSelectionLogic[newIndex].resetSelectionForWand(
+			wands[newIndex], spellRecepies[newIndex], false);
+		if (pauseManaCharge)
+		{
+			spellSelectionLogic[newIndex].pauseManaCharge = true;
+		}
+	};
+
+	bool switchToSlot0 = input.buttons[platform::Button::NR1].pressed;
+	bool switchToSlot1 = input.buttons[platform::Button::NR2].pressed;
+	if (switchToSlot0) { switchActiveWand(0, true); }
+	if (switchToSlot1) { switchActiveWand(1, true); }
+	if (input.controller.buttons[platform::Controller::LBumper].pressed ||
+		input.controller.buttons[platform::Controller::RBumper].pressed)
+	{
+		int otherIndex = activeWandIndex == 0 ? 1 : 0;
+		switchActiveWand(otherIndex, true);
+	}
+
+	if (input.buttons[platform::Button::Tab].pressed ||
+		input.controller.buttons[platform::Controller::Start].pressed)
+	{
+		inventoryOpen = !inventoryOpen;
+	}
+	if (!inventoryOpen && draggingStone)
+	{
+		draggingStoneIndex = -1;
+		draggingStoneOffset = {};
+		draggingStone = false;
+	}
+
+	int wandCountBefore = (hasWand[0] ? 1 : 0) + (hasWand[1] ? 1 : 0);
+	bool swapWandInput = !inventoryOpen && (input.buttons[platform::Button::E].pressed ||
+		input.controller.buttons[platform::Controller::A].pressed);
+	if (swapWandInput)
+	{
+		int pickedSlot = -1;
+		bool swappedWand = false;
+		int pickedItemIndex = -1;
+		if (droppedItems.trySwapWithPlayer(player.physics.getPos(), wands, hasWand,
+			activeWandIndex, pickedSlot, swappedWand, pickedItemIndex, true))
+		{
+			if (pickedSlot >= 0)
+			{
+				if (swappedWand && pickedItemIndex >= 0 && pickedItemIndex < (int)droppedItems.items.size())
+				{
+					returnStonesFromWand(pickedSlot, droppedItems.items[pickedItemIndex].wand);
+				}
+				else
+				{
+					clearStoneSlots(pickedSlot);
+				}
+				spellSelectionLogic[pickedSlot].resetSelectionForWand(
+					wands[pickedSlot], spellRecepies[pickedSlot], true);
+				if (!swappedWand && wandCountBefore == 1)
+				{
+					switchActiveWand(pickedSlot, true);
+				}
+			}
+		}
+	}
+
+	Wand &currentWand = wands[activeWandIndex];
 
 
 #pragma region imgui
@@ -151,7 +305,35 @@ bool GameLogic::update(float deltaTime,
 	ImGui::SliderInt("Random Wand Tier", &randomWandTier, 0, 5);
 	if (ImGui::Button("Random Wand"))
 	{
-		currentWand = getRandomWand(randomWandTier, rng);
+		returnStonesFromWand(activeWandIndex, wands[activeWandIndex]);
+		wands[activeWandIndex] = getRandomWand(randomWandTier, rng);
+		spellSelectionLogic[activeWandIndex].resetSelectionForWand(
+			wands[activeWandIndex], spellRecepies[activeWandIndex], true);
+	}
+
+	ImGui::Separator();
+	ImGui::Text("Magic Stones");
+	if (ImGui::Button("Add Fire Stone"))
+	{
+		stoneInventory.push_back({Elements::Fire, 2});
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Add Water Stone"))
+	{
+		stoneInventory.push_back({Elements::Water, 2});
+	}
+	if (ImGui::Button("Add Earth Stone"))
+	{
+		stoneInventory.push_back({Elements::Earth, 2});
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Add Ice Stone"))
+	{
+		stoneInventory.push_back({Elements::Ice, 2});
+	}
+	if (ImGui::Button("Remove Last Stone") && !stoneInventory.empty())
+	{
+		stoneInventory.pop_back();
 	}
 
 	ImGui::Separator();
@@ -288,10 +470,47 @@ bool GameLogic::update(float deltaTime,
 	glm::vec4 viewRect = renderer.getViewRect();
 	glm::vec2 screenCenter = {renderer.windowW / 2.f, renderer.windowH / 2.f};
 	static bool usesController = 0;
-
-	if (input.buttons[platform::Button::Tab].pressed)
 	{
-		inventoryOpen = !inventoryOpen;
+		const auto &controllerButtons = input.controller.buttons;
+		bool controllerUsed = glm::length(platform::getControllerButtons().LStick) > 0.1f ||
+			glm::length(platform::getControllerButtons().RStick) > 0.1f ||
+			controllerButtons[platform::Controller::LBumper].pressed ||
+			controllerButtons[platform::Controller::RBumper].pressed ||
+			controllerButtons[platform::Controller::A].pressed ||
+			controllerButtons[platform::Controller::B].pressed ||
+			controllerButtons[platform::Controller::X].pressed ||
+			controllerButtons[platform::Controller::Y].pressed ||
+			controllerButtons[platform::Controller::Up].pressed ||
+			controllerButtons[platform::Controller::Down].pressed ||
+			controllerButtons[platform::Controller::Left].pressed ||
+			controllerButtons[platform::Controller::Right].pressed ||
+			controllerButtons[platform::Controller::Start].pressed ||
+			controllerButtons[platform::Controller::Back].pressed ||
+			controllerButtons[platform::Controller::LThumb].pressed ||
+			controllerButtons[platform::Controller::RThumb].pressed ||
+			input.controller.LTButton.pressed ||
+			input.controller.RTButton.pressed;
+
+		bool keyboardUsed = input.buttons[platform::Button::A].pressed ||
+			input.buttons[platform::Button::D].pressed ||
+			input.buttons[platform::Button::W].pressed ||
+			input.buttons[platform::Button::S].pressed ||
+			input.buttons[platform::Button::Q].pressed ||
+			input.buttons[platform::Button::E].pressed ||
+			input.buttons[platform::Button::NR1].pressed ||
+			input.buttons[platform::Button::NR2].pressed ||
+			input.buttons[platform::Button::Tab].pressed;
+
+		bool mouseUsed = platform::isLMouseHeld() || platform::isRMouseHeld() || platform::mouseMoved();
+
+		if (controllerUsed)
+		{
+			usesController = true;
+		}
+		if (mouseUsed || keyboardUsed)
+		{
+			usesController = false;
+		}
 	}
 
 	// pause gameplay updates while inventory is open
@@ -360,10 +579,6 @@ bool GameLogic::update(float deltaTime,
 
 			player.physics.getPos() += move;
 			player.animator.setAnimationBasedOnMovement(move);
-
-			bool swapWand = input.buttons[platform::Button::E].pressed ||
-				input.controller.buttons[platform::Controller::A].pressed;
-			droppedItems.trySwapWithPlayer(player.physics.getPos(), currentWand, swapWand);
 
 			//fire dirrection
 			{
@@ -696,27 +911,51 @@ bool GameLogic::update(float deltaTime,
 
 	if (!inventoryOpen)
 	{
-		// current wand display
+		// wand slots ui
 		{
 			float cameraZoom = renderer.currentCamera.zoom;
 			renderer.pushCamera();
-			glui::Frame screenFrame({0, 0, renderer.windowW, renderer.windowH});
+			float padding = PIXEL_SIZE * 3.0f * cameraZoom;
+			float boxSize = PIXEL_SIZE * 16.0f * cameraZoom;
+			float gap = PIXEL_SIZE * 3.0f * cameraZoom;
+			float outlineWidth = std::max(PIXEL_SIZE * 0.8f * cameraZoom, 1.0f);
+			float baseX = padding;
+			float baseY = padding;
 
-			int size = (int)(PIXEL_SIZE * 16 * cameraZoom);
-			int padding = (int)(PIXEL_SIZE * 3 * cameraZoom);
-			auto wandBox = glui::Box().xLeft(padding).yTop(padding)
-				.xDimensionPixels(size).yDimensionPixels(size)();
+			for (int i = 0; i < 2; i++)
+			{
+				glm::vec4 boxRect = {baseX + i * (boxSize + gap), baseY, boxSize, boxSize};
+				gl2d::Color4f boxColor = {0.08f, 0.08f, 0.1f, 0.7f};
+				gl2d::Color4f outlineColor = {0.3f, 0.3f, 0.35f, 0.7f};
+				if (i == activeWandIndex)
+				{
+					boxColor = {0.16f, 0.12f, 0.08f, 0.85f};
+					outlineColor = {0.9f, 0.85f, 0.6f, 0.9f};
+				}
+				renderer.renderRectangle(boxRect, boxColor);
+				renderer.renderRectangleOutline(boxRect, outlineColor, outlineWidth);
 
-			renderer.renderRectangle(wandBox, assetsManager.wands.texture, {1, 1, 1, 1}, {}, 0,
-				assetsManager.wands.atlas.get(currentWand.wandSprite, 0));
+				if (hasWand[i])
+				{
+					float maxW = boxSize * 0.82f;
+					float maxH = boxSize * 0.82f;
+					glm::vec4 iconRect = {boxRect.x + (boxSize - maxW) * 0.5f,
+						boxRect.y + (boxSize - maxH) * 0.5f, maxW, maxH};
+					gl2d::Color4f tint = i == activeWandIndex
+						? gl2d::Color4f{1, 1, 1, 1}
+						: gl2d::Color4f{0.7f, 0.7f, 0.7f, 0.85f};
+					renderer.renderRectangle(iconRect, assetsManager.wands.texture, tint, {}, 0,
+						assetsManager.wands.atlas.get(wands[i].wandSprite, 0));
+				}
+			}
 
 			renderer.popCamera();
 		}
 
 		// magic ui
 		{
-			spellSelectionInputLogic.update(simDelta, renderer, assetsManager,
-				spellRecepie, spellsHolder, map, projectiles, entityHolder,
+			spellSelectionLogic[activeWandIndex].update(simDelta, renderer, assetsManager,
+				spellRecepies[activeWandIndex], spellsHolder, map, projectiles, entityHolder,
 				player, fireDirection, usesController, currentWand, input);
 		}
 	}
@@ -743,31 +982,116 @@ bool GameLogic::update(float deltaTime,
 		glm::vec2 wandShadowOffset = {-shadowOffset.x, shadowOffset.y * 0.9f};
 		float shadowAlpha = 0.45f;
 
-		gl2d::Texture &wandTexture = assetsManager.getWandIcon(currentWand.wandSprite);
-		if (wandTexture.isValid())
+		auto isInsideRect = [&](glm::vec4 rect, glm::vec2 pos)
 		{
+			return pos.x >= rect.x && pos.x <= rect.x + rect.z &&
+				pos.y >= rect.y && pos.y <= rect.y + rect.w;
+		};
+
+		float largeWandMaxW = renderer.windowW * 0.38f;
+		float largeWandMaxH = renderer.windowH * 0.62f;
+		float smallWandMaxW = largeWandMaxW * 0.8f;
+		float smallWandMaxH = largeWandMaxH * 0.8f;
+		float wandRowY = bookPos.y + bookH * 0.48f;
+		glm::vec2 wandCenters[2] = {
+			{bookPos.x + bookW * 0.22f, wandRowY},
+			{bookPos.x + bookW * 0.38f, wandRowY}
+		};
+		int clickedSlot = -1;
+
+		auto renderBookWand = [&](int slotIndex, glm::vec2 center, bool selected)
+		{
+			if (!hasWand[slotIndex]) { return glm::vec4{}; }
+			gl2d::Texture &wandTexture = assetsManager.getWandIcon(wands[slotIndex].wandSprite);
+			if (!wandTexture.isValid()) { return glm::vec4{}; }
+
 			auto wandSize = wandTexture.GetSize();
-			float maxW = renderer.windowW * 0.432f;
-			float maxH = renderer.windowH * 0.696f;
+			float maxW = selected ? largeWandMaxW : smallWandMaxW;
+			float maxH = selected ? largeWandMaxH : smallWandMaxH;
 			float scaleX = maxW / (float)wandSize.x;
 			float scaleY = maxH / (float)wandSize.y;
 			float scale = std::min(scaleX, scaleY);
 			float drawW = wandSize.x * scale;
 			float drawH = wandSize.y * scale;
-			glm::vec2 wandCenter = {renderer.windowW * 0.38f, renderer.windowH * 0.47f};
-			glm::vec4 wandRect = {wandCenter.x - drawW * 0.5f, wandCenter.y - drawH * 0.5f, drawW, drawH};
+			glm::vec4 wandRect = {center.x - drawW * 0.5f, center.y - drawH * 0.5f, drawW, drawH};
 			glm::vec4 wandShadowRect = {wandRect.x + wandShadowOffset.x, wandRect.y + wandShadowOffset.y,
 				wandRect.z, wandRect.w};
+			gl2d::Color4f tint = selected ? gl2d::Color4f{1, 1, 1, 1}
+				: gl2d::Color4f{0.35f, 0.35f, 0.35f, 0.85f};
 			renderer.renderRectangle(wandShadowRect, wandTexture, {0, 0, 0, shadowAlpha});
-			renderer.renderRectangle(wandRect, wandTexture, {1, 1, 1, 1});
+			renderer.renderRectangle(wandRect, wandTexture, tint);
+			return wandRect;
+		};
+
+		for (int i = 0; i < 2; i++)
+		{
+			bool selected = i == activeWandIndex;
+			glm::vec4 wandRect = renderBookWand(i, wandCenters[i], selected);
+			if (hasWand[i] && input.lMouse.pressed && isInsideRect(wandRect, cursorPos))
+			{
+				clickedSlot = i;
+			}
 		}
+		if (clickedSlot >= 0)
+		{
+			switchActiveWand(clickedSlot, true);
+		}
+
+		float stoneSize = PIXEL_SIZE * 12.0f * uiZoom;
+		float stoneSpacing = stoneSize * 1.3f;
+		glm::vec2 stoneBase = {bookPos.x + bookW * 0.52f, bookPos.y + bookH * 0.32f};
+
+		auto renderStone = [&](glm::vec4 rect, const MagicStone &stone, float alpha)
+		{
+			renderer.renderRectangle(rect, {0.2f, 0.2f, 0.2f, 0.85f * alpha});
+			float iconSize = rect.z * 0.75f;
+			glm::vec4 iconRect = {rect.x + (rect.z - iconSize) * 0.5f,
+				rect.y + (rect.w - iconSize) * 0.5f, iconSize, iconSize};
+			renderer.renderRectangle(iconRect, assetsManager.elements.texture,
+				{1, 1, 1, alpha}, {}, 0,
+				assetsManager.elements.atlas.get(stone.element, 0));
+
+			char usesText[8] = {};
+			snprintf(usesText, sizeof(usesText), "%d", stone.uses);
+			glm::vec2 textPos = {rect.x + rect.z * 0.62f, rect.y + rect.w * 0.58f};
+			float textSize = rect.z * 0.42f;
+			renderer.renderText(textPos, usesText, assetsManager.font,
+				{0.9f, 0.9f, 0.9f, alpha}, textSize, 4, 3, false);
+		};
+
+		if (draggingStone && (draggingStoneIndex < 0 || draggingStoneIndex >= (int)stoneInventory.size()))
+		{
+			draggingStoneIndex = -1;
+			draggingStoneOffset = {};
+			draggingStone = false;
+		}
+
+		for (int i = 0; i < (int)stoneInventory.size(); i++)
+		{
+			glm::vec4 stoneRect = {stoneBase.x, stoneBase.y + stoneSpacing * i, stoneSize, stoneSize};
+			if (draggingStone && draggingStoneIndex == i)
+			{
+				continue;
+			}
+			renderStone(stoneRect, stoneInventory[i], 1.0f);
+			if (!draggingStone && input.lMouse.pressed && isInsideRect(stoneRect, cursorPos))
+			{
+				draggingStone = true;
+				draggingStoneIndex = i;
+				draggingStoneOffset = cursorPos - glm::vec2(stoneRect.x, stoneRect.y);
+			}
+		}
+
+		glm::vec4 ringSlotRects[4] = {};
+		bool ringSlotRectsReady = false;
 
 		// wand stats ring (right side)
 		{
-			int upRemaining = currentWand.up.type == WandSlotType::Element ? currentWand.up.castCount : 0;
-			int downRemaining = currentWand.down.type == WandSlotType::Element ? currentWand.down.castCount : 0;
-			int leftRemaining = currentWand.left.type == WandSlotType::Element ? currentWand.left.castCount : 0;
-			int rightRemaining = currentWand.right.type == WandSlotType::Element ? currentWand.right.castCount : 0;
+			Wand &inventoryWand = wands[activeWandIndex];
+			int upRemaining = inventoryWand.up.type == WandSlotType::Element ? inventoryWand.up.castCount : 0;
+			int downRemaining = inventoryWand.down.type == WandSlotType::Element ? inventoryWand.down.castCount : 0;
+			int leftRemaining = inventoryWand.left.type == WandSlotType::Element ? inventoryWand.left.castCount : 0;
+			int rightRemaining = inventoryWand.right.type == WandSlotType::Element ? inventoryWand.right.castCount : 0;
 
 			glm::vec2 ringCenter = {renderer.windowW * 0.66f, renderer.windowH * 0.52f};
 			float ringSize = PIXEL_SIZE * 44.0f * uiZoom * (2.0f / 2.2f);
@@ -775,6 +1099,14 @@ bool GameLogic::update(float deltaTime,
 			float iconSize = ringSize * 0.34f;
 			float textSize = iconSize * 0.55f;
 			float textOffset = iconSize * 0.6f;
+			glm::vec2 slotDirs[4] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
+			for (int i = 0; i < 4; i++)
+			{
+				glm::vec2 center = ringCenter + slotDirs[i] * ringOffset;
+				ringSlotRects[i] = {center.x - iconSize * 0.5f, center.y - iconSize * 0.5f,
+					iconSize, iconSize};
+			}
+			ringSlotRectsReady = true;
 
 			glm::vec4 ringRect = {ringCenter.x - ringSize * 0.5f, ringCenter.y - ringSize * 0.5f,
 				ringSize, ringSize};
@@ -784,7 +1116,15 @@ bool GameLogic::update(float deltaTime,
 			auto renderRingPiece = [&](gl2d::Texture t, const WandSlot &slot, int remaining)
 			{
 				bool hasElement = slot.type == WandSlotType::Element;
-				glm::vec3 baseColor = hasElement ? elementToColor(slot.element) : glm::vec3{0.25f, 0.25f, 0.25f};
+				glm::vec3 baseColor = {0.65f, 0.65f, 0.65f};
+				if (slot.type == WandSlotType::Disabled)
+				{
+					baseColor = {0.15f, 0.15f, 0.15f};
+				}
+				else if (hasElement)
+				{
+					baseColor = elementToColor(slot.element);
+				}
 				if (hasElement && remaining <= 0)
 				{
 					baseColor = glm::mix(baseColor, glm::vec3{0.2f, 0.2f, 0.2f}, 0.6f);
@@ -794,40 +1134,48 @@ bool GameLogic::update(float deltaTime,
 				renderer.renderRectangle(ringRect, t, {baseColor, opacity});
 			};
 
-			renderRingPiece(assetsManager.upCircle, currentWand.up, upRemaining);
-			renderRingPiece(assetsManager.downCircle, currentWand.down, downRemaining);
-			renderRingPiece(assetsManager.leftCircle, currentWand.left, leftRemaining);
-			renderRingPiece(assetsManager.rightCircle, currentWand.right, rightRemaining);
+			renderRingPiece(assetsManager.upCircle, inventoryWand.up, upRemaining);
+			renderRingPiece(assetsManager.downCircle, inventoryWand.down, downRemaining);
+			renderRingPiece(assetsManager.leftCircle, inventoryWand.left, leftRemaining);
+			renderRingPiece(assetsManager.rightCircle, inventoryWand.right, rightRemaining);
 
-			auto renderRingIcon = [&](const WandSlot &slot, int remaining, glm::vec2 dir)
+			auto renderRingIcon = [&](const WandSlot &slot, int remaining, int slotIndex)
 			{
-				if (slot.type != WandSlotType::Element) { return; }
-				glm::vec2 center = ringCenter + dir * ringOffset;
-				glm::vec4 iconRect = {center.x - iconSize * 0.5f, center.y - iconSize * 0.5f,
-					iconSize, iconSize};
-				glm::vec4 iconShadowRect = {iconRect.x + shadowOffset.x, iconRect.y + shadowOffset.y,
-					iconRect.z, iconRect.w};
-				renderer.renderRectangle(iconShadowRect, assetsManager.elements.texture,
-					{0, 0, 0, shadowAlpha}, {}, 0,
-					assetsManager.elements.atlas.get(slot.element, 0));
-				renderer.renderRectangle(iconRect, assetsManager.elements.texture,
-					{1, 1, 1, 1}, {}, 0,
-					assetsManager.elements.atlas.get(slot.element, 0));
+				glm::vec4 iconRect = ringSlotRects[slotIndex];
+				glm::vec2 center = {iconRect.x + iconRect.z * 0.5f, iconRect.y + iconRect.w * 0.5f};
+				if (slot.type == WandSlotType::Element)
+				{
+					glm::vec4 iconShadowRect = {iconRect.x + shadowOffset.x, iconRect.y + shadowOffset.y,
+						iconRect.z, iconRect.w};
+					renderer.renderRectangle(iconShadowRect, assetsManager.elements.texture,
+						{0, 0, 0, shadowAlpha}, {}, 0,
+						assetsManager.elements.atlas.get(slot.element, 0));
+					renderer.renderRectangle(iconRect, assetsManager.elements.texture,
+						{1, 1, 1, 1}, {}, 0,
+						assetsManager.elements.atlas.get(slot.element, 0));
 
-				char countText[8] = {};
-				snprintf(countText, sizeof(countText), "%d", std::max(0, remaining));
-				glm::vec2 textPos = {center.x + textOffset, center.y + textSize * 0.35f};
-				float textAlpha = remaining > 0 ? 0.9f : 0.5f;
-				renderer.renderText(textPos, countText, assetsManager.font,
-					{1, 1, 1, textAlpha}, textSize, 4, 3, false);
+					char countText[8] = {};
+					snprintf(countText, sizeof(countText), "%d", std::max(0, remaining));
+					glm::vec2 textPos = {center.x + textOffset, center.y + textSize * 0.35f};
+					float textAlpha = remaining > 0 ? 0.9f : 0.5f;
+					renderer.renderText(textPos, countText, assetsManager.font,
+						{1, 1, 1, textAlpha}, textSize, 4, 3, false);
+				}
+				else if (slot.type == WandSlotType::Disabled)
+				{
+					float xSize = iconSize * 0.45f;
+					glm::vec2 textPos = {center.x - xSize * 0.25f, center.y - xSize * 0.20f};
+					renderer.renderText(textPos, "X", assetsManager.font,
+						{0.28f, 0.28f, 0.28f, 0.9f}, xSize, 4, 3, false);
+				}
 			};
 
-			renderRingIcon(currentWand.up, upRemaining, {0, -1});
-			renderRingIcon(currentWand.down, downRemaining, {0, 1});
-			renderRingIcon(currentWand.left, leftRemaining, {-1, 0});
-			renderRingIcon(currentWand.right, rightRemaining, {1, 0});
+			renderRingIcon(inventoryWand.up, upRemaining, 0);
+			renderRingIcon(inventoryWand.down, downRemaining, 1);
+			renderRingIcon(inventoryWand.left, leftRemaining, 2);
+			renderRingIcon(inventoryWand.right, rightRemaining, 3);
 
-			if (currentWand.alwaysCast.type == WandSlotType::Element)
+			if (inventoryWand.alwaysCast.type == WandSlotType::Element)
 			{
 				float centerSize = ringSize * 0.38f;
 				glm::vec4 centerRect = {ringCenter.x - centerSize * 0.5f, ringCenter.y - centerSize * 0.5f,
@@ -836,11 +1184,50 @@ bool GameLogic::update(float deltaTime,
 					centerRect.z, centerRect.w};
 				renderer.renderRectangle(centerShadowRect, assetsManager.elements.texture,
 					{0, 0, 0, shadowAlpha}, {}, 0,
-					assetsManager.elements.atlas.get(currentWand.alwaysCast.element, 0));
+					assetsManager.elements.atlas.get(inventoryWand.alwaysCast.element, 0));
 				renderer.renderRectangle(centerRect, assetsManager.elements.texture,
 					{1, 1, 1, 1}, {}, 0,
-					assetsManager.elements.atlas.get(currentWand.alwaysCast.element, 0));
+					assetsManager.elements.atlas.get(inventoryWand.alwaysCast.element, 0));
 			}
+		}
+
+		if (draggingStone && input.lMouse.released)
+		{
+			if (draggingStoneIndex >= 0 && draggingStoneIndex < (int)stoneInventory.size())
+			{
+				int dropSlot = -1;
+				if (ringSlotRectsReady)
+				{
+					for (int i = 0; i < 4; i++)
+					{
+						if (isInsideRect(ringSlotRects[i], cursorPos))
+						{
+							dropSlot = i;
+							break;
+						}
+					}
+				}
+				if (dropSlot >= 0)
+				{
+					MagicStone stone = stoneInventory[draggingStoneIndex];
+					if (applyStoneToSlot(activeWandIndex, dropSlot, stone))
+					{
+						stoneInventory.erase(stoneInventory.begin() + draggingStoneIndex);
+						spellSelectionLogic[activeWandIndex].resetSelectionForWand(
+							wands[activeWandIndex], spellRecepies[activeWandIndex], false);
+					}
+				}
+			}
+			draggingStoneIndex = -1;
+			draggingStoneOffset = {};
+			draggingStone = false;
+		}
+
+		if (draggingStone && draggingStoneIndex >= 0 && draggingStoneIndex < (int)stoneInventory.size())
+		{
+			glm::vec2 dragPos = cursorPos - draggingStoneOffset;
+			glm::vec4 dragRect = {dragPos.x, dragPos.y, stoneSize, stoneSize};
+			renderStone(dragRect, stoneInventory[draggingStoneIndex], 0.95f);
 		}
 
 		renderer.popCamera();

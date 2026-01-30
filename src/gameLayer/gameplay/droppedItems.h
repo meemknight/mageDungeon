@@ -36,5 +36,7 @@ struct DroppedItemSystem
 	void render(gl2d::Renderer2D &renderer, AssetsManager &assetsManager);
 
 	void spawnWand(glm::vec2 pos, const Wand &wand, std::ranlux24_base &rng);
-	bool trySwapWithPlayer(glm::vec2 playerPos, Wand &playerWand, bool trigger);
+	// tries to pick up or swap a wand; outputs slot, swap info, and item index
+	bool trySwapWithPlayer(glm::vec2 playerPos, Wand *playerWands, bool *hasWands,
+		int activeIndex, int &outSlot, bool &outSwapped, int &outItemIndex, bool trigger);
 };

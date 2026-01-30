@@ -77,7 +77,9 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		castCooldownTimer = 0.0f;
 	}
 
-	currentMana += wand.manaChargeSpeed * deltaTime;
+	float manaDelta = pauseManaCharge ? 0.0f : deltaTime;
+	pauseManaCharge = false;
+	currentMana += wand.manaChargeSpeed * manaDelta;
 	currentMana = glm::clamp(currentMana, 0.0f, (float)wand.maxMana);
 	castCooldownTimer = std::max(0.0f, castCooldownTimer - deltaTime);
 
@@ -714,5 +716,39 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		float fillWidth = cooldownWidth * cooldownRatio;
 		glm::vec4 fillRect = {barX, cooldownY, fillWidth, cooldownHeight};
 		renderer.renderRectangle(fillRect, {0.9f, 0.9f, 0.9f, 0.8f});
+	}
+}
+
+void SleppSelectionInputLogic::resetSelectionForWand(const Wand &wand, SpellRecepie &spellRecepie, bool resetMana)
+{
+	spellRecepie.clear();
+	executedFirstFrame = false;
+	isDrawing = false;
+	isClickSelection = false;
+	mouseStart = {};
+	dragDirection = 0;
+	trail.clear();
+	trailColor = {0.5f, 0.5f, 0.5f};
+	trailColorStart = trailColor;
+	trailTargetColor = trailColor;
+	trailColorTimer = 0.0f;
+	upPiece = {};
+	downPiece = {};
+	leftPiece = {};
+	rightPiece = {};
+	remainingUp = wand.up.type == WandSlotType::Element ? wand.up.castCount : 0;
+	remainingDown = wand.down.type == WandSlotType::Element ? wand.down.castCount : 0;
+	remainingLeft = wand.left.type == WandSlotType::Element ? wand.left.castCount : 0;
+	remainingRight = wand.right.type == WandSlotType::Element ? wand.right.castCount : 0;
+	remainingAlwaysCast = wand.alwaysCast.type == WandSlotType::Element ? 1 : 0;
+	alwaysCastUsedThisCast = false;
+	lastWand = wand;
+	hasWandState = true;
+	if (resetMana)
+	{
+		currentMana = 0.0f;
+		manaInitialized = true;
+		castCooldownTimer = 0.0f;
+		pauseManaCharge = false;
 	}
 }

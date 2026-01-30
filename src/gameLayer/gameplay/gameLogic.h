@@ -1,5 +1,7 @@
 #pragma once
 #include <gameplay/map.h>
+#include <gameplay/elements.h>
+#include <vector>
 #include <gameplay/Physics.h>
 #include <gameplay/player.h>
 #include <gameplay/projectiles/projectiles.h>
@@ -17,6 +19,19 @@
 
 //this is an instance of the game.
 //This shouldn't load things like textures, those should be load outside
+// Magic stones are temporary element upgrades for wand slots.
+struct MagicStone
+{
+	int element = Elements::Fire;
+	int uses = 1;
+};
+
+struct WandStoneSlot
+{
+	bool hasStone = false;
+	MagicStone stone = {};
+};
+
 struct GameLogic
 {
 	Map map;
@@ -26,11 +41,18 @@ struct GameLogic
 	SummonHolder summons; // friendly summons that assist the player
 	EntityHolder entityHolder;
 	SpellsHolder spellsHolder;
-	SpellRecepie spellRecepie; //current spell recepie;
-	SleppSelectionInputLogic spellSelectionInputLogic; //spell selection input and UI
+	SpellRecepie spellRecepies[2]; // current spell recepies for each wand
+	SleppSelectionInputLogic spellSelectionLogic[2]; // spell selection input and UI per wand
 	DamageViewerSystem damageViewerSystem;
 	FloorInfo floorInfo;
-	Wand currentWand;
+	Wand wands[2];
+	bool hasWand[2] = {};
+	int activeWandIndex = 0;
+	WandStoneSlot wandStoneSlots[2][4] = {};
+	std::vector<MagicStone> stoneInventory;
+	int draggingStoneIndex = -1;
+	glm::vec2 draggingStoneOffset = {};
+	bool draggingStone = false;
 	DroppedItemSystem droppedItems; // dropped items like wands
 
 	ParticleSystem particleSystem;

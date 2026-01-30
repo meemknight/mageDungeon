@@ -61,11 +61,19 @@ void DroppedItemSystem::render(gl2d::Renderer2D &renderer, AssetsManager &assets
 	}
 }
 
-bool DroppedItemSystem::trySwapWithPlayer(glm::vec2 playerPos, Wand &playerWand, bool trigger)
+bool DroppedItemSystem::trySwapWithPlayer(glm::vec2 playerPos, Wand *playerWands, bool *hasWands,
+	int activeIndex, int &outSlot, bool &outSwapped, int &outItemIndex, bool trigger)
 {
+	outSlot = -1;
+	outSwapped = false;
+	outItemIndex = -1;
 	if (!trigger)
 	{
 		return false;
+	}
+	if (activeIndex < 0 || activeIndex > 1)
+	{
+		activeIndex = 0;
 	}
 
 	const float pickupRadius = PIXEL_SIZE * 16.0f;
@@ -91,7 +99,24 @@ bool DroppedItemSystem::trySwapWithPlayer(glm::vec2 playerPos, Wand &playerWand,
 
 	if (bestIndex >= 0)
 	{
-		std::swap(playerWand, items[bestIndex].wand);
+		int targetSlot = -1;
+		if (!hasWands[0]) { targetSlot = 0; }
+		else if (!hasWands[1]) { targetSlot = 1; }
+		else { targetSlot = activeIndex; }
+
+		outSlot = targetSlot;
+		outItemIndex = bestIndex;
+		if (!hasWands[targetSlot])
+		{
+			playerWands[targetSlot] = items[bestIndex].wand;
+			hasWands[targetSlot] = true;
+			items[bestIndex] = items.back();
+			items.pop_back();
+			return true;
+		}
+
+		std::swap(playerWands[targetSlot], items[bestIndex].wand);
+		outSwapped = true;
 		return true;
 	}
 
