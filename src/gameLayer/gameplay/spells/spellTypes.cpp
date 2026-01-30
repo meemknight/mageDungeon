@@ -19,12 +19,15 @@ namespace SpellTypes
 			{Elements::Earth,Elements::Earth},	//earthThorn,
 			{Elements::Earth,Elements::Fire},	//fireStandby,
 			{Elements::Earth,Elements::Water},	//waterStandby,
+			{Elements::Earth,Elements::Ice},	//iceStandbySimple,
 			{Elements::Earth,Elements::Water,Elements::Water},	//waterHomingStandby,
 			{Elements::Earth,Elements::Ice,Elements::Ice},	//iceStandby,
 			{Elements::Earth,Elements::Earth,Elements::Water},	//summonWaterSlime,
 			{Elements::Earth,Elements::Earth,Elements::Fire},	//summonFireSlime,
 			{Elements::Earth,Elements::Earth,Elements::Ice},	//summonIceSlime,
 			{Elements::Earth,Elements::Water,Elements::Fire},	//cinderCompass,
+			{Elements::Fire,Elements::Earth},	//thornWall,
+			{Elements::Earth,Elements::Earth,Elements::Earth,Elements::Earth},	//wildGrowth,
 			{Elements::Earth,Elements::Water,Elements::Earth,Elements::Water},	//earthWaterThorn,
 			{Elements::Ice},	//iceBolt,
 			{Elements::Fire,Elements::Fire,Elements::Fire},	//dragonsBreath,
@@ -132,6 +135,10 @@ namespace SpellTypes
 		return std::make_unique<StandbyProjectilesSpell>(getWaterStandbySpell());
 		break;
 
+		case iceStandbySimple:
+		return std::make_unique<StandbyProjectilesSpell>(getIceStandbySimpleSpell());
+		break;
+
 		case waterHomingStandby:
 		return std::make_unique<StandbyProjectilesSpell>(getWaterHomingStandbySpell());
 		break;
@@ -154,6 +161,14 @@ namespace SpellTypes
 
 		case cinderCompass:
 		return std::make_unique<HomingVolleySpell>(getCinderCompassSpell());
+		break;
+
+		case thornWall:
+		return std::make_unique<ThornWallSpell>(getThornWallSpell());
+		break;
+
+		case wildGrowth:
+		return std::make_unique<WildGrowthSpell>(getWildGrowthSpell());
 		break;
 
 		case earthWaterThorn:

@@ -258,6 +258,23 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline StandbyProjectilesSpell getIceStandbySimpleSpell()
+	{
+		StandbyProjectilesSpell ret;
+		HitStats hitStats;
+		hitStats.damage = 2.5f;
+		hitStats.pushBack = 4.6f;
+		ret.element = Elements::Ice;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<BasicMagicMissle>(hitStats);
+		ret.projectile->element = Elements::Ice;
+		ret.standbyCount = 3;
+		ret.throwVelocity = 10.0f;
+		ret.standbyLifetime = 14.0f;
+		return ret;
+	}
+
 	inline StandbyProjectilesSpell getWaterHomingStandbySpell()
 	{
 		StandbyProjectilesSpell ret;
@@ -427,6 +444,32 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline ThornWallSpell getThornWallSpell()
+	{
+		ThornWallSpell ret;
+		ret.element = Elements::Earth;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.thornCount = 15;
+		ret.wallLength = 7.0f;
+		ret.wallOffset = 1.2f;
+		return ret;
+	}
+
+	inline WildGrowthSpell getWildGrowthSpell()
+	{
+		WildGrowthSpell ret;
+		ret.element = Elements::Earth;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.maxThorns = 60;
+		ret.wormCount = 12;
+		ret.maxDistance = 8.0f;
+		ret.maxDuration = 2.0f;
+		ret.spawnInterval = 0.02f;
+		return ret;
+	}
+
 	inline BasicMagicMissleSpell getEarthWaterThornSpell()
 	{
 		BasicMagicMissleSpell ret;
@@ -517,12 +560,15 @@ namespace SpellTypes
 		earthThorn,
 		fireStandby,
 		waterStandby,
+		iceStandbySimple,
 		waterHomingStandby,
 		iceStandby,
 		summonWaterSlime,
 		summonFireSlime,
 		summonIceSlime,
 		cinderCompass,
+		thornWall,
+		wildGrowth,
 		earthWaterThorn,
 		iceBolt,
 		dragonsBreath,

@@ -362,6 +362,327 @@ struct FlameWallSpell: public Spell
 	}
 };
 
+// Spawns a wall of thorn projectiles in front of the player.
+struct ThornWallSpell: public Spell
+{
+	// **configuration variables**
+	int thornCount = 15;
+	float wallLength = 5.0f;
+	float wallOffset = 1.2f;
+	float offsetJitter = 0.25f;
+	float forwardJitter = 0.2f;
+	float particleBurstCount = 18.0f;
+
+	// **state variables**
+	// (none)
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		glm::vec2 aim = currentAimDir;
+		float len = glm::length(aim);
+		if (len <= 0.0001f)
+		{
+			len = glm::length(createAimDir);
+			if (len <= 0.0001f)
+			{
+				aim = {1.0f, 0.0f};
+				len = 1.0f;
+			}
+			else
+			{
+				aim = createAimDir;
+			}
+		}
+		aim /= len;
+
+	glm::vec2 axis = {-aim.y, aim.x};
+	float spacing = thornCount > 1 ? (wallLength / (thornCount - 1)) : 0.0f;
+	glm::vec2 origin = player.physics.getPos() + aim * wallOffset;
+
+	glm::vec4 startColor = elementToSecondaryColor(Elements::Earth);
+	glm::vec4 endColor = elementToColor(Elements::Earth);
+	startColor.g *= 0.8f;
+	endColor.g *= 0.8f;
+	ParticleSettings burst = getSmallSquareParticle(startColor, endColor);
+	burst.onCreateCount = (short)particleBurstCount;
+	burst.particleLifeTime = {0.25f, 0.4f};
+	burst.velocityX = glm::vec2{-10.0f, 10.0f} * PIXEL_SIZE;
+	burst.velocityY = glm::vec2{-10.0f, 10.0f} * PIXEL_SIZE;
+	burst.createApearence.size = glm::vec2{2.2f, 3.0f} * PIXEL_SIZE;
+	burst.endApearence.size = glm::vec2{0.8f, 1.4f} * PIXEL_SIZE;
+	burst.folowParent = false;
+
+	auto isBlocked = [&](glm::vec2 pos)
+	{
+		int tx = (int)std::floor(pos.x);
+		int ty = (int)std::floor(pos.y);
+		return map.isCollidableAtPosSafe(tx, ty);
+	};
+
+	auto trySpawn = [&](glm::vec2 basePos)
+	{
+		if (isBlocked(basePos))
+		{
+			return false;
+		}
+
+		float jitterSide = getRandomFloat(rng, -offsetJitter, offsetJitter);
+		float jitterForward = getRandomFloat(rng, -forwardJitter, forwardJitter);
+		glm::vec2 spawnPos = basePos + axis * jitterSide + aim * jitterForward;
+		if (isBlocked(spawnPos))
+		{
+			return true;
+		}
+
+		auto thorn = std::make_unique<ThornProjectile>();
+		thorn->element = Elements::Earth;
+		projectileHolder.addProjectileAsPtr(std::move(thorn), spawnPos);
+		mainParticleSystem.emitParticles(burst, spawnPos, rng, spawnPos);
+		return true;
+	};
+
+	int spawned = 0;
+	bool stopNeg = false;
+	bool stopPos = false;
+
+	if (trySpawn(origin))
+	{
+		spawned++;
+	}
+	else
+	{
+		return true;
+	}
+
+	for (int step = 1; spawned < thornCount && (!stopNeg || !stopPos); step++)
+	{
+		float along = spacing * step;
+		if (!stopNeg && spawned < thornCount)
+		{
+			glm::vec2 basePos = origin - axis * along;
+			if (!trySpawn(basePos))
+			{
+				stopNeg = true;
+			}
+			else
+			{
+				spawned++;
+			}
+		}
+
+		if (!stopPos && spawned < thornCount)
+		{
+			glm::vec2 basePos = origin + axis * along;
+			if (!trySpawn(basePos))
+			{
+				stopPos = true;
+			}
+			else
+			{
+				spawned++;
+			}
+		}
+	}
+
+		return true;
+	}
+};
+
+// Rapidly grows thorns outward from the player.
+struct WildGrowthSpell: public Spell
+{
+	// **configuration variables**
+	int maxThorns = 60;
+	int wormCount = 14;
+	float maxDistance = 10.0f;
+	float maxDuration = 2.0f;
+	float spawnInterval = 0.008f;
+	float offsetJitter = 0.25f;
+
+	// **state variables**
+	bool initialized = false;
+	float spawnTimer = 0.0f;
+	int placedCount = 0;
+	int wormIndex = 0;
+	glm::ivec2 originTile = {0, 0};
+	std::vector<glm::ivec2> worms;
+	std::vector<glm::ivec2> placedTiles;
+
+	WildGrowthSpell()
+	{
+		continuousUpdate = true;
+		continuousUpdateTimer = 2.0f;
+	}
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		(void)currentAimDir;
+
+		if (!initialized)
+		{
+			initialized = true;
+			continuousUpdateTimer = maxDuration;
+			originTile = WorldToTile(player.physics.getPos());
+			worms.assign(wormCount, originTile);
+			placedTiles.clear();
+			spawnTimer = 0.0f;
+		}
+
+	if (placedCount >= maxThorns)
+	{
+		return false;
+	}
+
+	auto tileWithinRange = [&](const glm::ivec2 &tile)
+	{
+		glm::vec2 delta = glm::vec2(tile - originTile);
+		return glm::dot(delta, delta) <= maxDistance * maxDistance;
+	};
+
+	auto isBlocked = [&](const glm::ivec2 &tile)
+	{
+		if (tile.x < 0 || tile.y < 0 || tile.x >= map.size.x || tile.y >= map.size.y)
+		{
+			return true;
+		}
+		return map.isCollidableAtPosSafe(tile.x, tile.y);
+	};
+
+	auto hasLocalThorn = [&](const glm::ivec2 &tile)
+	{
+		for (auto &t : placedTiles)
+		{
+			if (t == tile) { return true; }
+		}
+		return false;
+	};
+
+	auto hasWorldThorn = [&](const glm::ivec2 &tile)
+	{
+		for (auto &p : projectileHolder.projectiles)
+		{
+			if (dynamic_cast<ThornProjectile *>(p.get()))
+			{
+				glm::ivec2 pt = WorldToTile(p->physics.getPos());
+				if (pt == tile) { return true; }
+			}
+		}
+		for (auto &p : projectileHolder.pendingProjectiles)
+		{
+			if (dynamic_cast<ThornProjectile *>(p.get()))
+			{
+				glm::ivec2 pt = WorldToTile(p->physics.getPos());
+				if (pt == tile) { return true; }
+			}
+		}
+		return false;
+	};
+
+	auto spawnThorn = [&](const glm::ivec2 &tile)
+	{
+		if (placedCount >= maxThorns) { return; }
+		if (hasLocalThorn(tile) || hasWorldThorn(tile)) { return; }
+
+		auto thorn = std::make_unique<ThornProjectile>();
+		thorn->element = Elements::Earth;
+		thorn->hitStats.damage = 2.0f;
+		glm::vec2 spawnPos = glm::vec2(tile) + glm::vec2(0.5f);
+		spawnPos.x += getRandomFloat(rng, -offsetJitter, offsetJitter);
+		spawnPos.y += getRandomFloat(rng, -offsetJitter, offsetJitter);
+		projectileHolder.addProjectileDeferredAsPtr(std::move(thorn), spawnPos);
+		placedTiles.push_back(tile);
+		placedCount++;
+
+		glm::vec4 startColor = elementToSecondaryColor(Elements::Earth);
+		glm::vec4 endColor = elementToColor(Elements::Earth);
+		startColor.g *= 0.8f;
+		endColor.g *= 0.8f;
+		auto burst = getSmallSquareParticle(startColor, endColor);
+		burst.onCreateCount = 3;
+		burst.particleLifeTime = {0.25f, 0.4f};
+		burst.velocityX = glm::vec2{-8.0f, 8.0f} * PIXEL_SIZE;
+		burst.velocityY = glm::vec2{-8.0f, 8.0f} * PIXEL_SIZE;
+		burst.createApearence.size = glm::vec2{2.0f, 2.8f} * PIXEL_SIZE;
+		burst.endApearence.size = glm::vec2{0.6f, 1.2f} * PIXEL_SIZE;
+		burst.folowParent = false;
+		mainParticleSystem.emitParticles(burst, spawnPos, rng, spawnPos);
+	};
+
+	spawnTimer -= deltaTime;
+	while (spawnTimer <= 0.0f)
+	{
+		spawnTimer += spawnInterval;
+		if (placedCount >= maxThorns) { break; }
+		if (worms.empty()) { break; }
+
+		int index = wormIndex % (int)worms.size();
+		wormIndex++;
+		glm::ivec2 current = worms[index];
+
+		const glm::ivec2 directions[] = {
+			{1, 0}, {-1, 0}, {0, 1}, {0, -1},
+			{1, 1}, {-1, 1}, {1, -1}, {-1, -1}
+		};
+
+		bool moved = false;
+		glm::ivec2 bestNext = current;
+		int bestScore = -999;
+		for (int i = 0; i < 8; i++)
+		{
+			glm::ivec2 next = current + directions[i];
+			if (!tileWithinRange(next)) { continue; }
+			if (isBlocked(next)) { continue; }
+			if (hasLocalThorn(next)) { continue; }
+			int score = 0;
+			for (int j = 0; j < 8; j++)
+			{
+				glm::ivec2 neighbor = next + directions[j];
+				if (!tileWithinRange(neighbor)) { continue; }
+				if (isBlocked(neighbor)) { continue; }
+				if (hasLocalThorn(neighbor)) { continue; }
+				score++;
+			}
+			if (score > bestScore)
+			{
+				bestScore = score;
+				bestNext = next;
+				moved = true;
+			}
+		}
+
+		if (!moved)
+		{
+			for (int tries = 0; tries < 8; tries++)
+			{
+				int pick = getRandomInt(rng, 0, 7);
+				glm::ivec2 next = current + directions[pick];
+				if (!tileWithinRange(next)) { continue; }
+				if (isBlocked(next)) { continue; }
+				current = next;
+				moved = true;
+				break;
+			}
+		}
+		else
+		{
+			current = bestNext;
+		}
+
+		if (moved)
+		{
+			worms[index] = current;
+			spawnThorn(current);
+		}
+	}
+
+	return true;
+	}
+};
+
 struct WaterSiphonSpell: public Spell
 {
 	// **configuration variables**

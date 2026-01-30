@@ -311,13 +311,7 @@ bool BasicMagicMissle::update(float deltaTime, Map &map, ParticleSystem &mainPar
 	if (particleTimer < 0)
 	{
 		particleTimer += particleEmmision.emitTimer;
-		ParticleSettings mainParticle = particleEmmision.sustain;
-		mainParticle.onCreateCount = std::max<short>(2, mainParticle.onCreateCount + 1);
-		if (getRandomChance(rng, 0.5f))
-		{
-			mainParticle.folowParent = false;
-		}
-		particleSystem.emitParticles(mainParticle, physics.getPos(), rng, physics.getPos());
+		particleSystem.emitParticles(particleEmmision.sustain, physics.getPos(), rng, physics.getPos());
 	}
 
 	if (basicProjectileHitEntitiesLogic(physics, physics.velocity,

@@ -27,7 +27,7 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 {
 	const auto &controller = input.controller;
 	glm::vec2 cursorPos = {static_cast<float>(input.mouseX), static_cast<float>(input.mouseY)};
-	constexpr float CAST_COOLDOWN = 0.4f;
+	constexpr float CAST_COOLDOWN = 0.7f;
 
 	auto getMaxElements = [&]()
 	{
@@ -136,6 +136,13 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 			{
 				firedStandby = getStandbyProjectilesSystem().tryFire(map, projectileHolder,
 					player, entityHolder, fireDirection);
+			}
+
+			if (!hasRecipe && !firedStandby)
+			{
+				auto spell = SpellTypes::getSpellFromRecepie(spellRecepie);
+				spellsHolder.addSpell(std::move(spell), player.physics.getPos(), fireDirection);
+				castedSpell = true;
 			}
 
 			if (castedSpell || firedStandby)
