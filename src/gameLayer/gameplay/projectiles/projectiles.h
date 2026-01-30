@@ -202,6 +202,11 @@ struct StandbyProjectileSystem
 // Access the active standby projectile system.
 StandbyProjectileSystem &getStandbyProjectilesSystem();
 
+// Access the current player aim direction.
+glm::vec2 getFireDirection();
+// Access the current player aim target position.
+glm::vec2 getFireTargetPos();
+
 // CRTP mixin that implements clone() for any Derived
 template <class Derived, class Base = Projectile>
 struct CloneableProjectile: Base
@@ -265,6 +270,61 @@ struct TrapProjectile: public CloneableProjectile<TrapProjectile>
 
 
 
+};
+
+// Aimable bolt that steers to current aim direction.
+struct AimableBoltProjectile: public CloneableProjectile<AimableBoltProjectile>
+{
+	// **configuration variables**
+	HitStats hitStats;
+	float particleSizeBias = 1.0f;
+	float moveSpeed = 5.5f;
+	float orbitInterval = 0.08f;
+	float statusAmount = 5.0f;
+
+	// **state variables**
+	bool firstTime = true;
+	float particleTimer = 0.0f;
+	float orbitTimer = 0.0f;
+	glm::vec2 moveDir = {1.0f, 0.0f};
+	ParticleEmissionSettings particleEmmision;
+	ParticleSettings orbitParticle;
+
+	AimableBoltProjectile();
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng, EntityHolder &entityHolder) override;
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+		ParticlePostProcessRenderer &particlePostProcessRenderer) override;
+	void onDestroy(std::ranlux24_base &rng) override;
+};
+
+// Aimable earth bolt that sheds thorns as it moves.
+struct AimableEarthBoltProjectile: public CloneableProjectile<AimableEarthBoltProjectile>
+{
+	// **configuration variables**
+	HitStats hitStats;
+	float particleSizeBias = 1.0f;
+	float moveSpeed = 4.5f;
+	float trailInterval = 0.3f;
+	float orbitInterval = 0.08f;
+	float statusAmount = 5.0f;
+
+	// **state variables**
+	bool firstTime = true;
+	float particleTimer = 0.0f;
+	float trailTimer = 0.0f;
+	float orbitTimer = 0.0f;
+	int storedDamage = 0;
+	glm::vec2 moveDir = {1.0f, 0.0f};
+	ParticleEmissionSettings particleEmmision;
+	ParticleSettings orbitParticle;
+
+	AimableEarthBoltProjectile();
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng, EntityHolder &entityHolder) override;
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+		ParticlePostProcessRenderer &particlePostProcessRenderer) override;
+	void onDestroy(std::ranlux24_base &rng) override;
 };
 
 // Stationary thorn that damages a single enemy on contact.

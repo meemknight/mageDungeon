@@ -365,6 +365,18 @@ bool GameLogic::update(float deltaTime,
 			{
 				fireDirection /= l;
 			}
+
+			if (!usesController)
+			{
+				fireTargetPos = {
+					viewRect.x + (cursorPos.x / renderer.windowW) * viewRect.z,
+					viewRect.y + (cursorPos.y / renderer.windowH) * viewRect.w
+				};
+			}
+			else
+			{
+				fireTargetPos = player.physics.getPos() + fireDirection * 1000.0f;
+			}
 		}
 
 		platform::showMouse(!usesController);

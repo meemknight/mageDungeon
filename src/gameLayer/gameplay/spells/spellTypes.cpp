@@ -36,6 +36,9 @@ namespace SpellTypes
 			{Elements::Water,Elements::Ice},	//iceHomingMissle,
 			{Elements::Water,Elements::Fire,Elements::Fire},	//fastFireBolt,
 			{Elements::Water,Elements::Ice,Elements::Ice},	//fastIceBolt,
+			{Elements::Water,Elements::Water,Elements::Fire},	//aimableFireBolt,
+			{Elements::Water,Elements::Water,Elements::Ice},	//aimableIceBolt,
+			{Elements::Water,Elements::Water,Elements::Earth},	//aimableEarthBolt,
 			{Elements::Fire,Elements::Fire},	//flameWall,
 			{Elements::Fire,Elements::Ice},	//iceWall,
 			{Elements::Fire,Elements::Water},	//boulder,
@@ -98,6 +101,18 @@ namespace SpellTypes
 
 		case fastIceBolt:
 		return std::make_unique<BasicMagicMissleSpell>(getFastMagicBoltSpell(Elements::Ice));
+		break;
+
+		case aimableFireBolt:
+		return std::make_unique<BasicMagicMissleSpell>(getAimableBoltSpell(Elements::Fire));
+		break;
+
+		case aimableIceBolt:
+		return std::make_unique<BasicMagicMissleSpell>(getAimableBoltSpell(Elements::Ice));
+		break;
+
+		case aimableEarthBolt:
+		return std::make_unique<BasicMagicMissleSpell>(getAimableEarthBoltSpell());
 		break;
 
 		case earthBolt:

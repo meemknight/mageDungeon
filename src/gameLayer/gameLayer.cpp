@@ -48,6 +48,16 @@ SummonHolder &getSummonHolder()
 	return game.summons;
 }
 
+glm::vec2 getFireDirection()
+{
+	return game.fireDirection;
+}
+
+glm::vec2 getFireTargetPos()
+{
+	return game.fireTargetPos;
+}
+
 StandbyProjectileSystem &getStandbyProjectilesSystem()
 {
 	return game.standbyProjectiles;

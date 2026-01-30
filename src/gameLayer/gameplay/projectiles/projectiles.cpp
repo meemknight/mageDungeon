@@ -5,6 +5,8 @@
 #include <gameplay/assetsManager.h>
 #include <gameplay/aStar.h>
 #include <gameplay/player.h>
+#include <algorithm>
+#include <cmath>
 
 
 
@@ -309,7 +311,13 @@ bool BasicMagicMissle::update(float deltaTime, Map &map, ParticleSystem &mainPar
 	if (particleTimer < 0)
 	{
 		particleTimer += particleEmmision.emitTimer;
-		particleSystem.emitParticles(particleEmmision.sustain, physics.getPos(), rng, physics.getPos());
+		ParticleSettings mainParticle = particleEmmision.sustain;
+		mainParticle.onCreateCount = std::max<short>(2, mainParticle.onCreateCount + 1);
+		if (getRandomChance(rng, 0.5f))
+		{
+			mainParticle.folowParent = false;
+		}
+		particleSystem.emitParticles(mainParticle, physics.getPos(), rng, physics.getPos());
 	}
 
 	if (basicProjectileHitEntitiesLogic(physics, physics.velocity,
@@ -336,6 +344,236 @@ void BasicMagicMissle::render(gl2d::Renderer2D &renderer, AssetsManager &assetMa
 }
 
 void BasicMagicMissle::onDestroy(std::ranlux24_base &rng)
+{
+}
+
+static ParticleEmissionSettings buildAimableEmission(int element, float sizeBias)
+{
+	ParticleEmissionSettings emission;
+	glm::vec4 startColor = {0.7f, 0.3f, 0.95f, 0.6f};
+	glm::vec4 endColor = elementToColor(element); endColor.a = 0.6f;
+
+	emission.sustain = getBasicMagicMissleParticle(startColor, endColor);
+	emission.release = getBasicMagicMissleParticle(startColor, endColor);
+	emission.release.particleLifeTime *= 1.6f;
+	emission.emitTimer = 0.02f;
+	emission.create = emission.sustain;
+
+	emission.sustain.createApearence.size *= sizeBias;
+	emission.sustain.endApearence.size *= sizeBias;
+	emission.release.createApearence.size *= sizeBias;
+	emission.release.endApearence.size *= sizeBias;
+	emission.create.createApearence.size *= sizeBias;
+	emission.create.endApearence.size *= sizeBias;
+
+	return emission;
+}
+
+static ParticleSettings buildAimableOrbitParticle()
+{
+	glm::vec4 startColor = {0.7f, 0.3f, 0.95f, 0.85f};
+	glm::vec4 endColor = {0.55f, 0.2f, 0.85f, 0.3f};
+
+	ParticleSettings orbit = getSpiralParticle(startColor, endColor);
+	orbit.onCreateCount = 2;
+	orbit.particleLifeTime = {0.35f, 0.5f};
+	orbit.velocityX = {0.0f, 0.0f};
+	orbit.velocityY = {0.0f, 0.0f};
+	orbit.dragX = {0.0f, 0.0f};
+	orbit.dragY = {0.0f, 0.0f};
+	orbit.createApearence.size = glm::vec2{2.4f, 3.1f} * PIXEL_SIZE;
+	orbit.endApearence.size = glm::vec2{1.4f, 2.2f} * PIXEL_SIZE;
+	orbit.animationSpeed = {-12.0f, 12.0f};
+	orbit.animationScaleX = {PIXEL_SIZE * 5.0f, PIXEL_SIZE * 11.0f};
+	orbit.animationScaleY = {PIXEL_SIZE * 5.0f, PIXEL_SIZE * 11.0f};
+	orbit.positionX = {0.0f, 0.0f};
+	orbit.positionY = {0.0f, 0.0f};
+	orbit.folowParent = true;
+
+	return orbit;
+}
+
+AimableBoltProjectile::AimableBoltProjectile()
+{
+	hitStats.damage = 18.0f;
+	hitStats.pushBack = 4.0f;
+	element = Elements::Fire;
+	timeAlieve = 7.0f;
+	physics.transform.size = {PIXEL_SIZE * 7.0f, PIXEL_SIZE * 7.0f};
+	physics.transform.isCircleCollider = true;
+	particleSystem.maxCount = 140;
+}
+
+bool AimableBoltProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+	std::ranlux24_base &rng, EntityHolder &entityHolder)
+{
+	if (firstTime)
+	{
+		firstTime = false;
+		particleEmmision = buildAimableEmission(element, particleSizeBias);
+		orbitParticle = buildAimableOrbitParticle();
+		orbitParticle.createApearence.size *= particleSizeBias;
+		orbitParticle.endApearence.size *= particleSizeBias;
+		particleSystem.emitParticles(particleEmmision.create, physics.getPos(), rng, physics.getPos());
+		orbitTimer = getRandomFloat(rng, 0.0f, orbitInterval);
+	}
+
+	glm::vec2 targetPos = getFireTargetPos();
+	glm::vec2 toTarget = targetPos - physics.getPos();
+	float targetLen = glm::length(toTarget);
+	if (targetLen > 0.0001f)
+	{
+		moveDir = toTarget / targetLen;
+	}
+	physics.velocity = moveDir * moveSpeed;
+
+	particleTimer -= deltaTime;
+	if (particleTimer < 0)
+	{
+		particleTimer += particleEmmision.emitTimer;
+		ParticleSettings mainParticle = particleEmmision.sustain;
+		mainParticle.onCreateCount = std::max<short>(2, mainParticle.onCreateCount + 1);
+		if (getRandomChance(rng, 0.5f))
+		{
+			mainParticle.folowParent = false;
+		}
+		particleSystem.emitParticles(mainParticle, physics.getPos(), rng, physics.getPos());
+	}
+
+	orbitTimer -= deltaTime;
+	if (orbitTimer <= 0.0f)
+	{
+		orbitTimer += orbitInterval;
+		ParticleSettings spark = orbitParticle;
+		if (getRandomChance(rng, 0.5f))
+		{
+			spark.folowParent = false;
+		}
+		particleSystem.emitParticles(spark, physics.getPos(), rng, physics.getPos());
+	}
+
+	if (basicProjectileHitEntitiesLogic(physics, physics.velocity,
+		element, entityHolder, hitStats, statusAmount))
+	{
+		return false;
+	}
+
+	if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+	{
+		particleSystem.emitParticles(particleEmmision.release, physics.getPos(), rng, physics.getPos());
+		return false;
+	}
+
+	particleSystem.update(deltaTime);
+	return true;
+}
+
+void AimableBoltProjectile::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+	ParticlePostProcessRenderer &particlePostProcessRenderer)
+{
+	particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+	physics.renderCollider(renderer);
+}
+
+void AimableBoltProjectile::onDestroy(std::ranlux24_base &rng)
+{
+}
+
+AimableEarthBoltProjectile::AimableEarthBoltProjectile()
+{
+	hitStats.damage = 18.0f;
+	hitStats.pushBack = 4.0f;
+	element = Elements::Earth;
+	timeAlieve = 7.0f;
+	physics.transform.size = {PIXEL_SIZE * 7.5f, PIXEL_SIZE * 7.5f};
+	physics.transform.isCircleCollider = true;
+	particleSystem.maxCount = 120;
+}
+
+bool AimableEarthBoltProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+	std::ranlux24_base &rng, EntityHolder &entityHolder)
+{
+	if (firstTime)
+	{
+		firstTime = false;
+		storedDamage = std::max(1, (int)std::round(hitStats.damage));
+		hitStats.damage = (float)storedDamage;
+		particleEmmision = buildAimableEmission(element, particleSizeBias);
+		orbitParticle = buildAimableOrbitParticle();
+		orbitParticle.createApearence.size *= particleSizeBias;
+		orbitParticle.endApearence.size *= particleSizeBias;
+		particleSystem.emitParticles(particleEmmision.create, physics.getPos(), rng, physics.getPos());
+		orbitTimer = getRandomFloat(rng, 0.0f, orbitInterval);
+	}
+
+	glm::vec2 targetPos = getFireTargetPos();
+	glm::vec2 toTarget = targetPos - physics.getPos();
+	float targetLen = glm::length(toTarget);
+	if (targetLen > 0.0001f)
+	{
+		moveDir = toTarget / targetLen;
+	}
+	physics.velocity = moveDir * moveSpeed;
+
+	trailTimer -= deltaTime;
+	if (trailTimer <= 0.0f)
+	{
+		trailTimer += trailInterval;
+		auto thorn = std::make_unique<ThornProjectile>();
+		thorn->element = element;
+		getProjectileHolder().addProjectileDeferredAsPtr(std::move(thorn), physics.getPos());
+		storedDamage = std::max(0, storedDamage - 1);
+		hitStats.damage = (float)storedDamage;
+		if (storedDamage <= 0)
+		{
+			particleSystem.emitParticles(particleEmmision.release, physics.getPos(), rng, physics.getPos());
+			return false;
+		}
+	}
+
+	particleTimer -= deltaTime;
+	if (particleTimer < 0)
+	{
+		particleTimer += particleEmmision.emitTimer;
+		particleSystem.emitParticles(particleEmmision.sustain, physics.getPos(), rng, physics.getPos());
+	}
+
+	orbitTimer -= deltaTime;
+	if (orbitTimer <= 0.0f)
+	{
+		orbitTimer += orbitInterval;
+		ParticleSettings spark = orbitParticle;
+		if (getRandomChance(rng, 0.5f))
+		{
+			spark.folowParent = false;
+		}
+		particleSystem.emitParticles(spark, physics.getPos(), rng, physics.getPos());
+	}
+
+	if (basicProjectileHitEntitiesLogic(physics, physics.velocity,
+		element, entityHolder, hitStats, statusAmount))
+	{
+		return false;
+	}
+
+	if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+	{
+		particleSystem.emitParticles(particleEmmision.release, physics.getPos(), rng, physics.getPos());
+		return false;
+	}
+
+	particleSystem.update(deltaTime);
+	return true;
+}
+
+void AimableEarthBoltProjectile::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+	ParticlePostProcessRenderer &particlePostProcessRenderer)
+{
+	particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+	physics.renderCollider(renderer);
+}
+
+void AimableEarthBoltProjectile::onDestroy(std::ranlux24_base &rng)
 {
 }
 

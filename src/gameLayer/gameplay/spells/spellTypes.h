@@ -439,6 +439,40 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline BasicMagicMissleSpell getAimableBoltSpell(int element)
+	{
+		BasicMagicMissleSpell ret;
+		ret.element = element;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		auto projectile = std::make_unique<AimableBoltProjectile>();
+		projectile->element = element;
+		projectile->hitStats.damage = 18.0f;
+		projectile->hitStats.pushBack = 4.0f;
+		projectile->moveSpeed = 5.5f;
+		projectile->timeAlieve = 7.0f;
+		ret.projectile = std::move(projectile);
+		ret.throwVelocity = 5.5f;
+		return ret;
+	}
+
+	inline BasicMagicMissleSpell getAimableEarthBoltSpell()
+	{
+		BasicMagicMissleSpell ret;
+		ret.element = Elements::Earth;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		auto projectile = std::make_unique<AimableEarthBoltProjectile>();
+		projectile->element = Elements::Earth;
+		projectile->hitStats.damage = 18.0f;
+		projectile->hitStats.pushBack = 4.0f;
+		projectile->moveSpeed = 4.5f;
+		projectile->timeAlieve = 7.0f;
+		ret.projectile = std::move(projectile);
+		ret.throwVelocity = 4.5f;
+		return ret;
+	}
+
 	inline WaterSiphonSpell getWaterSiphonSpell()
 	{
 		WaterSiphonSpell ret;
@@ -476,6 +510,9 @@ namespace SpellTypes
 		iceHomingMissle,
 		fastFireBolt,
 		fastIceBolt,
+		aimableFireBolt,
+		aimableIceBolt,
+		aimableEarthBolt,
 		flameWall,
 		iceWall,
 		boulder,
