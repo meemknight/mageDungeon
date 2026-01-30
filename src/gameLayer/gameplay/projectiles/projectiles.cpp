@@ -107,7 +107,8 @@ void StandbyProjectileSystem::addProjectileAsPtr(std::unique_ptr<Projectile> pro
 }
 
 void StandbyProjectileSystem::update(float deltaTime, Map &map, ProjectileHolder &projectileHolder,
-	std::ranlux24_base &rng, Player &player, EntityHolder &entityHolder, glm::vec2 aimDir)
+	std::ranlux24_base &rng, Player &player, EntityHolder &entityHolder,
+	glm::vec2 aimDir, bool aimActive)
 {
 	for (int i = 0; i < (int)standbyProjectiles.size(); )
 	{
@@ -134,6 +135,9 @@ void StandbyProjectileSystem::update(float deltaTime, Map &map, ProjectileHolder
 
 	if (standbyProjectiles.empty())
 	{
+		idleRotation = 0.0f;
+		idleRotationVelocity = 0.0f;
+		idleRotationDelayTimer = idleRotationDelay;
 		return;
 	}
 
@@ -149,7 +153,27 @@ void StandbyProjectileSystem::update(float deltaTime, Map &map, ProjectileHolder
 	}
 
 	const float twoPi = 6.2831853f;
+	if (aimActive)
+	{
+		idleRotationVelocity = 0.0f;
+		idleRotation = 0.0f;
+		idleRotationDelayTimer = idleRotationDelay;
+	}
+	else
+	{
+		idleRotationDelayTimer = std::max(0.0f, idleRotationDelayTimer - deltaTime);
+		if (idleRotationDelayTimer <= 0.0f)
+		{
+			idleRotationVelocity = std::min(idleRotationSpeed, idleRotationVelocity + idleRotationAccel * deltaTime);
+			idleRotation += idleRotationVelocity * deltaTime;
+		}
+	}
+
 	float baseAngle = std::atan2(aimDir.y, aimDir.x);
+	if (!aimActive)
+	{
+		baseAngle += idleRotation;
+	}
 	float angleStep = twoPi / (float)standbyProjectiles.size();
 
 	for (int i = 0; i < (int)standbyProjectiles.size(); i++)

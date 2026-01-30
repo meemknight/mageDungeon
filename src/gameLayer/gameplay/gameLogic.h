@@ -37,6 +37,7 @@ struct GameLogic
 
 	glm::vec2 fireDirection = {1,0};
 	glm::vec2 fireTargetPos = {1,0};
+	bool fireInputActive = false;
 	float playerDamageCooldown = 0.0f; // time until next contact hit
 
 	//returns false on fail

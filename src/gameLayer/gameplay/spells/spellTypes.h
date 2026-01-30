@@ -464,7 +464,7 @@ namespace SpellTypes
 		ret.triggerDelay = 0.1f;
 		ret.maxThorns = 60;
 		ret.wormCount = 12;
-		ret.maxDistance = 8.0f;
+		ret.maxDistance = 10.0f;
 		ret.maxDuration = 2.0f;
 		ret.spawnInterval = 0.02f;
 		return ret;

@@ -183,17 +183,24 @@ struct StandbyProjectileSystem
 	float fireRange = 9.0f;
 	float standbyLifetime = 14.0f;
 	int maxStandby = 12;
+	float idleRotationSpeed = 0.6f;
+	float idleRotationAccel = 0.4f;
+	float idleRotationDelay = 0.8f;
 
 	// **state variables**
 	std::vector<StandbyProjectileEntry> standbyProjectiles;
 	// insertion cursor for interleaving new entries
 	int insertIndex = 1;
+	float idleRotation = 0.0f;
+	float idleRotationVelocity = 0.0f;
+	float idleRotationDelayTimer = 0.0f;
 
 	void addProjectileAsPtr(std::unique_ptr<Projectile> projectile,
 		float customLifetime = -1.0f, float customThrowVelocity = 10.0f,
 		const ParticleEmissionSettings *customEmission = nullptr);
 	void update(float deltaTime, Map &map, ProjectileHolder &projectileHolder,
-		std::ranlux24_base &rng, Player &player, EntityHolder &entityHolder, glm::vec2 aimDir);
+		std::ranlux24_base &rng, Player &player, EntityHolder &entityHolder,
+		glm::vec2 aimDir, bool aimActive);
 	bool tryFire(Map &map, ProjectileHolder &projectileHolder,
 		Player &player, EntityHolder &entityHolder, glm::vec2 aimDir);
 	void render(gl2d::Renderer2D &renderer, ParticlePostProcessRenderer &particlePostProcessRenderer);

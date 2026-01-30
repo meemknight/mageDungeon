@@ -325,6 +325,9 @@ bool GameLogic::update(float deltaTime,
 			usesController = false;
 		}
 
+		fireInputActive = platform::mouseMoved() ||
+			(glm::length(platform::getControllerButtons().RStick) > 0.4f);
+
 		move += platform::getControllerButtons().LStick * glm::vec2(1, -1);
 
 		if (glm::length(move) != 0)
@@ -390,7 +393,8 @@ bool GameLogic::update(float deltaTime,
 
 	player.physics.updateMove();
 
-	standbyProjectiles.update(deltaTime, map, projectiles, rng, player, entityHolder, fireDirection);
+	standbyProjectiles.update(deltaTime, map, projectiles, rng, player, entityHolder,
+		fireDirection, fireInputActive);
 	projectiles.update(deltaTime, map, particleSystem, rng, entityHolder);
 
 	particleSystem.update(deltaTime);
