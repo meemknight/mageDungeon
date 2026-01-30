@@ -114,6 +114,116 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		return false;
 	};
 
+	auto buildQuickRecipe = [&](const QuickAction &action)
+	{
+		SpellRecepie fullRecipe;
+		int maxElements = getMaxElements();
+		if (wand.alwaysCast.type == WandSlotType::Element)
+		{
+			fullRecipe.add(wand.alwaysCast.element, maxElements);
+		}
+		for (int i = 0; i < action.count; i++)
+		{
+			fullRecipe.add(action.elements[i], maxElements);
+		}
+		return fullRecipe;
+	};
+
+	auto tryConsumeElement = [&](int element, int &ru, int &rd, int &rl, int &rr)
+	{
+		if (wand.up.type == WandSlotType::Element && wand.up.element == element && ru > 0)
+		{
+			ru--;
+			return true;
+		}
+		if (wand.down.type == WandSlotType::Element && wand.down.element == element && rd > 0)
+		{
+			rd--;
+			return true;
+		}
+		if (wand.left.type == WandSlotType::Element && wand.left.element == element && rl > 0)
+		{
+			rl--;
+			return true;
+		}
+		if (wand.right.type == WandSlotType::Element && wand.right.element == element && rr > 0)
+		{
+			rr--;
+			return true;
+		}
+		return false;
+	};
+
+	auto tryApplyElement = [&](int element)
+	{
+		if (wand.up.type == WandSlotType::Element && wand.up.element == element && remainingUp > 0)
+		{
+			return tryUseSlotElement(element, remainingUp);
+		}
+		if (wand.down.type == WandSlotType::Element && wand.down.element == element && remainingDown > 0)
+		{
+			return tryUseSlotElement(element, remainingDown);
+		}
+		if (wand.left.type == WandSlotType::Element && wand.left.element == element && remainingLeft > 0)
+		{
+			return tryUseSlotElement(element, remainingLeft);
+		}
+		if (wand.right.type == WandSlotType::Element && wand.right.element == element && remainingRight > 0)
+		{
+			return tryUseSlotElement(element, remainingRight);
+		}
+		return false;
+	};
+
+	auto tryQuickCast = [&](const QuickAction &action)
+	{
+		int maxElements = getMaxElements();
+		int alwaysCastCount = wand.alwaysCast.type == WandSlotType::Element ? 1 : 0;
+		if (action.count + alwaysCastCount > maxElements) { return; }
+		if (action.count <= 0 && alwaysCastCount == 0) { return; }
+		SpellRecepie fullRecipe = buildQuickRecipe(action);
+		if (fullRecipe.count == 0 || fullRecipe.count > maxElements) { return; }
+		if (spellRecepie.count > fullRecipe.count) { return; }
+		for (int i = 0; i < spellRecepie.count; i++)
+		{
+			if (spellRecepie.elements[i] != fullRecipe.elements[i]) { return; }
+		}
+
+		float tempMana = currentMana;
+		int tempUp = remainingUp;
+		int tempDown = remainingDown;
+		int tempLeft = remainingLeft;
+		int tempRight = remainingRight;
+		SpellRecepie tempRecipe = spellRecepie;
+
+		for (int i = spellRecepie.count; i < fullRecipe.count; i++)
+		{
+			if (tempRecipe.count >= maxElements) { return; }
+			if (tempMana < 1.0f) { return; }
+			if (!tryConsumeElement(fullRecipe.elements[i], tempUp, tempDown, tempLeft, tempRight))
+			{
+				return;
+			}
+			tempRecipe.add(fullRecipe.elements[i], maxElements);
+			tempMana -= 1.0f;
+		}
+
+		for (int i = spellRecepie.count; i < fullRecipe.count; i++)
+		{
+			if (!tryApplyElement(fullRecipe.elements[i])) { return; }
+		}
+	};
+
+	int quickIndex = -1;
+	if (controller.buttons[platform::Controller::Up].pressed) { quickIndex = 0; }
+	if (controller.buttons[platform::Controller::Down].pressed) { quickIndex = 1; }
+	if (controller.buttons[platform::Controller::Left].pressed) { quickIndex = 2; }
+	if (controller.buttons[platform::Controller::Right].pressed) { quickIndex = 3; }
+	if (quickIndex >= 0)
+	{
+		tryQuickCast(wand.quickActions[quickIndex]);
+	}
+
 	if (input.rMouse.held || controller.RTButton.held)
 	{
 		if (castCooldownTimer > 0.0f)
@@ -647,6 +757,65 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 			renderer.renderRectangle(centerRect, assetsManager.elements.texture,
 				{1, 1, 1, 0.9f}, {}, 0,
 				assetsManager.elements.atlas.get(wand.alwaysCast.element, 0));
+		}
+
+		// quick action ring (only set actions)
+		{
+			bool hasAlwaysCast = wand.alwaysCast.type == WandSlotType::Element;
+			float quickRingSize = ringSize * 0.82f;
+			float quickRingOffset = quickRingSize * 0.4f;
+			float quickIconSize = quickRingSize * 0.34f;
+			float quickTextSize = quickIconSize * 0.55f;
+			float quickTextOffset = quickIconSize * 0.6f;
+			glm::vec2 quickCenter = ringCenter + glm::vec2(0.0f, ringSize * 0.95f);
+			glm::vec4 quickRingRect = {quickCenter.x - quickRingSize * 0.5f, quickCenter.y - quickRingSize * 0.5f,
+				quickRingSize, quickRingSize};
+
+			auto getQuickInfo = [&](const QuickAction &action, int &outElement, int &outCount)
+			{
+				if (action.count <= 0) { return false; }
+				outElement = action.elements[0];
+				outCount = action.count + (hasAlwaysCast ? 1 : 0);
+				return outCount > 0;
+			};
+
+			auto renderQuickPiece = [&](gl2d::Texture t, const QuickAction &action)
+			{
+				int element = Elements::NoneElement;
+				int count = 0;
+				if (!getQuickInfo(action, element, count)) { return; }
+				glm::vec3 baseColor = elementToColor(element);
+				renderer.renderRectangle(quickRingRect, t, {baseColor, 0.9f});
+			};
+
+			renderQuickPiece(assetsManager.upCircle, wand.quickActions[0]);
+			renderQuickPiece(assetsManager.downCircle, wand.quickActions[1]);
+			renderQuickPiece(assetsManager.leftCircle, wand.quickActions[2]);
+			renderQuickPiece(assetsManager.rightCircle, wand.quickActions[3]);
+
+			auto renderQuickIcon = [&](const QuickAction &action, glm::vec2 dir)
+			{
+				int element = Elements::NoneElement;
+				int count = 0;
+				if (!getQuickInfo(action, element, count)) { return; }
+				glm::vec2 center = quickCenter + dir * quickRingOffset;
+				glm::vec4 iconRect = {center.x - quickIconSize * 0.5f, center.y - quickIconSize * 0.5f,
+					quickIconSize, quickIconSize};
+				renderer.renderRectangle(iconRect, assetsManager.elements.texture,
+					{1, 1, 1, 0.9f}, {}, 0,
+					assetsManager.elements.atlas.get(element, 0));
+
+				char countText[8] = {};
+				snprintf(countText, sizeof(countText), "%d", count);
+				glm::vec2 textPos = {center.x + quickTextOffset, center.y + quickTextSize * 0.35f};
+				renderer.renderText(textPos, countText, assetsManager.font,
+					{1, 1, 1, 0.85f}, quickTextSize, 4, 3, false);
+			};
+
+			renderQuickIcon(wand.quickActions[0], {0, -1});
+			renderQuickIcon(wand.quickActions[1], {0, 1});
+			renderQuickIcon(wand.quickActions[2], {-1, 0});
+			renderQuickIcon(wand.quickActions[3], {1, 0});
 		}
 	}
 

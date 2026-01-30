@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cstdio>
 #include <cmath>
+#include <algorithm>
 #include <logs.h>
 #include <gameplay/entities/entity.h>
 #include <gameplay/entities/enemyTypes.h>
@@ -211,6 +212,56 @@ bool GameLogic::update(float deltaTime,
 		return true;
 	};
 
+	auto validateQuickAction = [&](Wand &wand, QuickAction &action)
+	{
+		if (action.count <= 0) { return; }
+		int maxElements = std::min(wand.maxElementsPerCast, QuickAction::MAX_ELEMENTS);
+		if (maxElements < 1) { maxElements = 1; }
+		int alwaysCastCount = wand.alwaysCast.type == WandSlotType::Element ? 1 : 0;
+		if (action.count + alwaysCastCount > maxElements)
+		{
+			action.clear();
+			return;
+		}
+
+		int available[Elements::Ice + 1] = {};
+		auto addSlot = [&](const WandSlot &slot)
+		{
+			if (slot.type == WandSlotType::Element)
+			{
+				available[slot.element] += slot.castCount;
+			}
+		};
+		addSlot(wand.up);
+		addSlot(wand.down);
+		addSlot(wand.left);
+		addSlot(wand.right);
+
+		for (int i = 0; i < action.count; i++)
+		{
+			int element = action.elements[i];
+			if (element < Elements::NoneElement || element > Elements::Ice)
+			{
+				action.clear();
+				return;
+			}
+			available[element]--;
+			if (available[element] < 0)
+			{
+				action.clear();
+				return;
+			}
+		}
+	};
+
+	auto validateQuickActions = [&](int wandIndex)
+	{
+		for (int slotIndex = 0; slotIndex < 4; slotIndex++)
+		{
+			validateQuickAction(wands[wandIndex], wands[wandIndex].quickActions[slotIndex]);
+		}
+	};
+
 	auto switchActiveWand = [&](int newIndex, bool pauseManaCharge)
 	{
 		if (newIndex < 0 || newIndex > 1) { return; }
@@ -253,6 +304,14 @@ bool GameLogic::update(float deltaTime,
 		draggingStoneOffset = {};
 		draggingStone = false;
 	}
+	if (!inventoryOpen)
+	{
+		quickActionEditIndex = -1;
+	}
+	if (quickActionEditIndex < -1 || quickActionEditIndex > 3)
+	{
+		quickActionEditIndex = -1;
+	}
 
 	int wandCountBefore = (hasWand[0] ? 1 : 0) + (hasWand[1] ? 1 : 0);
 	bool swapWandInput = !inventoryOpen && (input.buttons[platform::Button::E].pressed ||
@@ -284,6 +343,9 @@ bool GameLogic::update(float deltaTime,
 			}
 		}
 	}
+
+	validateQuickActions(0);
+	validateQuickActions(1);
 
 	Wand &currentWand = wands[activeWandIndex];
 
@@ -514,6 +576,7 @@ bool GameLogic::update(float deltaTime,
 
 	// pause gameplay updates while inventory is open
 	float simDelta = inventoryOpen ? 0.0f : deltaTime;
+	wandHoverTimer += deltaTime;
 
 	{
 		auto statusTick = updateStatusEffects(player.statusEffects, player.statusImmunities, simDelta);
@@ -596,6 +659,23 @@ bool GameLogic::update(float deltaTime,
 				}
 
 				float l = glm::length(fireDirection);
+				float aimStrength = 0.0f;
+				if (usesController)
+				{
+					float stickLen = glm::length(platform::getControllerButtons().RStick);
+					if (stickLen > 0.4f)
+					{
+						aimStrength = glm::clamp((stickLen - 0.4f) / 0.6f, 0.0f, 1.0f);
+					}
+				}
+				else
+				{
+					float threshold = std::min(renderer.windowW, renderer.windowH) / 3.0f;
+					if (l > threshold && threshold > 0.0f)
+					{
+						aimStrength = glm::clamp((l - threshold) / threshold, 0.0f, 1.0f);
+					}
+				}
 				if (l <= 0.000000001)
 				{
 					fireDirection = {1,0};
@@ -604,6 +684,8 @@ bool GameLogic::update(float deltaTime,
 				{
 					fireDirection /= l;
 				}
+				player.aimDirection = fireDirection;
+				player.aimStrength = aimStrength;
 
 				if (!usesController)
 				{
@@ -1012,13 +1094,24 @@ bool GameLogic::update(float deltaTime,
 			float scale = std::min(scaleX, scaleY);
 			float drawW = wandSize.x * scale;
 			float drawH = wandSize.y * scale;
-			glm::vec4 wandRect = {center.x - drawW * 0.5f, center.y - drawH * 0.5f, drawW, drawH};
+			glm::vec2 drawCenter = center;
+			float rotation = 0.0f;
+			if (selected)
+			{
+				float hover = std::sin(wandHoverTimer * 0.8f) * (PIXEL_SIZE * 1.4f * uiZoom);
+				float sway = std::sin(wandHoverTimer * 0.5f) * (PIXEL_SIZE * 0.8f * uiZoom);
+				drawCenter.y -= hover;
+				drawCenter.x += sway;
+				rotation = std::sin(wandHoverTimer * 0.7f) * 2.0f;
+			}
+			glm::vec4 wandRect = {drawCenter.x - drawW * 0.5f, drawCenter.y - drawH * 0.5f, drawW, drawH};
 			glm::vec4 wandShadowRect = {wandRect.x + wandShadowOffset.x, wandRect.y + wandShadowOffset.y,
 				wandRect.z, wandRect.w};
 			gl2d::Color4f tint = selected ? gl2d::Color4f{1, 1, 1, 1}
 				: gl2d::Color4f{0.35f, 0.35f, 0.35f, 0.85f};
-			renderer.renderRectangle(wandShadowRect, wandTexture, {0, 0, 0, shadowAlpha});
-			renderer.renderRectangle(wandRect, wandTexture, tint);
+			glm::vec2 origin = {drawW * 0.5f, drawH * 0.5f};
+			renderer.renderRectangle(wandShadowRect, wandTexture, {0, 0, 0, shadowAlpha}, origin, rotation);
+			renderer.renderRectangle(wandRect, wandTexture, tint, origin, rotation);
 			return wandRect;
 		};
 
@@ -1031,12 +1124,20 @@ bool GameLogic::update(float deltaTime,
 				clickedSlot = i;
 			}
 		}
+		{
+			glm::vec2 namePos = {(wandCenters[0].x + wandCenters[1].x) * 0.5f,
+				wandRowY - largeWandMaxH * 0.55f};
+			float nameSize = PIXEL_SIZE * 8.0f * uiZoom;
+			const char *wandName = getWandSpriteName(wands[activeWandIndex].wandSprite);
+			renderer.renderText(namePos, wandName, assetsManager.font,
+				{0.2f, 0.15f, 0.08f, 0.9f}, nameSize, 4, 3, true);
+		}
 		if (clickedSlot >= 0)
 		{
 			switchActiveWand(clickedSlot, true);
 		}
 
-		glm::vec2 ringCenter = {renderer.windowW * 0.62f, renderer.windowH * 0.38f};
+		glm::vec2 ringCenter = {renderer.windowW * 0.62f, renderer.windowH * 0.36f};
 		float ringSize = PIXEL_SIZE * 44.0f * uiZoom * (2.0f / 2.6f);
 		float ringOffset = ringSize * 0.4f;
 		float iconSize = ringSize * 0.34f;
@@ -1051,6 +1152,31 @@ bool GameLogic::update(float deltaTime,
 				iconSize, iconSize};
 		}
 		bool ringSlotRectsReady = true;
+		glm::vec2 quickRingCenter = ringCenter + glm::vec2(0.0f, ringSize * 1.25f);
+		glm::vec4 quickRingSlotRects[4] = {};
+		for (int i = 0; i < 4; i++)
+		{
+			glm::vec2 center = quickRingCenter + slotDirs[i] * ringOffset;
+			quickRingSlotRects[i] = {center.x - iconSize * 0.5f, center.y - iconSize * 0.5f,
+				iconSize, iconSize};
+		}
+
+		auto getRingIndex = [&](glm::vec2 center)
+		{
+			glm::vec2 diff = cursorPos - center;
+			float dist = glm::length(diff);
+			float radius = ringSize * 0.5f;
+			float innerRadius = ringSize * 0.2f;
+			if (dist < innerRadius || dist > radius * 1.05f) { return -1; }
+			if (std::abs(diff.x) > std::abs(diff.y))
+			{
+				return diff.x > 0 ? 3 : 2;
+			}
+			return diff.y > 0 ? 1 : 0;
+		};
+
+		int ringHoverSlot = getRingIndex(ringCenter);
+		int quickHoverSlot = getRingIndex(quickRingCenter);
 
 		float stoneSize = PIXEL_SIZE * 10.0f * uiZoom;
 		float stoneSpacing = stoneSize * 1.25f;
@@ -1099,10 +1225,40 @@ bool GameLogic::update(float deltaTime,
 			}
 		}
 
+		int quickActionInput = -1;
+		if (input.controller.buttons[platform::Controller::Up].pressed) { quickActionInput = 0; }
+		if (input.controller.buttons[platform::Controller::Down].pressed) { quickActionInput = 1; }
+		if (input.controller.buttons[platform::Controller::Left].pressed) { quickActionInput = 2; }
+		if (input.controller.buttons[platform::Controller::Right].pressed) { quickActionInput = 3; }
+		if (input.lMouse.pressed && quickHoverSlot >= 0)
+		{
+			quickActionInput = quickHoverSlot;
+		}
+		if (quickActionInput >= 0)
+		{
+			if (quickActionEditIndex == quickActionInput)
+			{
+				quickActionEditIndex = -1;
+			}
+			else
+			{
+				quickActionEditIndex = quickActionInput;
+				wands[activeWandIndex].quickActions[quickActionEditIndex].clear();
+			}
+		}
+		if (quickActionEditIndex >= 0 && input.lMouse.pressed && quickActionInput < 0)
+		{
+			if (ringHoverSlot < 0)
+			{
+				quickActionEditIndex = -1;
+			}
+		}
+
+		Wand &inventoryWand = wands[activeWandIndex];
+
 		// wand stats ring (right side)
 		{
-			Wand &inventoryWand = wands[activeWandIndex];
-			if (!draggingStone && input.lMouse.pressed)
+			if (!draggingStone && quickActionEditIndex == -1 && input.lMouse.pressed)
 			{
 				for (int slotIndex = 0; slotIndex < 4; slotIndex++)
 				{
@@ -1123,17 +1279,132 @@ bool GameLogic::update(float deltaTime,
 					break;
 				}
 			}
+
 			int upRemaining = inventoryWand.up.type == WandSlotType::Element ? inventoryWand.up.castCount : 0;
 			int downRemaining = inventoryWand.down.type == WandSlotType::Element ? inventoryWand.down.castCount : 0;
 			int leftRemaining = inventoryWand.left.type == WandSlotType::Element ? inventoryWand.left.castCount : 0;
 			int rightRemaining = inventoryWand.right.type == WandSlotType::Element ? inventoryWand.right.castCount : 0;
+			int maxElements = std::min(inventoryWand.maxElementsPerCast, QuickAction::MAX_ELEMENTS);
+			if (maxElements < 1) { maxElements = 1; }
+			int alwaysCastCount = inventoryWand.alwaysCast.type == WandSlotType::Element ? 1 : 0;
+			bool editingQuickAction = quickActionEditIndex >= 0;
+			QuickAction *editAction = editingQuickAction ? &inventoryWand.quickActions[quickActionEditIndex] : nullptr;
+			int usedElements = editAction ? (editAction->count + alwaysCastCount) : 0;
+			bool canAddMore = editAction ? (usedElements < maxElements) : false;
+
+			float ringTop = ringCenter.y - ringSize * 0.5f;
+			float slotBoxSize = iconSize * 0.36f;
+			float slotGap = slotBoxSize * 0.4f;
+			float slotRowWidth = slotBoxSize * 4.0f + slotGap * 3.0f;
+			float slotRowX = ringCenter.x - slotRowWidth * 0.5f;
+			float slotRowY = ringTop - slotBoxSize * 1.2f;
+
+			const WandSlot *slots[4] = {&inventoryWand.up, &inventoryWand.down, &inventoryWand.left, &inventoryWand.right};
+			for (int i = 0; i < 4; i++)
+			{
+				glm::vec4 boxRect = {slotRowX + i * (slotBoxSize + slotGap), slotRowY, slotBoxSize, slotBoxSize};
+				glm::vec4 boxColor = {0.4f, 0.4f, 0.4f, 0.6f};
+				if (slots[i]->type == WandSlotType::Disabled)
+				{
+					boxColor = {0.18f, 0.18f, 0.18f, 0.85f};
+				}
+				else if (slots[i]->type == WandSlotType::Element)
+				{
+					boxColor = elementToColor(slots[i]->element);
+					boxColor.a = 0.8f;
+				}
+				renderer.renderRectangle(boxRect, boxColor);
+			}
+
+			int manaSlots = std::max(1, inventoryWand.maxMana);
+			float manaBoxSize = slotBoxSize * 0.85f;
+			float manaGap = manaBoxSize * 0.35f;
+			float manaRowWidth = manaBoxSize * manaSlots + manaGap * (manaSlots - 1);
+			float manaRowX = ringCenter.x - manaRowWidth * 0.5f;
+			float manaRowY = slotRowY - manaBoxSize * 1.4f;
+			for (int i = 0; i < manaSlots; i++)
+			{
+				glm::vec4 boxRect = {manaRowX + i * (manaBoxSize + manaGap), manaRowY, manaBoxSize, manaBoxSize};
+				renderer.renderRectangle(boxRect, {0.2f, 0.2f, 0.22f, 0.6f});
+			}
+
+			auto consumeRemainingForElement = [&](int element, int &ru, int &rd, int &rl, int &rr)
+			{
+				if (inventoryWand.up.type == WandSlotType::Element && inventoryWand.up.element == element && ru > 0)
+				{
+					ru--;
+					return true;
+				}
+				if (inventoryWand.down.type == WandSlotType::Element && inventoryWand.down.element == element && rd > 0)
+				{
+					rd--;
+					return true;
+				}
+				if (inventoryWand.left.type == WandSlotType::Element && inventoryWand.left.element == element && rl > 0)
+				{
+					rl--;
+					return true;
+				}
+				if (inventoryWand.right.type == WandSlotType::Element && inventoryWand.right.element == element && rr > 0)
+				{
+					rr--;
+					return true;
+				}
+				return false;
+			};
+
+			auto recomputeRemaining = [&]()
+			{
+				upRemaining = inventoryWand.up.type == WandSlotType::Element ? inventoryWand.up.castCount : 0;
+				downRemaining = inventoryWand.down.type == WandSlotType::Element ? inventoryWand.down.castCount : 0;
+				leftRemaining = inventoryWand.left.type == WandSlotType::Element ? inventoryWand.left.castCount : 0;
+				rightRemaining = inventoryWand.right.type == WandSlotType::Element ? inventoryWand.right.castCount : 0;
+				if (!editAction) { return; }
+				usedElements = editAction->count + alwaysCastCount;
+				canAddMore = usedElements < maxElements;
+				for (int i = 0; i < editAction->count; i++)
+				{
+					consumeRemainingForElement(editAction->elements[i], upRemaining, downRemaining, leftRemaining, rightRemaining);
+				}
+			};
+			recomputeRemaining();
+
+			if (editAction)
+			{
+				int selectSlot = -1;
+				if (input.controller.RStickButtonUp.pressed) { selectSlot = 0; }
+				if (input.controller.RStickButtonDown.pressed) { selectSlot = 1; }
+				if (input.controller.RStickButtonLeft.pressed) { selectSlot = 2; }
+				if (input.controller.RStickButtonRight.pressed) { selectSlot = 3; }
+				if (input.lMouse.pressed && ringHoverSlot >= 0) { selectSlot = ringHoverSlot; }
+				if (selectSlot >= 0 && canAddMore)
+				{
+					WandSlot *slot = getWandSlot(inventoryWand, selectSlot);
+					int *remainingPtr = nullptr;
+					switch (selectSlot)
+					{
+						case 0: remainingPtr = &upRemaining; break;
+						case 1: remainingPtr = &downRemaining; break;
+						case 2: remainingPtr = &leftRemaining; break;
+						case 3: remainingPtr = &rightRemaining; break;
+						default: break;
+					}
+					if (slot && remainingPtr && slot->type == WandSlotType::Element && *remainingPtr > 0)
+					{
+						if (editAction->add(slot->element, maxElements))
+						{
+							recomputeRemaining();
+						}
+					}
+				}
+			}
 
 			glm::vec4 ringRect = {ringCenter.x - ringSize * 0.5f, ringCenter.y - ringSize * 0.5f,
 				ringSize, ringSize};
 			glm::vec4 ringShadowRect = {ringRect.x + shadowOffset.x, ringRect.y + shadowOffset.y,
 				ringRect.z, ringRect.w};
 
-			auto renderRingPiece = [&](gl2d::Texture t, const WandSlot &slot, int remaining)
+			auto renderRingPiece = [&](gl2d::Texture t, const WandSlot &slot, int remaining, bool selectable)
 			{
 				bool hasElement = slot.type == WandSlotType::Element;
 				glm::vec3 baseColor = {0.65f, 0.65f, 0.65f};
@@ -1145,7 +1416,7 @@ bool GameLogic::update(float deltaTime,
 				{
 					baseColor = elementToColor(slot.element);
 				}
-				if (hasElement && remaining <= 0)
+				if (hasElement && (!selectable || remaining <= 0))
 				{
 					baseColor = glm::mix(baseColor, glm::vec3{0.2f, 0.2f, 0.2f}, 0.6f);
 				}
@@ -1154,12 +1425,16 @@ bool GameLogic::update(float deltaTime,
 				renderer.renderRectangle(ringRect, t, {baseColor, opacity});
 			};
 
-			renderRingPiece(assetsManager.upCircle, inventoryWand.up, upRemaining);
-			renderRingPiece(assetsManager.downCircle, inventoryWand.down, downRemaining);
-			renderRingPiece(assetsManager.leftCircle, inventoryWand.left, leftRemaining);
-			renderRingPiece(assetsManager.rightCircle, inventoryWand.right, rightRemaining);
+			bool upSelectable = !editAction || (upRemaining > 0 && canAddMore);
+			bool downSelectable = !editAction || (downRemaining > 0 && canAddMore);
+			bool leftSelectable = !editAction || (leftRemaining > 0 && canAddMore);
+			bool rightSelectable = !editAction || (rightRemaining > 0 && canAddMore);
+			renderRingPiece(assetsManager.upCircle, inventoryWand.up, upRemaining, upSelectable);
+			renderRingPiece(assetsManager.downCircle, inventoryWand.down, downRemaining, downSelectable);
+			renderRingPiece(assetsManager.leftCircle, inventoryWand.left, leftRemaining, leftSelectable);
+			renderRingPiece(assetsManager.rightCircle, inventoryWand.right, rightRemaining, rightSelectable);
 
-			auto renderRingIcon = [&](const WandSlot &slot, int remaining, int slotIndex)
+			auto renderRingIcon = [&](const WandSlot &slot, int remaining, int slotIndex, bool selectable)
 			{
 				glm::vec4 iconRect = ringSlotRects[slotIndex];
 				glm::vec2 center = {iconRect.x + iconRect.z * 0.5f, iconRect.y + iconRect.w * 0.5f};
@@ -1174,17 +1449,18 @@ bool GameLogic::update(float deltaTime,
 					}
 					glm::vec4 iconShadowRect = {iconRect.x + shadowOffset.x, iconRect.y + shadowOffset.y,
 						iconRect.z, iconRect.w};
+					float iconAlpha = selectable ? 1.0f : 0.4f;
 					renderer.renderRectangle(iconShadowRect, assetsManager.elements.texture,
 						{0, 0, 0, shadowAlpha}, {}, 0,
 						assetsManager.elements.atlas.get(slot.element, 0));
 					renderer.renderRectangle(iconRect, assetsManager.elements.texture,
-						{1, 1, 1, 1}, {}, 0,
+						{1, 1, 1, iconAlpha}, {}, 0,
 						assetsManager.elements.atlas.get(slot.element, 0));
 
 					char countText[8] = {};
 					snprintf(countText, sizeof(countText), "%d", std::max(0, remaining));
 					glm::vec2 textPos = {center.x + textOffset, center.y + textSize * 0.35f};
-					float textAlpha = remaining > 0 ? 0.9f : 0.5f;
+					float textAlpha = remaining > 0 && selectable ? 0.9f : 0.5f;
 					renderer.renderText(textPos, countText, assetsManager.font,
 						{1, 1, 1, textAlpha}, textSize, 4, 3, false);
 				}
@@ -1197,10 +1473,10 @@ bool GameLogic::update(float deltaTime,
 				}
 			};
 
-			renderRingIcon(inventoryWand.up, upRemaining, 0);
-			renderRingIcon(inventoryWand.down, downRemaining, 1);
-			renderRingIcon(inventoryWand.left, leftRemaining, 2);
-			renderRingIcon(inventoryWand.right, rightRemaining, 3);
+			renderRingIcon(inventoryWand.up, upRemaining, 0, upSelectable);
+			renderRingIcon(inventoryWand.down, downRemaining, 1, downSelectable);
+			renderRingIcon(inventoryWand.left, leftRemaining, 2, leftSelectable);
+			renderRingIcon(inventoryWand.right, rightRemaining, 3, rightSelectable);
 
 			if (inventoryWand.alwaysCast.type == WandSlotType::Element)
 			{
@@ -1215,6 +1491,77 @@ bool GameLogic::update(float deltaTime,
 				renderer.renderRectangle(centerRect, assetsManager.elements.texture,
 					{1, 1, 1, 1}, {}, 0,
 					assetsManager.elements.atlas.get(inventoryWand.alwaysCast.element, 0));
+			}
+		}
+
+		// quick action ring (gray)
+		{
+			glm::vec4 quickRingRect = {quickRingCenter.x - ringSize * 0.5f, quickRingCenter.y - ringSize * 0.5f,
+				ringSize, ringSize};
+			glm::vec4 quickRingShadowRect = {quickRingRect.x + shadowOffset.x, quickRingRect.y + shadowOffset.y,
+				quickRingRect.z, quickRingRect.w};
+
+			auto renderQuickPiece = [&](gl2d::Texture t, int slotIndex)
+			{
+				glm::vec3 baseColor = {0.35f, 0.35f, 0.35f};
+				if (quickHoverSlot == slotIndex)
+				{
+					baseColor = {0.46f, 0.46f, 0.46f};
+				}
+				if (quickActionEditIndex == slotIndex)
+				{
+					baseColor = {0.68f, 0.68f, 0.68f};
+				}
+				renderer.renderRectangle(quickRingShadowRect, t, {0, 0, 0, shadowAlpha});
+				renderer.renderRectangle(quickRingRect, t, {baseColor, 1.0f});
+			};
+
+			renderQuickPiece(assetsManager.upCircle, 0);
+			renderQuickPiece(assetsManager.downCircle, 1);
+			renderQuickPiece(assetsManager.leftCircle, 2);
+			renderQuickPiece(assetsManager.rightCircle, 3);
+
+			int maxElements = std::min(inventoryWand.maxElementsPerCast, QuickAction::MAX_ELEMENTS);
+			if (maxElements < 1) { maxElements = 1; }
+			bool hasAlwaysCast = inventoryWand.alwaysCast.type == WandSlotType::Element;
+			for (int slotIndex = 0; slotIndex < 4; slotIndex++)
+			{
+				const QuickAction &action = inventoryWand.quickActions[slotIndex];
+				int filledCount = action.count + (hasAlwaysCast ? 1 : 0);
+				filledCount = std::min(filledCount, maxElements);
+				float boxSize = iconSize * 0.12f;
+				float boxGap = boxSize * 0.4f;
+				float totalWidth = maxElements * boxSize + (maxElements - 1) * boxGap;
+				glm::vec2 center = {quickRingSlotRects[slotIndex].x + quickRingSlotRects[slotIndex].z * 0.5f,
+					quickRingSlotRects[slotIndex].y + quickRingSlotRects[slotIndex].w * 0.5f};
+				float startX = center.x - totalWidth * 0.5f;
+				float y = center.y + iconSize * 0.12f;
+
+				for (int i = 0; i < maxElements; i++)
+				{
+					glm::vec4 boxRect = {startX + i * (boxSize + boxGap), y, boxSize, boxSize};
+					if (i < filledCount)
+					{
+						int elementIndex = i;
+						if (hasAlwaysCast)
+						{
+							if (i == 0)
+							{
+								renderer.renderRectangle(boxRect, elementToColor(inventoryWand.alwaysCast.element));
+								continue;
+							}
+							elementIndex = i - 1;
+						}
+						if (elementIndex < action.count)
+						{
+							renderer.renderRectangle(boxRect, elementToColor(action.elements[elementIndex]));
+						}
+					}
+					else
+					{
+						renderer.renderRectangle(boxRect, {0.18f, 0.18f, 0.18f, 0.7f});
+					}
+				}
 			}
 		}
 

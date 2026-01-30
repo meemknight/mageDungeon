@@ -43,6 +43,40 @@ Wand makeStarterWand(std::ranlux24_base &rng)
 	return wand;
 }
 
+const char *getWandSpriteName(int sprite)
+{
+	switch ((Wand::WandSprite)sprite)
+	{
+		case Wand::starterWand: return "Starter Wand";
+		case Wand::oakWand: return "Oak Wand";
+		case Wand::birchWand: return "Birch Wand";
+		case Wand::cherryWand: return "Cherry Wand";
+		case Wand::longOakWand: return "Long Oak Wand";
+		case Wand::ashWand: return "Ash Wand";
+		case Wand::opalWand: return "Opal Wand";
+		case Wand::boneWand: return "Bone Wand";
+		case Wand::unicornWand: return "Unicorn Wand";
+		case Wand::cobaltWand: return "Cobalt Wand";
+		case Wand::obsidianWand: return "Obsidian Wand";
+		case Wand::earthWand: return "Earth Wand";
+		case Wand::waterWand: return "Water Wand";
+		case Wand::iceWand: return "Ice Wand";
+		case Wand::fireWand: return "Fire Wand";
+		case Wand::elderWand: return "Elder Wand";
+		case Wand::earthStaff: return "Earth Staff";
+		case Wand::waterStaff: return "Water Staff";
+		case Wand::iceStaff: return "Ice Staff";
+		case Wand::fireStaff: return "Fire Staff";
+		case Wand::diamondStaff: return "Diamond Staff";
+		case Wand::elderEarthStaff: return "Elder Earth Staff";
+		case Wand::elderWaterStaff: return "Elder Water Staff";
+		case Wand::elderIceStaff: return "Elder Ice Staff";
+		case Wand::elderFireStaff: return "Elder Fire Staff";
+		case Wand::elderStaff: return "Elder Staff";
+		default: return "Wand";
+	}
+}
+
 namespace
 {
 	struct TierRules

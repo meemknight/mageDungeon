@@ -1,6 +1,7 @@
 #pragma once
 #include <gameplay/elements.h>
 #include <random>
+#include <algorithm>
 
 // Wand defines which elements can be selected in the spell UI.
 // Empty slots can be filled later by other systems, disabled slots are inactive.
@@ -18,6 +19,28 @@ struct WandSlot
 	int castCount = 1;
 };
 
+// Quick action stores an element recipe bound to a wand.
+struct QuickAction
+{
+	static constexpr int MAX_ELEMENTS = 7;
+	unsigned char elements[MAX_ELEMENTS] = {};
+	char count = 0;
+
+	bool add(int element, int maxElements = MAX_ELEMENTS)
+	{
+		maxElements = std::min(MAX_ELEMENTS, maxElements);
+		if (count < maxElements)
+		{
+			elements[count] = (unsigned char)element;
+			count++;
+			return true;
+		}
+		return false;
+	}
+
+	void clear() { count = 0; }
+};
+
 struct Wand
 {
 	WandSlot up;
@@ -33,6 +56,7 @@ struct Wand
 	// Max elements allowed per cast (1..7).
 	int maxElementsPerCast = 4;
 	int wandSprite = 0;
+	QuickAction quickActions[4] = {};
 
 	void sanitize()
 	{
@@ -118,3 +142,6 @@ struct Wand
 Wand makeTestWand();
 Wand makeStarterWand(std::ranlux24_base &rng);
 Wand getRandomWand(int tier, std::ranlux24_base &rng);
+
+// Returns a display name for a wand sprite.
+const char *getWandSpriteName(int sprite);

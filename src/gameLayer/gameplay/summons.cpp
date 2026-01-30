@@ -171,7 +171,7 @@ SlimeSummon::SlimeSummon()
 {
 	maxLife = 5.0f;
 	life = maxLife;
-	timeLeft = 50.0f;
+	timeLeft = 60.0f;
 	tileSet = getAssetManager().waterSlime;
 	physics.transform.size = {12.f * PIXEL_SIZE, 12.f * PIXEL_SIZE};
 	physics.transform.isCircleCollider = true;
@@ -390,6 +390,7 @@ bool SlimeSummon::update(float deltaTime, Map &map, ParticleSystem &mainParticle
 
 	if (returningToPlayer)
 	{
+		controlTimer = 0.0f;
 		moveDir = computePathMove(playerPos);
 		moveSpeed = catchupSpeed;
 	}
@@ -419,6 +420,7 @@ bool SlimeSummon::update(float deltaTime, Map &map, ParticleSystem &mainParticle
 
 		if (hasTarget)
 		{
+			controlTimer = 0.0f;
 			resetPath();
 			glm::vec2 toTarget = targetPos - summonPos;
 			float dist = glm::length(toTarget);
@@ -426,7 +428,7 @@ bool SlimeSummon::update(float deltaTime, Map &map, ParticleSystem &mainParticle
 			if (attackCooldown <= 0.0f)
 			{
 				HitStats hitStats;
-				hitStats.damage = attackDamage;
+				hitStats.damage = std::max(0.0f, attackDamage - 2.0f);
 				hitStats.pushBack = attackPushBack;
 				auto bolt = std::make_unique<BasicMagicMissle>(hitStats, projectileSizeBias);
 				bolt->element = element;
@@ -441,13 +443,36 @@ bool SlimeSummon::update(float deltaTime, Map &map, ParticleSystem &mainParticle
 				moveDir = aimDir;
 			}
 		}
-		else if (distToPlayer > followDistance)
-		{
-			moveDir = computePathMove(playerPos);
-		}
 		else
 		{
-			resetPath();
+			glm::vec2 aimDir = safeNormalize(player.aimDirection);
+			float aimStrength = glm::clamp(player.aimStrength, 0.0f, 1.0f);
+			float controlLimit = std::max(followDistance, std::min(controlMaxDistance, returnDistance - 0.8f));
+			bool controlRequested = aimStrength >= controlMinStrength &&
+				distToPlayer <= controlLimit && glm::dot(aimDir, aimDir) > 0.0001f;
+			if (controlRequested)
+			{
+				controlTimer += deltaTime;
+			}
+			else
+			{
+				controlTimer = 0.0f;
+			}
+
+			if (controlRequested && controlTimer >= controlDelay)
+			{
+				float nudgeDistance = followDistance * (0.8f + 0.8f * aimStrength);
+				glm::vec2 nudgeTarget = playerPos + aimDir * nudgeDistance;
+				moveDir = computePathMove(nudgeTarget);
+			}
+			else if (distToPlayer > followDistance)
+			{
+				moveDir = computePathMove(playerPos);
+			}
+			else
+			{
+				resetPath();
+			}
 		}
 	}
 

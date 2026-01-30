@@ -95,6 +95,10 @@ struct SlimeSummon: public CloneableSummon<SlimeSummon>
 	float moveAnimSpeed = 1.7f * 0.9f;
 	float particleInterval = 0.12f;
 	float teleportDistance = 20.0f;
+	// aim nudge control (player-directed summon steering)
+	float controlDelay = 0.2f;
+	float controlMaxDistance = 6.2f;
+	float controlMinStrength = 0.08f;
 	float deathFrameDuration = 0.12f;
 	float deathHoldDuration = 0.12f;
 	float deathFadeDuration = 0.4f;
@@ -115,6 +119,7 @@ struct SlimeSummon: public CloneableSummon<SlimeSummon>
 	ParticleSettings ambientParticle;
 	ParticleSystem particleSystem;
 	float repathTimer = 0.0f;
+	float controlTimer = 0.0f;
 	int pathIndex = 0;
 	glm::ivec2 lastPathGoalTile = {999999, 999999};
 	std::vector<glm::ivec2> pathTiles;

@@ -1347,6 +1347,35 @@ namespace gl2d
 		return glm::vec4(v1.x, v1.y, v3.x, v3.y);
 	}
 
+	void Renderer2D::schisor(const glm::vec4 &rect)
+	{
+		if (!sdlRenderer) { return; }
+		SDL_Rect clip = {};
+		clip.x = (int)std::round(rect.x);
+		clip.y = (int)std::round(rect.y);
+		clip.w = (int)std::round(rect.z);
+		clip.h = (int)std::round(rect.w);
+		if (clip.w < 0)
+		{
+			clip.x += clip.w;
+			clip.w = -clip.w;
+		}
+		if (clip.h < 0)
+		{
+			clip.y += clip.h;
+			clip.h = -clip.h;
+		}
+		clip.w = std::max(0, clip.w);
+		clip.h = std::max(0, clip.h);
+		SDL_SetRenderClipRect(sdlRenderer, &clip);
+	}
+
+	void Renderer2D::stopSchisor()
+	{
+		if (!sdlRenderer) { return; }
+		SDL_SetRenderClipRect(sdlRenderer, nullptr);
+	}
+
 	glm::vec2 Renderer2D::getTextSize(const char *text, const Font font,
 		const float sizePixels, const float spacing, const float line_space)
 	{

@@ -499,6 +499,11 @@ namespace gl2d
 		//converts pixels to screen (top left) (bottom right)
 		glm::vec4 toScreen(const glm::vec4 &transform);
 
+		// Sets a clip rectangle in screen pixels (top-left origin).
+		void schisor(const glm::vec4 &rect);
+		// Disables clip rectangle and restores full screen rendering.
+		void stopSchisor();
+
 		//clears the things that are to be drawn when calling flush
 		inline void clearDrawData()
 		{

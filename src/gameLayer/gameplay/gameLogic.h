@@ -53,6 +53,8 @@ struct GameLogic
 	int draggingStoneIndex = -1;
 	glm::vec2 draggingStoneOffset = {};
 	bool draggingStone = false;
+	int quickActionEditIndex = -1;
+	float wandHoverTimer = 0.0f;
 	DroppedItemSystem droppedItems; // dropped items like wands
 
 	ParticleSystem particleSystem;
