@@ -38,6 +38,8 @@ struct AssetsManager
 	gl2d::Texture target;
 	gl2d::Texture thorn;
 
+	
+
 
 	void loadAllAssets();
 

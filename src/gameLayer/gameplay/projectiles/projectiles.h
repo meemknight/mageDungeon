@@ -406,15 +406,18 @@ struct EarthWaterThornBoltProjectile: public CloneableProjectile<EarthWaterThorn
 	float spawnOffset = PIXEL_SIZE * 5.5f;
 	float minScale = 0.8f;
 	float particleSizeBias = 1.25f;
+	float orbitInterval = 0.06f;
 	int maxStoredDamage = 30;
 
 	// **state variables**
 	bool firstTime = true;
 	float trailTimer = 0.0f;
+	float orbitTimer = 0.0f;
 	int storedDamage = 0;
 	glm::vec2 baseColliderSize = {};
 	ParticleEmissionSettings particleEmmision;
 	ParticleEmissionSettings baseEmmision;
+	ParticleSettings orbitParticle;
 
 	EarthWaterThornBoltProjectile();
 	void updateVisualScale();
@@ -431,11 +434,14 @@ struct RicochetProjectile: public CloneableProjectile<RicochetProjectile>
 	// **configuration variables**
 	HitStats hitStats;
 	float hitCooldownDuration = 0.3f;
+	float orbitInterval = 0.12f;
 
 	// **state variables**
 	bool firstTime = true;
 	float hitCooldown = 0.0f;
+	float orbitTimer = 0.0f;
 	ParticleSettings bodyParticle;
+	ParticleSettings orbitParticle;
 
 	RicochetProjectile();
 	void setDamage(float damage)
@@ -507,12 +513,15 @@ struct BigIceBlockProjectile: public CloneableProjectile<BigIceBlockProjectile>
 	float trailInterval = 0.07f;
 	glm::vec4 bigStartColor = {0.7f, 0.9f, 1.0f, 0.9f};
 	glm::vec4 bigEndColor = {0.45f, 0.75f, 1.0f, 0.85f};
+	float orbitInterval = 0.08f;
 
 	// **state variables**
 	bool firstTime = true;
 	float trailTimer = 0.0f;
+	float orbitTimer = 0.0f;
 	ParticleSettings bigParticle;
 	ParticleSettings trailParticle;
+	ParticleSettings orbitParticle;
 	bool shouldBurst = false;
 
 

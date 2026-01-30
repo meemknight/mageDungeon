@@ -590,7 +590,6 @@ struct WildGrowthSpell: public Spell
 		auto thorn = std::make_unique<ThornProjectile>();
 		thorn->element = Elements::Earth;
 		thorn->hitStats.damage = 2.0f;
-		thorn->timeAlieve * 1.5;
 		glm::vec2 spawnPos = glm::vec2(tile) + glm::vec2(0.5f);
 		spawnPos.x += getRandomFloat(rng, -offsetJitter, offsetJitter);
 		spawnPos.y += getRandomFloat(rng, -offsetJitter, offsetJitter);

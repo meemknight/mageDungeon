@@ -1020,6 +1020,15 @@ bool EarthWaterThornBoltProjectile::update(float deltaTime, Map &map, ParticleSy
 		particleEmmision = baseEmmision;
 		updateVisualScale();
 		particleSystem.emitParticles(particleEmmision.create, physics.getPos(), rng, physics.getPos());
+		orbitParticle = getOrbitParticle(elementToSecondaryColor(element), elementToColor(element));
+		orbitParticle.onCreateCount = 2;
+		orbitParticle.particleLifeTime = {0.45f, 0.7f};
+		orbitParticle.createApearence.size = glm::vec2{2.4f, 3.4f} * PIXEL_SIZE;
+		orbitParticle.endApearence.size = glm::vec2{1.4f, 2.4f} * PIXEL_SIZE;
+		orbitParticle.animationScaleX = {PIXEL_SIZE * 5.0f, PIXEL_SIZE * 11.0f};
+		orbitParticle.animationScaleY = {PIXEL_SIZE * 5.0f, PIXEL_SIZE * 11.0f};
+		orbitParticle.folowParent = true;
+		orbitTimer = getRandomFloat(rng, 0.0f, orbitInterval);
 	}
 
 	trailTimer -= deltaTime;
@@ -1110,6 +1119,22 @@ bool RicochetProjectile::update(float deltaTime, Map &map, ParticleSystem &mainP
 		bodyParticle.positionY = glm::vec2{-1.5f, 1.5f} * PIXEL_SIZE;
 
 		particleSystem.emitParticles(bodyParticle, physics.getPos(), rng, physics.getPos());
+		orbitParticle = getOrbitParticle(startColor, endColor);
+		orbitParticle.onCreateCount = 2;
+		orbitParticle.particleLifeTime = {0.35f, 0.6f};
+		orbitParticle.createApearence.size = glm::vec2{2.0f, 2.6f} * PIXEL_SIZE;
+		orbitParticle.endApearence.size = glm::vec2{1.0f, 1.8f} * PIXEL_SIZE;
+		orbitParticle.animationScaleX = {PIXEL_SIZE * 2.5f, PIXEL_SIZE * 6.0f};
+		orbitParticle.animationScaleY = {PIXEL_SIZE * 2.5f, PIXEL_SIZE * 6.0f};
+		orbitParticle.folowParent = true;
+		orbitTimer = getRandomFloat(rng, 0.0f, orbitInterval);
+	}
+
+	orbitTimer -= deltaTime;
+	if (orbitTimer <= 0.0f)
+	{
+		orbitTimer += orbitInterval;
+		particleSystem.emitParticles(orbitParticle, physics.getPos(), rng, physics.getPos());
 	}
 
 	hitCooldown = std::max(0.0f, hitCooldown - deltaTime);
@@ -1473,6 +1498,15 @@ bool BigIceBlockProjectile::update(float deltaTime, Map &map, ParticleSystem &ma
 		trailParticle.velocityY = {0.0f, 0.0f};
 
 		particleSystem.emitParticles(bigParticle, physics.getPos(), rng, physics.getPos());
+		orbitParticle = getOrbitParticle(bigStartColor, bigEndColor);
+		orbitParticle.onCreateCount = 2;
+		orbitParticle.particleLifeTime = {0.35f, 0.6f};
+		orbitParticle.createApearence.size = glm::vec2{2.0f, 2.8f} * PIXEL_SIZE;
+		orbitParticle.endApearence.size = glm::vec2{1.0f, 2.0f} * PIXEL_SIZE;
+		orbitParticle.animationScaleX = {PIXEL_SIZE * 7.0f, PIXEL_SIZE * 14.0f};
+		orbitParticle.animationScaleY = {PIXEL_SIZE * 7.0f, PIXEL_SIZE * 14.0f};
+		orbitParticle.folowParent = true;
+		orbitTimer = getRandomFloat(rng, 0.0f, orbitInterval);
 	}
 
 	trailTimer -= deltaTime;
