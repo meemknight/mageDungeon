@@ -17,8 +17,8 @@ struct Player
 	StatusEffects statusEffects;
 	StatusImmunities statusImmunities;
 	float statusSpeedMultiplier = 1.0f;
-	float life = 20.0f;
-	float maxLife = 20.0f;
+	float life = 10.0f;
+	float maxLife = 10.0f;
 
 	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
 		const Wand &wand, glm::vec2 aimDirection);

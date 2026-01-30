@@ -131,6 +131,10 @@ void AssetsManager::loadAllAssets()
 	s = waterSlime.texture.GetSize();
 	waterSlime.atlas = gl2d::TextureAtlasPadding(6, 7, s.x, s.y);
 
+	iceSlime.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "characters/iceSlime.png", 32);
+	s = iceSlime.texture.GetSize();
+	iceSlime.atlas = gl2d::TextureAtlasPadding(6, 7, s.x, s.y);
+
 	fireSlime.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "characters/fireSlime.png", 32);
 	s = fireSlime.texture.GetSize();
 	fireSlime.atlas = gl2d::TextureAtlasPadding(6, 7, s.x, s.y);

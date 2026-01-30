@@ -5,9 +5,12 @@
 #include <gameplay/wand.h>
 
 struct AssetsManager;
+struct Map;
 struct Player;
+struct ProjectileHolder;
 struct SpellsHolder;
 struct SpellRecepie;
+struct EntityHolder;
 
 namespace platform
 {
@@ -69,6 +72,9 @@ struct SleppSelectionInputLogic
 		AssetsManager &assetsManager,
 		SpellRecepie &spellRecepie,
 		SpellsHolder &spellsHolder,
+		Map &map,
+		ProjectileHolder &projectileHolder,
+		EntityHolder &entityHolder,
 		Player &player,
 		glm::vec2 fireDirection,
 		bool usesController,

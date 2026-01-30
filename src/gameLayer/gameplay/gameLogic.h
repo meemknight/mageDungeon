@@ -3,6 +3,7 @@
 #include <gameplay/Physics.h>
 #include <gameplay/player.h>
 #include <gameplay/projectiles/projectiles.h>
+#include <gameplay/summons.h>
 #include "particleSystem.h"
 #include <gameplay/entities/entity.h>
 #include <gameplay/spells/spells.h>
@@ -21,6 +22,7 @@ struct GameLogic
 	Player player;
 	ProjectileHolder projectiles;
 	StandbyProjectileSystem standbyProjectiles; // orbiting projectiles that wait and fire
+	SummonHolder summons; // friendly summons that assist the player
 	EntityHolder entityHolder;
 	SpellsHolder spellsHolder;
 	SpellRecepie spellRecepie; //current spell recepie;
@@ -34,6 +36,7 @@ struct GameLogic
 	ParticlePostProcessRenderer particlePostProcessRenderer;
 
 	glm::vec2 fireDirection = {1,0};
+	float playerDamageCooldown = 0.0f; // time until next contact hit
 
 	//returns false on fail
 	bool init();

@@ -6,6 +6,7 @@
 #include <gameplay/assetsManager.h>
 #include <gameplay/elements.h>
 #include <gameplay/Physics.h>
+#include <gameplay/projectiles/projectiles.h>
 #include <glui/glui.h>
 #include <platformInput.h>
 #include <gameLayer.h>
@@ -15,6 +16,9 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 	AssetsManager &assetsManager,
 	SpellRecepie &spellRecepie,
 	SpellsHolder &spellsHolder,
+	Map &map,
+	ProjectileHolder &projectileHolder,
+	EntityHolder &entityHolder,
 	Player &player,
 	glm::vec2 fireDirection,
 	bool usesController,
@@ -108,7 +112,7 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		return false;
 	};
 
-	if (input.rMouse.pressed || controller.RTButton.pressed)
+	if (input.rMouse.held || controller.RTButton.held)
 	{
 		if (castCooldownTimer > 0.0f)
 		{
@@ -116,12 +120,32 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		}
 		else
 		{
-			auto spell = SpellTypes::getSpellFromRecepie(spellRecepie);
-			spellsHolder.addSpell(std::move(spell), player.physics.getPos(), fireDirection);
-			spellRecepie.clear();
-			resetCastState();
-			applyAlwaysCast();
-			castCooldownTimer = CAST_COOLDOWN;
+			bool hasRecipe = spellRecepie.count > 0;
+			bool onlyAlwaysCast = alwaysCastUsedThisCast && spellRecepie.count == 1;
+			bool castedSpell = false;
+			bool firedStandby = false;
+
+			if (hasRecipe)
+			{
+				auto spell = SpellTypes::getSpellFromRecepie(spellRecepie);
+				spellsHolder.addSpell(std::move(spell), player.physics.getPos(), fireDirection);
+				castedSpell = true;
+			}
+
+			if (!hasRecipe || onlyAlwaysCast)
+			{
+				firedStandby = getStandbyProjectilesSystem().tryFire(map, projectileHolder,
+					player, entityHolder, fireDirection);
+			}
+
+			if (castedSpell || firedStandby)
+			{
+				spellRecepie.clear();
+				resetCastState();
+				applyAlwaysCast();
+				float cooldownRatio = firedStandby ? 0.7f : 1.0f;
+				castCooldownTimer = CAST_COOLDOWN * cooldownRatio;
+			}
 		}
 	}
 

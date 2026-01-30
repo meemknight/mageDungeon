@@ -14,6 +14,8 @@
 #include <gameplay/player.h>
 #include <gameplay/aStar.h>
 
+struct SummonHolder;
+
 struct HitStats
 {
 	float damage = 0;
@@ -110,7 +112,7 @@ struct Entity
 
 
 	virtual bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
-		std::ranlux24_base &rng, Player &player) = 0;
+		std::ranlux24_base &rng, Player &player, SummonHolder &summons) = 0;
 
 	virtual void render(gl2d::Renderer2D &renderer, ParticlePostProcessRenderer &particlePostProcessRenderer) = 0;
 
@@ -142,7 +144,7 @@ struct EntityHolder
 	}
 
 	void update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
-		std::ranlux24_base &rng, Player &player)
+		std::ranlux24_base &rng, Player &player, SummonHolder &summons)
 	{
 
 		for (auto it = entities.begin(); it != entities.end(); )
@@ -160,7 +162,7 @@ struct EntityHolder
 			}
 			updateStatusEffectParticles(p.statusEffects, mainParticleSystem, rng, p.physics.getPos(), deltaTime);
 
-			if ((p.life.life <= 0) ||  !p.update(deltaTime, map, mainParticleSystem, rng, player) ||
+			if ((p.life.life <= 0) ||  !p.update(deltaTime, map, mainParticleSystem, rng, player, summons) ||
 				(p.life.life <= 0)
 				)
 			{
@@ -286,6 +288,7 @@ struct BasicMeleEnemy : public Entity
 	float speed = 2.2f;
 	float chaseAcquireRange = 13.0f;      // start chasing if within this distance
 	float chaseLoseRange    = 15.0f;     // keep chasing until beyond this distance
+	float summonAggroRange = 5.0f;       // switch to summon target if very close
 	float turnRate          = 14.0f;     // higher = snappier steering
 	float noLOSTimer = 0.0f;
 	float forgetAfterNoLOS = 2.0f;     // seconds with no LOS before forgetting
@@ -364,7 +367,7 @@ struct BasicMeleEnemy : public Entity
 
 
 	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
-		std::ranlux24_base &rng, Player &player) override;
+		std::ranlux24_base &rng, Player &player, SummonHolder &summons) override;
 
 	void render(gl2d::Renderer2D &renderer, ParticlePostProcessRenderer &particlePostProcessRenderer) override;
 

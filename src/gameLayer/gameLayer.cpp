@@ -43,6 +43,11 @@ ProjectileHolder &getProjectileHolder()
 	return game.projectiles;
 }
 
+SummonHolder &getSummonHolder()
+{
+	return game.summons;
+}
+
 StandbyProjectileSystem &getStandbyProjectilesSystem()
 {
 	return game.standbyProjectiles;

@@ -10,7 +10,7 @@
 
 bool basicProjectileHitEntitiesLogic(PhysicalEntity &physics,
 	glm::vec2 projectileMoveDirection, char projectileElement,
-	EntityHolder &entities, HitStats hitStats)
+	EntityHolder &entities, HitStats hitStats, float statusAmount)
 {
 
 	auto projectile = physics.transform;
@@ -25,7 +25,7 @@ bool basicProjectileHitEntitiesLogic(PhysicalEntity &physics,
 
 			e->life.computeHit(hitStats, projectileElement, e->element, projectileMoveDirection, pushBack);
 			e->physics.velocity += pushBack;
-			addStatusEffectFromElement(e->statusEffects, e->statusImmunities, projectileElement, 5.0f);
+			addStatusEffectFromElement(e->statusEffects, e->statusImmunities, projectileElement, statusAmount);
 
 			glm::vec2 damagePos = e->physics.getPos();
 			damagePos.y -= e->physics.transform.size.y * 0.6f;
@@ -46,6 +46,30 @@ void StandbyProjectileSystem::addProjectileAsPtr(std::unique_ptr<Projectile> pro
 	if (!projectile)
 	{
 		return;
+	}
+
+	while ((int)standbyProjectiles.size() >= maxStandby && !standbyProjectiles.empty())
+	{
+		int removeIndex = 0;
+		float lowestTime = standbyProjectiles[0].timeLeft;
+		for (int i = 1; i < (int)standbyProjectiles.size(); i++)
+		{
+			if (standbyProjectiles[i].timeLeft < lowestTime)
+			{
+				lowestTime = standbyProjectiles[i].timeLeft;
+				removeIndex = i;
+			}
+		}
+
+		if (removeIndex != (int)standbyProjectiles.size() - 1)
+		{
+			standbyProjectiles[removeIndex] = std::move(standbyProjectiles.back());
+		}
+		standbyProjectiles.pop_back();
+	}
+	if (insertIndex > (int)standbyProjectiles.size())
+	{
+		insertIndex = 1;
 	}
 
 	StandbyProjectileEntry entry;
@@ -83,11 +107,6 @@ void StandbyProjectileSystem::addProjectileAsPtr(std::unique_ptr<Projectile> pro
 void StandbyProjectileSystem::update(float deltaTime, Map &map, ProjectileHolder &projectileHolder,
 	std::ranlux24_base &rng, Player &player, EntityHolder &entityHolder, glm::vec2 aimDir)
 {
-	if (fireCooldown > 0.0f)
-	{
-		fireCooldown = std::max(0.0f, fireCooldown - deltaTime);
-	}
-
 	for (int i = 0; i < (int)standbyProjectiles.size(); )
 	{
 		auto &entry = standbyProjectiles[i];
@@ -170,11 +189,19 @@ void StandbyProjectileSystem::update(float deltaTime, Map &map, ProjectileHolder
 		entry.projectile->particleSystem.update(deltaTime);
 	}
 
-	if (fireCooldown > 0.0f)
+}
+
+bool StandbyProjectileSystem::tryFire(Map &map, ProjectileHolder &projectileHolder,
+	Player &player, EntityHolder &entityHolder, glm::vec2 aimDir)
+{
+	if (standbyProjectiles.empty())
 	{
-		return;
+		return false;
 	}
 
+	(void)map;
+
+	glm::vec2 playerPos = player.physics.getPos();
 	glm::vec2 targetPos = {};
 	bool hasTarget = false;
 	float bestDist2 = fireRange * fireRange;
@@ -188,22 +215,12 @@ void StandbyProjectileSystem::update(float deltaTime, Map &map, ProjectileHolder
 			continue;
 		}
 
-		if (!HasLineOfSightGrid(map, playerPos, e->physics.getPos()))
-		{
-			continue;
-		}
-
 		bestDist2 = dist2;
 		targetPos = e->physics.getPos();
 		hasTarget = true;
 	}
 
-	if (!hasTarget)
-	{
-		return;
-	}
-
-	glm::vec2 targetDir = targetPos - playerPos;
+	glm::vec2 targetDir = hasTarget ? (targetPos - playerPos) : aimDir;
 	float targetLen = glm::length(targetDir);
 	if (targetLen <= 0.0001f)
 	{
@@ -235,7 +252,7 @@ void StandbyProjectileSystem::update(float deltaTime, Map &map, ProjectileHolder
 	firedEntry.projectile->physics.teleport(playerPos);
 	firedEntry.projectile->physics.velocity = targetDir * firedEntry.throwVelocity;
 	projectileHolder.addProjectileDeferredAsPtr(std::move(firedEntry.projectile), playerPos);
-	fireCooldown = fireCooldownDuration;
+	return true;
 }
 
 void StandbyProjectileSystem::render(gl2d::Renderer2D &renderer,
@@ -296,7 +313,7 @@ bool BasicMagicMissle::update(float deltaTime, Map &map, ParticleSystem &mainPar
 	}
 
 	if (basicProjectileHitEntitiesLogic(physics, physics.velocity,
-		element, entityHolder, hitStats))
+		element, entityHolder, hitStats, statusAmount))
 	{
 		return false;
 	}

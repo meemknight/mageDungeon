@@ -1,35 +1,58 @@
 #include "entity.h"
-
+#include "gameplay/entities/entity.h"
+#include "gameplay/summons.h"
 
 bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
-	std::ranlux24_base &rng, Player &player)
+	std::ranlux24_base &rng, Player &player, SummonHolder &summons)
 {
 	animator.update(deltaTime, 0.12, 6);
 
 	const glm::vec2 enemyPos = physics.getPos();
 	const glm::vec2 playerPos = player.physics.getPos();
 
-	const glm::vec2 toPlayer = playerPos - enemyPos;
-	const float dist2 = glm::length2(toPlayer);
+	glm::vec2 targetPos = playerPos;
+	glm::ivec2 targetTile = WorldToTile(playerPos);
+
+	float bestSummonDist2 = summonAggroRange * summonAggroRange;
+	for (auto &summon : summons.summons)
+	{
+		if (!summon->canBeTargeted()) { continue; }
+		glm::vec2 summonPos = summon->physics.getPos();
+		float distToSummon2 = glm::length2(summonPos - enemyPos);
+		if (distToSummon2 > bestSummonDist2)
+		{
+			continue;
+		}
+		if (!HasLineOfSightTiles(map, WorldToTile(enemyPos), WorldToTile(summonPos)))
+		{
+			continue;
+		}
+		bestSummonDist2 = distToSummon2;
+		targetPos = summonPos;
+		targetTile = WorldToTile(summonPos);
+	}
+
+	const glm::vec2 toTarget = targetPos - enemyPos;
+	const float dist2 = glm::length2(toTarget);
 
 	// LOS-based aggro/forget (with optional distance cap)
 	const bool hasLOS = seeThroughWalls
 		? true
-		: HasLineOfSightTiles(map, WorldToTile(enemyPos), WorldToTile(playerPos));
+		: HasLineOfSightTiles(map, WorldToTile(enemyPos), targetTile);
 
 	const bool withinAggro = (dist2 <= chaseAcquireRange * chaseAcquireRange);
 
 	// Can "see" player either via LOS+range, or just range if seeThroughWalls
-	const bool canSeePlayer = seeThroughWalls ? withinAggro : (hasLOS && withinAggro);
+	const bool canSeeTarget = seeThroughWalls ? withinAggro : (hasLOS && withinAggro);
 
-	if (canSeePlayer)
+	if (canSeeTarget)
 	{
 		chasing = true;
 		noLOSTimer = 0.0f;
 
 		// Remember last seen position/tile
-		lastSeenPlayerPos = playerPos;
-		lastSeenPlayerTile = WorldToTile(playerPos);
+		lastSeenPlayerPos = targetPos;
+		lastSeenPlayerTile = targetTile;
 		hasLastSeen = true;
 	}
 	else
@@ -52,9 +75,9 @@ bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParti
 	if (chasing)
 	{
 		// During grace period, chase last seen target if we can't currently see the player
-		const bool useLastSeen = (!canSeePlayer && hasLastSeen);
-		const glm::vec2 chaseTargetPos = useLastSeen ? lastSeenPlayerPos : playerPos;
-		const glm::ivec2 chaseTargetTile = useLastSeen ? lastSeenPlayerTile : WorldToTile(playerPos);
+		const bool useLastSeen = (!canSeeTarget && hasLastSeen);
+		const glm::vec2 chaseTargetPos = useLastSeen ? lastSeenPlayerPos : targetPos;
+		const glm::ivec2 chaseTargetTile = useLastSeen ? lastSeenPlayerTile : targetTile;
 
 		const glm::vec2 toTarget = chaseTargetPos - enemyPos;
 		const float distTarget2 = glm::length2(toTarget);
@@ -89,9 +112,8 @@ bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParti
 
 				lastPathGoalTile = goalT;
 
-				// Call YOUR old A* here:
-				// pathTiles = FindPathAStar8_Old(map, startT, goalT);
-				// pathIndex = 0;
+				pathTiles = findPathAStar8(map, startT, goalT);
+				pathIndex = 0;
 
 				// If A* fails, don't freeze: just keep trying to move roughly toward target
 				// (still blocked by collisions later)

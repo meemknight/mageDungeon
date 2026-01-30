@@ -6,6 +6,8 @@
 #include <glui/glui.h>
 #include <imguiTools.h>
 #include <iostream>
+#include <cstdio>
+#include <cmath>
 #include <gameplay/entities/entity.h>
 #include <gameplay/entities/enemyTypes.h>
 #define GLM_ENABLE_EXPERIMENTAL
@@ -32,6 +34,7 @@ bool GameLogic::init()
 
 	currentWand = getRandomWand(0, rng);
 	droppedItems.clear();
+	summons.clear();
 
 	particlePostProcessRenderer.init();
 
@@ -43,6 +46,8 @@ bool GameLogic::init()
 	{
 		player.physics.getPos() = {35, 35};
 	}
+	player.life = player.maxLife;
+	playerDamageCooldown = 0.0f;
 
 	for (int i = 0; i < (int)floorInfo.rooms.size(); i++)
 	{
@@ -380,6 +385,8 @@ bool GameLogic::update(float deltaTime,
 	damageViewerSystem.update(deltaTime);
 	droppedItems.update(deltaTime);
 
+	summons.update(deltaTime, map, particleSystem, projectiles, rng, player, entityHolder);
+
 #pragma endregion
 
 
@@ -399,8 +406,34 @@ bool GameLogic::update(float deltaTime,
 	spellsHolder.renderBeforeEntities(renderer, particlePostProcessRenderer);
 	droppedItems.render(renderer, assetsManager);
 
-	entityHolder.update(deltaTime, map, particleSystem, rng, player);
+	entityHolder.update(deltaTime, map, particleSystem, rng, player, summons);
 	resolveEntityPush(entityHolder, player);
+	resolveSummonEntityPush(entityHolder, summons);
+
+	// contact damage from enemies
+	playerDamageCooldown = std::max(0.0f, playerDamageCooldown - deltaTime);
+	if (playerDamageCooldown <= 0.0f)
+	{
+		for (auto &entity : entityHolder.entities)
+		{
+			if (player.physics.transform.intersectTransform(entity->physics.transform))
+			{
+				player.life -= 1.0f;
+				playerDamageCooldown = 0.6f;
+				glm::vec2 damagePos = player.physics.getPos();
+				damagePos.y -= player.physics.transform.size.y * 0.6f;
+				getDamageViewerSystem().addDamage(1.0f, damagePos);
+				break;
+			}
+		}
+	}
+
+	if (player.life <= 0.0f)
+	{
+		close();
+		init();
+		return true;
+	}
 
 	#pragma region temp enemy spawner
 	// temporary: spawn enemies for testing
@@ -475,6 +508,7 @@ bool GameLogic::update(float deltaTime,
 	}
 	#pragma endregion
 	entityHolder.render(renderer, particlePostProcessRenderer);
+	summons.render(renderer, particlePostProcessRenderer);
 
 
 	//renderer.renderRectangle(player.physical.getAABB(), Colors_Red);
@@ -543,6 +577,35 @@ bool GameLogic::update(float deltaTime,
 
 #pragma endregion
 
+	// player life
+	{
+		float cameraZoom = renderer.currentCamera.zoom;
+		renderer.pushCamera();
+		float padding = PIXEL_SIZE * 3.0f * cameraZoom;
+		float barWidth = PIXEL_SIZE * 48.0f * cameraZoom;
+		float barHeight = PIXEL_SIZE * 6.0f * cameraZoom;
+		float x = renderer.windowW - padding - barWidth;
+		float y = padding;
+
+		glm::vec4 barRect = {x, y, barWidth, barHeight};
+		renderer.renderRectangle(barRect, {0.15f, 0.05f, 0.05f, 0.85f});
+		float lifeDisplay = std::max(0.0f, player.life);
+		float lifeRatio = player.maxLife > 0.0f ? (lifeDisplay / player.maxLife) : 0.0f;
+		lifeRatio = glm::clamp(lifeRatio, 0.0f, 1.0f);
+		glm::vec4 fillRect = {x, y, barWidth * lifeRatio, barHeight};
+		renderer.renderRectangle(fillRect, {0.9f, 0.1f, 0.1f, 0.9f});
+		renderer.renderRectangleOutline(barRect, {0.4f, 0.1f, 0.1f, 0.9f}, PIXEL_SIZE * cameraZoom);
+
+		//char lifeText[32] = {};
+		//snprintf(lifeText, sizeof(lifeText), "HP %d/%d", (int)std::ceil(lifeDisplay), (int)player.maxLife);
+		//float textSize = PIXEL_SIZE * 6.0f * cameraZoom;
+		//glm::vec2 textPos = {x, y - textSize * 0.2f};
+		//renderer.renderText(textPos, lifeText, assetsManager.font,
+		//	{1, 1, 1, 0.95f}, textSize, 4, 3, false);
+
+		renderer.popCamera();
+	}
+
 	// current wand display
 	{
 		float cameraZoom = renderer.currentCamera.zoom;
@@ -563,7 +626,8 @@ bool GameLogic::update(float deltaTime,
 	// magic ui
 	{
 		spellSelectionInputLogic.update(deltaTime, renderer, assetsManager,
-			spellRecepie, spellsHolder, player, fireDirection, usesController, currentWand, input);
+			spellRecepie, spellsHolder, map, projectiles, entityHolder,
+			player, fireDirection, usesController, currentWand, input);
 	}
 
 

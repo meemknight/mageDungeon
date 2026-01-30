@@ -77,7 +77,7 @@ struct Projectile
 //return true if hit
 bool basicProjectileHitEntitiesLogic(PhysicalEntity &physics, 
 	glm::vec2 projectileMoveDirection, char projectileElement,
-	EntityHolder &entities, HitStats hitStats);
+	EntityHolder &entities, HitStats hitStats, float statusAmount = 5.0f);
 
 struct ProjectileHolder
 {
@@ -162,7 +162,7 @@ struct ProjectileHolder
 // Access the active projectile holder for spawning burst projectiles.
 ProjectileHolder &getProjectileHolder();
 
-// Standby projectiles orbit the player and auto-fire at enemies.
+// Standby projectiles orbit the player and fire on input.
 struct StandbyProjectileEntry
 {
 	std::unique_ptr<Projectile> projectile;
@@ -180,13 +180,12 @@ struct StandbyProjectileSystem
 {
 	// **configuration variables**
 	float ringRadius = 1.1f;
-	float fireCooldownDuration = 0.7f;
 	float fireRange = 9.0f;
 	float standbyLifetime = 14.0f;
+	int maxStandby = 12;
 
 	// **state variables**
 	std::vector<StandbyProjectileEntry> standbyProjectiles;
-	float fireCooldown = 0.0f;
 	// insertion cursor for interleaving new entries
 	int insertIndex = 1;
 
@@ -195,6 +194,8 @@ struct StandbyProjectileSystem
 		const ParticleEmissionSettings *customEmission = nullptr);
 	void update(float deltaTime, Map &map, ProjectileHolder &projectileHolder,
 		std::ranlux24_base &rng, Player &player, EntityHolder &entityHolder, glm::vec2 aimDir);
+	bool tryFire(Map &map, ProjectileHolder &projectileHolder,
+		Player &player, EntityHolder &entityHolder, glm::vec2 aimDir);
 	void render(gl2d::Renderer2D &renderer, ParticlePostProcessRenderer &particlePostProcessRenderer);
 };
 
@@ -217,6 +218,7 @@ struct BasicMagicMissle: public CloneableProjectile<BasicMagicMissle>
 	// **configuration variables**
 	HitStats hitStats;
 	float particleSizeBias = 1;
+	float statusAmount = 5.0f;
 	bool hasCustomEmission = false;
 	ParticleEmissionSettings customEmission;
 

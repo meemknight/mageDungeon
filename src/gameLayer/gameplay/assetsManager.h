@@ -20,7 +20,7 @@ struct AssetsManager
 	TileSet skeleton;
 	TileSet waterSlime;
 	TileSet fireSlime;
-
+	TileSet iceSlime;
 
 	TileSet elements;
 	TileSet shadow;

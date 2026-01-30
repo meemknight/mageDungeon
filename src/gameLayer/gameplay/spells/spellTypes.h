@@ -97,7 +97,7 @@ namespace SpellTypes
 
 		HitStats hitStats;
 		hitStats.pushBack = 0.3;
-		hitStats.damage = 0.5;
+		hitStats.damage = 0.2;
 
 		ret.element = element;
 		ret.maxFireCount = 100;
@@ -355,6 +355,54 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline SummonSpell getSummonWaterSlimeSpell()
+	{
+		SummonSpell ret;
+		ret.element = Elements::Water;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		auto slime = std::make_unique<SlimeSummon>();
+		slime->element = Elements::Water;
+		slime->attackDamage = 5.0f;
+		slime->statusAmount = 5.0f;
+		slime->tileSet = getAssetManager().waterSlime;
+		ret.summon = std::move(slime);
+		ret.summonCount = 1;
+		return ret;
+	}
+
+	inline SummonSpell getSummonFireSlimeSpell()
+	{
+		SummonSpell ret;
+		ret.element = Elements::Fire;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		auto slime = std::make_unique<SlimeSummon>();
+		slime->element = Elements::Fire;
+		slime->attackDamage = 3.0f;
+		slime->statusAmount = 2.0f;
+		slime->tileSet = getAssetManager().fireSlime;
+		ret.summon = std::move(slime);
+		ret.summonCount = 1;
+		return ret;
+	}
+
+	inline SummonSpell getSummonIceSlimeSpell()
+	{
+		SummonSpell ret;
+		ret.element = Elements::Ice;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		auto slime = std::make_unique<SlimeSummon>();
+		slime->element = Elements::Ice;
+		slime->attackDamage = 4.0f;
+		slime->statusAmount = 2.0f;
+		slime->tileSet = getAssetManager().iceSlime;
+		ret.summon = std::move(slime);
+		ret.summonCount = 1;
+		return ret;
+	}
+
 	inline BasicMagicMissleSpell getEarthWaterThornSpell()
 	{
 		BasicMagicMissleSpell ret;
@@ -413,6 +461,9 @@ namespace SpellTypes
 		waterStandby,
 		waterHomingStandby,
 		iceStandby,
+		summonWaterSlime,
+		summonFireSlime,
+		summonIceSlime,
 		earthWaterThorn,
 		iceBolt,
 		dragonsBreath,

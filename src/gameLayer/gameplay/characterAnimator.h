@@ -46,13 +46,17 @@ struct CharacterAnimator
 	{
 		// Treat tiny movement as zero to avoid jitter
 		constexpr float kEps = 1e-6f;
+		constexpr int moveFrames = 6;
 	
 		if (glm::length2(movement) <= kEps)
 		{
 			// No movement: keep / set idle animation like you already do
 			if (positionY > 2)
 			{
-				setAnimation(positionY - 3);
+				if (positionX >= moveFrames - 1)
+				{
+					setAnimation(positionY - 3);
+				}
 			}
 			return;
 		}

@@ -21,6 +21,9 @@ namespace SpellTypes
 			{Elements::Earth,Elements::Water},	//waterStandby,
 			{Elements::Earth,Elements::Water,Elements::Water},	//waterHomingStandby,
 			{Elements::Earth,Elements::Ice,Elements::Ice},	//iceStandby,
+			{Elements::Earth,Elements::Earth,Elements::Water},	//summonWaterSlime,
+			{Elements::Earth,Elements::Earth,Elements::Fire},	//summonFireSlime,
+			{Elements::Earth,Elements::Earth,Elements::Ice},	//summonIceSlime,
 			{Elements::Earth,Elements::Water,Elements::Earth,Elements::Water},	//earthWaterThorn,
 			{Elements::Ice},	//iceBolt,
 			{Elements::Fire,Elements::Fire,Elements::Fire},	//dragonsBreath,
@@ -119,6 +122,18 @@ namespace SpellTypes
 
 		case iceStandby:
 		return std::make_unique<DualStandbyProjectilesSpell>(getIceStandbySpell());
+		break;
+
+		case summonWaterSlime:
+		return std::make_unique<SummonSpell>(getSummonWaterSlimeSpell());
+		break;
+
+		case summonFireSlime:
+		return std::make_unique<SummonSpell>(getSummonFireSlimeSpell());
+		break;
+
+		case summonIceSlime:
+		return std::make_unique<SummonSpell>(getSummonIceSlimeSpell());
 		break;
 
 		case earthWaterThorn:

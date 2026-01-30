@@ -3,6 +3,7 @@
 #include <gameplay/map.h>
 #include <gameplay/player.h>
 #include <gameplay/projectiles/projectiles.h>
+#include <gameplay/summons.h>
 #include <gameplay/damageViewerSystem.h>
 #include <gameplay/aStar.h>
 #include <gameplay/elements.h>
@@ -195,6 +196,44 @@ struct DualStandbyProjectilesSpell: public Spell
 	}
 };
 
+// Spawns a summon that follows and aids the player.
+struct SummonSpell: public Spell
+{
+	// **configuration variables**
+	std::unique_ptr<SummonEntity> summon;
+	int summonCount = 1;
+
+	// **state variables**
+	// (none)
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		(void)deltaTime;
+		(void)map;
+		(void)mainParticleSystem;
+		(void)projectileHolder;
+		(void)rng;
+		(void)entityHolder;
+		(void)currentAimDir;
+
+		if (!summon)
+		{
+			return true;
+		}
+
+		auto &summonHolder = getSummonHolder();
+		for (int i = 0; i < summonCount; i++)
+		{
+			auto sptr = summon->clone();
+			summonHolder.addSummonAsPtr(std::move(sptr), player.physics.getPos());
+		}
+
+		return true;
+	}
+};
+
 // Triple earth shot that fires fixed-angle ricocheting projectiles.
 struct TripleEarthRicochetSpell: public Spell
 {
@@ -291,7 +330,7 @@ struct WaterSiphonSpell: public Spell
 	float tickInterval = 0.12f;
 	float particleSpeed = 10.0f;
 	float minDamage = 0.1f;
-	float maxDamage = 2.5f;
+	float maxDamage = 1.f;
 	float rampDuration = 0.5f;
 
 	// **state variables**
