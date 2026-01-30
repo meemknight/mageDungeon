@@ -217,7 +217,6 @@ bool GameLogic::update(float deltaTime,
 		if (!hasWand[newIndex]) { return; }
 		if (newIndex == activeWandIndex) { return; }
 		int oldIndex = activeWandIndex;
-		returnStonesFromWand(oldIndex, wands[oldIndex]);
 		draggingStoneIndex = -1;
 		draggingStoneOffset = {};
 		draggingStone = false;
@@ -970,7 +969,7 @@ bool GameLogic::update(float deltaTime,
 		renderer.renderRectangle({0, 0, (float)renderer.windowW, (float)renderer.windowH},
 			{0.02f, 0.02f, 0.03f, 0.75f});
 		// inventory book background
-		float bookScale = 0.8f;
+		float bookScale = 0.85f;
 		float bookW = renderer.windowW * bookScale;
 		float bookH = renderer.windowH * bookScale;
 		glm::vec2 bookPos = {(renderer.windowW - bookW) * 0.5f, (renderer.windowH - bookH) * 0.5f};
@@ -1037,13 +1036,31 @@ bool GameLogic::update(float deltaTime,
 			switchActiveWand(clickedSlot, true);
 		}
 
-		float stoneSize = PIXEL_SIZE * 12.0f * uiZoom;
-		float stoneSpacing = stoneSize * 1.3f;
-		glm::vec2 stoneBase = {bookPos.x + bookW * 0.52f, bookPos.y + bookH * 0.32f};
+		glm::vec2 ringCenter = {renderer.windowW * 0.62f, renderer.windowH * 0.38f};
+		float ringSize = PIXEL_SIZE * 44.0f * uiZoom * (2.0f / 2.6f);
+		float ringOffset = ringSize * 0.4f;
+		float iconSize = ringSize * 0.34f;
+		float textSize = iconSize * 0.55f;
+		float textOffset = iconSize * 0.6f;
+		glm::vec2 slotDirs[4] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
+		glm::vec4 ringSlotRects[4] = {};
+		for (int i = 0; i < 4; i++)
+		{
+			glm::vec2 center = ringCenter + slotDirs[i] * ringOffset;
+			ringSlotRects[i] = {center.x - iconSize * 0.5f, center.y - iconSize * 0.5f,
+				iconSize, iconSize};
+		}
+		bool ringSlotRectsReady = true;
+
+		float stoneSize = PIXEL_SIZE * 10.0f * uiZoom;
+		float stoneSpacing = stoneSize * 1.25f;
+		glm::vec2 stoneBase = {ringCenter.x + ringSize * 0.78f, ringCenter.y - ringSize * 0.55f};
 
 		auto renderStone = [&](glm::vec4 rect, const MagicStone &stone, float alpha)
 		{
-			renderer.renderRectangle(rect, {0.2f, 0.2f, 0.2f, 0.85f * alpha});
+			float inset = rect.z * 0.12f;
+			glm::vec4 bgRect = {rect.x + inset, rect.y + inset, rect.z - inset * 2.0f, rect.w - inset * 2.0f};
+			renderer.renderRectangle(bgRect, {0.2f, 0.2f, 0.2f, 0.85f * alpha});
 			float iconSize = rect.z * 0.75f;
 			glm::vec4 iconRect = {rect.x + (rect.z - iconSize) * 0.5f,
 				rect.y + (rect.w - iconSize) * 0.5f, iconSize, iconSize};
@@ -1082,31 +1099,34 @@ bool GameLogic::update(float deltaTime,
 			}
 		}
 
-		glm::vec4 ringSlotRects[4] = {};
-		bool ringSlotRectsReady = false;
-
 		// wand stats ring (right side)
 		{
 			Wand &inventoryWand = wands[activeWandIndex];
+			if (!draggingStone && input.lMouse.pressed)
+			{
+				for (int slotIndex = 0; slotIndex < 4; slotIndex++)
+				{
+					if (!wandStoneSlots[activeWandIndex][slotIndex].hasStone) { continue; }
+					if (!isInsideRect(ringSlotRects[slotIndex], cursorPos)) { continue; }
+					MagicStone stone = wandStoneSlots[activeWandIndex][slotIndex].stone;
+					wandStoneSlots[activeWandIndex][slotIndex] = {};
+					if (auto *slot = getWandSlot(inventoryWand, slotIndex))
+					{
+						clearWandSlot(*slot);
+					}
+					stoneInventory.push_back(stone);
+					draggingStone = true;
+					draggingStoneIndex = (int)stoneInventory.size() - 1;
+					draggingStoneOffset = cursorPos - glm::vec2(ringSlotRects[slotIndex].x, ringSlotRects[slotIndex].y);
+					spellSelectionLogic[activeWandIndex].resetSelectionForWand(
+						wands[activeWandIndex], spellRecepies[activeWandIndex], false);
+					break;
+				}
+			}
 			int upRemaining = inventoryWand.up.type == WandSlotType::Element ? inventoryWand.up.castCount : 0;
 			int downRemaining = inventoryWand.down.type == WandSlotType::Element ? inventoryWand.down.castCount : 0;
 			int leftRemaining = inventoryWand.left.type == WandSlotType::Element ? inventoryWand.left.castCount : 0;
 			int rightRemaining = inventoryWand.right.type == WandSlotType::Element ? inventoryWand.right.castCount : 0;
-
-			glm::vec2 ringCenter = {renderer.windowW * 0.66f, renderer.windowH * 0.52f};
-			float ringSize = PIXEL_SIZE * 44.0f * uiZoom * (2.0f / 2.2f);
-			float ringOffset = ringSize * 0.4f;
-			float iconSize = ringSize * 0.34f;
-			float textSize = iconSize * 0.55f;
-			float textOffset = iconSize * 0.6f;
-			glm::vec2 slotDirs[4] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
-			for (int i = 0; i < 4; i++)
-			{
-				glm::vec2 center = ringCenter + slotDirs[i] * ringOffset;
-				ringSlotRects[i] = {center.x - iconSize * 0.5f, center.y - iconSize * 0.5f,
-					iconSize, iconSize};
-			}
-			ringSlotRectsReady = true;
 
 			glm::vec4 ringRect = {ringCenter.x - ringSize * 0.5f, ringCenter.y - ringSize * 0.5f,
 				ringSize, ringSize};
@@ -1145,6 +1165,13 @@ bool GameLogic::update(float deltaTime,
 				glm::vec2 center = {iconRect.x + iconRect.z * 0.5f, iconRect.y + iconRect.w * 0.5f};
 				if (slot.type == WandSlotType::Element)
 				{
+					if (wandStoneSlots[activeWandIndex][slotIndex].hasStone)
+					{
+						float inset = iconRect.z * 0.12f;
+						glm::vec4 stoneRect = {iconRect.x + inset, iconRect.y + inset,
+							iconRect.z - inset * 2.0f, iconRect.w - inset * 2.0f};
+						renderer.renderRectangle(stoneRect, {0.2f, 0.2f, 0.2f, 0.85f});
+					}
 					glm::vec4 iconShadowRect = {iconRect.x + shadowOffset.x, iconRect.y + shadowOffset.y,
 						iconRect.z, iconRect.w};
 					renderer.renderRectangle(iconShadowRect, assetsManager.elements.texture,

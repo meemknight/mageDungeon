@@ -92,7 +92,7 @@ struct Wand
 
 		//this wand has fire elemental affinity
 		fireStaff,
-
+		
 		diamondStaff,
 
 		//tier 5 wands
