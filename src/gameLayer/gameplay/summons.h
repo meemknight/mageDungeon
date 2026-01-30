@@ -94,6 +94,7 @@ struct SlimeSummon: public CloneableSummon<SlimeSummon>
 	float idleAnimSpeed = 1.1f;
 	float moveAnimSpeed = 1.7f * 0.9f;
 	float particleInterval = 0.12f;
+	float teleportDistance = 20.0f;
 	float deathFrameDuration = 0.12f;
 	float deathHoldDuration = 0.12f;
 	float deathFadeDuration = 0.4f;

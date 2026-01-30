@@ -191,6 +191,16 @@ bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParti
 	animator.setAnimationBasedOnMovement(moveDir);
 
 	basicPhysicsAndCollisionsCheck(deltaTime, map);
+	if ((physics.leftTouch || physics.rightTouch || physics.upTouch || physics.downTouch) &&
+		glm::dot(moveDir, moveDir) > 0.0001f)
+	{
+		repathTimer = 0.0f;
+		lastPathGoalTile = glm::ivec2(999999);
+		if (!pathTiles.empty() && pathIndex < (int)pathTiles.size())
+		{
+			pathIndex++;
+		}
+	}
 	return true;
 }
 

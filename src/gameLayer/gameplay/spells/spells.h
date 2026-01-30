@@ -234,6 +234,48 @@ struct SummonSpell: public Spell
 	}
 };
 
+// Fires a fixed-direction volley of projectiles.
+struct HomingVolleySpell: public Spell
+{
+	// **configuration variables**
+	std::unique_ptr<Projectile> projectile;
+	std::vector<glm::vec2> directions;
+	float throwVelocity = 6.0f;
+
+	// **state variables**
+	// (none)
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		if (!projectile)
+		{
+			return true;
+		}
+
+		for (auto dir : directions)
+		{
+			float len = glm::length(dir);
+			if (len <= 0.0001f)
+			{
+				dir = {1.0f, 0.0f};
+			}
+			else
+			{
+				dir /= len;
+			}
+
+			auto pptr = projectile->clone();
+			pptr->element = element;
+			pptr->physics.velocity = dir * throwVelocity;
+			projectileHolder.addProjectileAsPtr(std::move(pptr), player.physics.getPos());
+		}
+
+		return true;
+	}
+};
+
 // Triple earth shot that fires fixed-angle ricocheting projectiles.
 struct TripleEarthRicochetSpell: public Spell
 {

@@ -403,6 +403,30 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline HomingVolleySpell getCinderCompassSpell()
+	{
+		HomingVolleySpell ret;
+		HitStats hitStats;
+		hitStats.damage = 5.0f;
+		hitStats.pushBack = 5.2f;
+		ret.element = Elements::Fire;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		auto projectile = std::make_unique<HomingMagicMissle>(hitStats);
+		projectile->element = Elements::Fire;
+		ret.projectile = std::move(projectile);
+		ret.throwVelocity = 6.0f;
+		ret.directions = {
+			{0.0f, -1.0f},
+			{0.0f, 1.0f},
+			{-1.0f, -0.4f},
+			{-1.0f, 0.4f},
+			{1.0f, -0.4f},
+			{1.0f, 0.4f}
+		};
+		return ret;
+	}
+
 	inline BasicMagicMissleSpell getEarthWaterThornSpell()
 	{
 		BasicMagicMissleSpell ret;
@@ -498,6 +522,7 @@ namespace SpellTypes
 		summonWaterSlime,
 		summonFireSlime,
 		summonIceSlime,
+		cinderCompass,
 		earthWaterThorn,
 		iceBolt,
 		dragonsBreath,

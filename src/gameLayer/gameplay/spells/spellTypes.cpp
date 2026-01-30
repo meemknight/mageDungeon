@@ -24,6 +24,7 @@ namespace SpellTypes
 			{Elements::Earth,Elements::Earth,Elements::Water},	//summonWaterSlime,
 			{Elements::Earth,Elements::Earth,Elements::Fire},	//summonFireSlime,
 			{Elements::Earth,Elements::Earth,Elements::Ice},	//summonIceSlime,
+			{Elements::Earth,Elements::Water,Elements::Fire},	//cinderCompass,
 			{Elements::Earth,Elements::Water,Elements::Earth,Elements::Water},	//earthWaterThorn,
 			{Elements::Ice},	//iceBolt,
 			{Elements::Fire,Elements::Fire,Elements::Fire},	//dragonsBreath,
@@ -149,6 +150,10 @@ namespace SpellTypes
 
 		case summonIceSlime:
 		return std::make_unique<SummonSpell>(getSummonIceSlimeSpell());
+		break;
+
+		case cinderCompass:
+		return std::make_unique<HomingVolleySpell>(getCinderCompassSpell());
 		break;
 
 		case earthWaterThorn:

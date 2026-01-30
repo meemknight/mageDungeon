@@ -304,6 +304,16 @@ bool SlimeSummon::update(float deltaTime, Map &map, ParticleSystem &mainParticle
 	glm::vec2 summonPos = physics.getPos();
 	glm::vec2 toPlayer = playerPos - summonPos;
 	float distToPlayer = glm::length(toPlayer);
+	if (distToPlayer > teleportDistance)
+	{
+		physics.teleport(playerPos);
+		returningToPlayer = false;
+		pathTiles.clear();
+		pathIndex = 0;
+		repathTimer = 0.0f;
+		lastPathGoalTile = {999999, 999999};
+		return true;
+	}
 
 	if (distToPlayer > returnDistance)
 	{
@@ -452,6 +462,17 @@ bool SlimeSummon::update(float deltaTime, Map &map, ParticleSystem &mainParticle
 
 	physics.resolveConstrains(map);
 	physics.updateMove();
+
+	if ((physics.leftTouch || physics.rightTouch || physics.upTouch || physics.downTouch) &&
+		glm::dot(moveDir, moveDir) > 0.0001f)
+	{
+		repathTimer = 0.0f;
+		lastPathGoalTile = {999999, 999999};
+		if (!pathTiles.empty() && pathIndex < (int)pathTiles.size())
+		{
+			pathIndex++;
+		}
+	}
 
 	particleSystem.update(deltaTime);
 
