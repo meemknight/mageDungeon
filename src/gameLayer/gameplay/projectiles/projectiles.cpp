@@ -411,6 +411,19 @@ static ParticleSettings buildAimableOrbitParticle()
 	return orbit;
 }
 
+static int getRandomElementForWild(std::ranlux24_base &rng)
+{
+	return getRandomInt(rng, Elements::Fire, Elements::Ice);
+}
+
+static void applyWildColors(ParticleSettings &p, glm::vec4 startColor, glm::vec4 endColor)
+{
+	p.createApearence.color1 = startColor;
+	p.createApearence.color2 = startColor;
+	p.endApearence.color1 = endColor;
+	p.endApearence.color2 = endColor;
+}
+
 AimableBoltProjectile::AimableBoltProjectile()
 {
 	hitStats.damage = 18.0f;
@@ -593,6 +606,172 @@ void AimableEarthBoltProjectile::render(gl2d::Renderer2D &renderer, AssetsManage
 
 void AimableEarthBoltProjectile::onDestroy(std::ranlux24_base &rng)
 {
+}
+
+WildMagicBoltProjectile::WildMagicBoltProjectile()
+{
+	hitStats.damage = 12.0f;
+	hitStats.pushBack = 4.0f;
+	element = Elements::NoneElement;
+	timeAlieve = 7.0f;
+	physics.transform.size = {PIXEL_SIZE * 7.0f, PIXEL_SIZE * 7.0f};
+	physics.transform.isCircleCollider = true;
+	particleSystem.maxCount = 180;
+}
+
+bool WildMagicBoltProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+	std::ranlux24_base &rng, EntityHolder &entityHolder)
+{
+	if (firstTime)
+	{
+		firstTime = false;
+		glm::vec4 startColor = {0.9f, 0.9f, 0.9f, 0.7f};
+		glm::vec4 endColor = {0.7f, 0.7f, 0.7f, 0.7f};
+		baseEmission.sustain = getBasicMagicMissleParticle(startColor, endColor);
+		baseEmission.release = getBasicMagicMissleParticle(startColor, endColor);
+		baseEmission.release.particleLifeTime *= 1.4f;
+		baseEmission.emitTimer = 0.02f;
+		baseEmission.create = baseEmission.sustain;
+		baseEmission.sustain.createApearence.size *= particleSizeBias;
+		baseEmission.sustain.endApearence.size *= particleSizeBias;
+		baseEmission.release.createApearence.size *= particleSizeBias;
+		baseEmission.release.endApearence.size *= particleSizeBias;
+		baseEmission.create.createApearence.size *= particleSizeBias;
+		baseEmission.create.endApearence.size *= particleSizeBias;
+		baseEmission.sustain.folowParent = true;
+		baseEmission.release.folowParent = false;
+		baseEmission.create.folowParent = true;
+
+		orbitParticle = getOrbitParticle({0.8f, 0.4f, 0.95f, 0.7f}, {0.6f, 0.2f, 0.9f, 0.0f});
+		orbitParticle.onCreateCount = 2;
+		orbitParticle.particleLifeTime = {0.4f, 0.6f};
+		orbitParticle.createApearence.size = glm::vec2{2.2f, 3.0f} * PIXEL_SIZE;
+		orbitParticle.endApearence.size = glm::vec2{1.2f, 2.0f} * PIXEL_SIZE;
+		orbitParticle.animationScaleX = {PIXEL_SIZE * 6.0f, PIXEL_SIZE * 12.0f};
+		orbitParticle.animationScaleY = {PIXEL_SIZE * 6.0f, PIXEL_SIZE * 12.0f};
+		orbitParticle.folowParent = true;
+
+		particleSystem.emitParticles(baseEmission.create, physics.getPos(), rng, physics.getPos());
+		orbitTimer = getRandomFloat(rng, 0.0f, orbitInterval);
+	}
+
+	particleTimer -= deltaTime;
+	if (particleTimer < 0.0f)
+	{
+		particleTimer += baseEmission.emitTimer;
+		ParticleSettings mainParticle = baseEmission.sustain;
+		int randElement = getRandomElementForWild(rng);
+		auto startColor = elementToSecondaryColor(randElement); startColor.a = 0.75f;
+		auto endColor = elementToColor(randElement); endColor.a = 0.7f;
+		applyWildColors(mainParticle, startColor, endColor);
+		particleSystem.emitParticles(mainParticle, physics.getPos(), rng, physics.getPos());
+	}
+
+	orbitTimer -= deltaTime;
+	if (orbitTimer <= 0.0f)
+	{
+		orbitTimer += orbitInterval;
+		ParticleSettings spark = orbitParticle;
+		int randElement = getRandomElementForWild(rng);
+		auto startColor = elementToSecondaryColor(randElement); startColor.a = 0.85f;
+		auto endColor = elementToColor(randElement); endColor.a = 0.2f;
+		applyWildColors(spark, startColor, endColor);
+		particleSystem.emitParticles(spark, physics.getPos(), rng, physics.getPos());
+	}
+
+	if (basicProjectileHitEntitiesLogic(physics, physics.velocity,
+		element, entityHolder, hitStats, statusAmount))
+	{
+		return false;
+	}
+
+	if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+	{
+		particleSystem.emitParticles(baseEmission.release, physics.getPos(), rng, physics.getPos());
+		return false;
+	}
+
+	particleSystem.update(deltaTime);
+	return true;
+}
+
+void WildMagicBoltProjectile::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+	ParticlePostProcessRenderer &particlePostProcessRenderer)
+{
+	particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+	physics.renderCollider(renderer);
+}
+
+void WildMagicBoltProjectile::onDestroy(std::ranlux24_base &rng)
+{
+	glm::vec2 pos = physics.getPos();
+	int outcome = getRandomInt(rng, 0, 3);
+
+	if (outcome == 0)
+	{
+		HitStats burstStats;
+		burstStats.damage = 18.0f;
+		burstStats.pushBack = 7.0f;
+		int burstElement = getRandomElementForWild(rng);
+		auto burst = std::make_unique<BasicMagicMissle>(burstStats, 1.8f);
+		burst->element = burstElement;
+		burst->physics.transform.size = glm::vec2{PIXEL_SIZE * 18.0f, PIXEL_SIZE * 18.0f};
+		burst->timeAlieve = 0.2f;
+		getProjectileHolder().addProjectileDeferredAsPtr(std::move(burst), pos);
+		return;
+	}
+	else if (outcome == 1)
+	{
+		HitStats fusionStats;
+		fusionStats.damage = 4.0f;
+		fusionStats.pushBack = 4.0f;
+		int burstCount = 10;
+		float angleStep = 6.2831853f / (float)burstCount;
+		float angleOffset = getRandomFloat(rng, 0.0f, angleStep);
+		for (int i = 0; i < burstCount; i++)
+		{
+			float angle = angleOffset + angleStep * i;
+			glm::vec2 dir = {std::cos(angle), std::sin(angle)};
+			int elem = (i % 2 == 0) ? Elements::Fire : Elements::Ice;
+			auto bolt = std::make_unique<HomingMagicMissle>(fusionStats);
+			bolt->element = elem;
+			bolt->physics.velocity = dir * 6.5f;
+			getProjectileHolder().addProjectileDeferredAsPtr(std::move(bolt), pos);
+		}
+		return;
+	}
+	else if (outcome == 2)
+	{
+		int thornCount = 16;
+		for (int i = 0; i < thornCount; i++)
+		{
+			float angle = (6.2831853f / thornCount) * i;
+			float radius = getRandomFloat(rng, 0.6f, 1.2f);
+			glm::vec2 spawnPos = pos + glm::vec2{std::cos(angle), std::sin(angle)} * radius;
+			auto thorn = std::make_unique<ThornProjectile>();
+			thorn->element = Elements::Earth;
+			getProjectileHolder().addProjectileDeferredAsPtr(std::move(thorn), spawnPos);
+		}
+		return;
+	}
+	else
+	{
+		HitStats shardStats;
+		shardStats.damage = 2.5f;
+		shardStats.pushBack = 3.0f;
+		int shardCount = 12;
+		for (int i = 0; i < shardCount; i++)
+		{
+			float angle = (6.2831853f / shardCount) * i + getRandomFloat(rng, -0.2f, 0.2f);
+			glm::vec2 dir = {std::cos(angle), std::sin(angle)};
+			int shardElement = getRandomElementForWild(rng);
+			auto shard = std::make_unique<BasicMagicMissle>(shardStats, 0.9f);
+			shard->element = shardElement;
+			shard->physics.velocity = dir * 7.0f;
+			shard->timeAlieve = 1.2f;
+			getProjectileHolder().addProjectileDeferredAsPtr(std::move(shard), pos);
+		}
+	}
 }
 
 TrapProjectile::TrapProjectile()

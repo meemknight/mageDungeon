@@ -334,6 +334,30 @@ struct AimableEarthBoltProjectile: public CloneableProjectile<AimableEarthBoltPr
 	void onDestroy(std::ranlux24_base &rng) override;
 };
 
+// Unstable bolt that releases random elemental effects.
+struct WildMagicBoltProjectile: public CloneableProjectile<WildMagicBoltProjectile>
+{
+	// **configuration variables**
+	HitStats hitStats;
+	float particleSizeBias = 1.2f;
+	float orbitInterval = 0.06f;
+	float statusAmount = 0.0f;
+
+	// **state variables**
+	bool firstTime = true;
+	float particleTimer = 0.0f;
+	float orbitTimer = 0.0f;
+	ParticleEmissionSettings baseEmission;
+	ParticleSettings orbitParticle;
+
+	WildMagicBoltProjectile();
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng, EntityHolder &entityHolder) override;
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+		ParticlePostProcessRenderer &particlePostProcessRenderer) override;
+	void onDestroy(std::ranlux24_base &rng) override;
+};
+
 // Stationary thorn that damages a single enemy on contact.
 struct ThornProjectile: public CloneableProjectile<ThornProjectile>
 {

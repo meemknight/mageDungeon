@@ -66,6 +66,31 @@ namespace SpellTypes
 			}
 		}
 
+		if (recepie.count == 4)
+		{
+			bool used[5] = {};
+			bool allDifferent = true;
+			for (int i = 0; i < 4; i++)
+			{
+				int element = recepie.elements[i];
+				if (element == Elements::NoneElement)
+				{
+					allDifferent = false;
+					break;
+				}
+				if (used[element])
+				{
+					allDifferent = false;
+					break;
+				}
+				used[element] = true;
+			}
+			if (allDifferent)
+			{
+				return std::make_unique<BasicMagicMissleSpell>(getWildMagicSpell());
+			}
+		}
+
 		return getSpell((Spells)0);
 
 	}

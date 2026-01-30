@@ -540,6 +540,19 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline BasicMagicMissleSpell getWildMagicSpell()
+	{
+		BasicMagicMissleSpell ret;
+		ret.element = Elements::NoneElement;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		auto projectile = std::make_unique<WildMagicBoltProjectile>();
+		projectile->element = Elements::NoneElement;
+		ret.projectile = std::move(projectile);
+		ret.throwVelocity = 6.0f;
+		return ret;
+	}
+
 	inline WaterSiphonSpell getWaterSiphonSpell()
 	{
 		WaterSiphonSpell ret;
