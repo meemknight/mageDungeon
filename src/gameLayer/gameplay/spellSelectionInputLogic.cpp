@@ -642,8 +642,6 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 			float centerSize = ringSize * 0.38f;
 			glm::vec4 centerRect = {ringCenter.x - centerSize * 0.5f, ringCenter.y - centerSize * 0.5f,
 				centerSize, centerSize};
-			glm::vec3 elementColor = elementToColor(wand.alwaysCast.element);
-			renderer.renderRectangle(centerRect, {elementColor, 0.35f});
 			renderer.renderRectangle(centerRect, assetsManager.elements.texture,
 				{1, 1, 1, 0.9f}, {}, 0,
 				assetsManager.elements.atlas.get(wand.alwaysCast.element, 0));

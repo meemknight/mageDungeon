@@ -4,6 +4,7 @@
 #include <gameplay/player.h>
 #include <gameplay/projectiles/projectiles.h>
 #include <gameplay/summons.h>
+#include <gameplay/paletteEffect.h>
 #include "particleSystem.h"
 #include <gameplay/entities/entity.h>
 #include <gameplay/spells/spells.h>
@@ -34,6 +35,9 @@ struct GameLogic
 
 	ParticleSystem particleSystem;
 	ParticlePostProcessRenderer particlePostProcessRenderer;
+	gl2d::FrameBuffer gameFbo;
+	PaletteEffect paletteEffect;
+	bool inventoryOpen = false;
 
 	glm::vec2 fireDirection = {1,0};
 	glm::vec2 fireTargetPos = {1,0};

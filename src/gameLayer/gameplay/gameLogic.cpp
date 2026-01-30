@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cstdio>
 #include <cmath>
+#include <logs.h>
 #include <gameplay/entities/entity.h>
 #include <gameplay/entities/enemyTypes.h>
 #define GLM_ENABLE_EXPERIMENTAL
@@ -37,6 +38,8 @@ bool GameLogic::init()
 	summons.clear();
 
 	particlePostProcessRenderer.init();
+	gameFbo.create(1, 1, true);
+	paletteEffect.loadPalette();
 
 	if (floorInfo.playerSpawnPos)
 	{
@@ -263,6 +266,15 @@ bool GameLogic::update(float deltaTime,
 		spawnParticleTest(getBobParticle({0.9f, 0.7f, 0.5f, 0.9f}, {0.6f, 0.4f, 0.3f, 0.7f}));
 	}
 
+	ImGui::Separator();
+	ImGui::Text("Palette");
+	ImGui::Checkbox("Palette Particles", &paletteEffect.enabledParticles);
+	ImGui::Checkbox("Palette Game", &paletteEffect.enabledGame);
+	if (!paletteEffect.hasPalette())
+	{
+		ImGui::Text("Palette: not loaded");
+	}
+
 	if (ImGui::Button("Exit"))
 	{
 		exitDungeon = true;
@@ -277,8 +289,16 @@ bool GameLogic::update(float deltaTime,
 	glm::vec2 screenCenter = {renderer.windowW / 2.f, renderer.windowH / 2.f};
 	static bool usesController = 0;
 
+	if (input.buttons[platform::Button::Tab].pressed)
 	{
-		auto statusTick = updateStatusEffects(player.statusEffects, player.statusImmunities, deltaTime);
+		inventoryOpen = !inventoryOpen;
+	}
+
+	// pause gameplay updates while inventory is open
+	float simDelta = inventoryOpen ? 0.0f : deltaTime;
+
+	{
+		auto statusTick = updateStatusEffects(player.statusEffects, player.statusImmunities, simDelta);
 		player.statusSpeedMultiplier = statusTick.speedMultiplier;
 		if (statusTick.damage > 0.0f)
 		{
@@ -287,99 +307,106 @@ bool GameLogic::update(float deltaTime,
 			damagePos.y -= player.physics.transform.size.y * 0.6f;
 			getDamageViewerSystem().addDamage(statusTick.damage, damagePos);
 		}
-		updateStatusEffectParticles(player.statusEffects, particleSystem, rng, player.physics.getPos(), deltaTime);
+		updateStatusEffectParticles(player.statusEffects, particleSystem, rng, player.physics.getPos(), simDelta);
 	}
 
 #pragma region input
 	{
 
-		glm::vec2 move = {};
-		if (platform::isButtonHeld(platform::Button::A))
+		if (!inventoryOpen)
 		{
-			move.x -= 1;
-			usesController = false;
-		}
-		if (platform::isButtonHeld(platform::Button::D))
-		{
-			move.x += 1;
-			usesController = false;
-		}
-		if (platform::isButtonHeld(platform::Button::W))
-		{
-			move.y -= 1;
-			usesController = false;
-		}
-		if (platform::isButtonHeld(platform::Button::S))
-		{
-			move.y += 1;
-			usesController = false;
-		}
-
-		if (glm::length(platform::getControllerButtons().LStick) > 0.1 || glm::length(platform::getControllerButtons().RStick) > 0.1)
-		{
-			usesController = true;
-		}
-
-		if (platform::isLMouseHeld() || platform::isRMouseHeld() || platform::mouseMoved())
-		{
-			usesController = false;
-		}
-
-		fireInputActive = platform::mouseMoved() ||
-			(glm::length(platform::getControllerButtons().RStick) > 0.4f);
-
-		move += platform::getControllerButtons().LStick * glm::vec2(1, -1);
-
-		if (glm::length(move) != 0)
-		{
-			move = glm::normalize(move);
-			move *= deltaTime * 6.f * player.statusSpeedMultiplier; //player speed
-		}
-
-		player.physics.getPos() += move;
-		player.animator.setAnimationBasedOnMovement(move);
-
-		bool swapWand = input.buttons[platform::Button::E].pressed ||
-			input.controller.buttons[platform::Controller::A].pressed;
-		droppedItems.trySwapWithPlayer(player.physics.getPos(), currentWand, swapWand);
-
-		//fire dirrection
-		{
-			if (!usesController)
+			glm::vec2 move = {};
+			if (platform::isButtonHeld(platform::Button::A))
 			{
-				fireDirection = cursorPos - screenCenter;
+				move.x -= 1;
+				usesController = false;
 			}
-			else
+			if (platform::isButtonHeld(platform::Button::D))
 			{
-				auto c = platform::getControllerButtons().RStick;
-				float l = glm::length(c);
-				if (l > 0.4)
+				move.x += 1;
+				usesController = false;
+			}
+			if (platform::isButtonHeld(platform::Button::W))
+			{
+				move.y -= 1;
+				usesController = false;
+			}
+			if (platform::isButtonHeld(platform::Button::S))
+			{
+				move.y += 1;
+				usesController = false;
+			}
+
+			if (glm::length(platform::getControllerButtons().LStick) > 0.1 || glm::length(platform::getControllerButtons().RStick) > 0.1)
+			{
+				usesController = true;
+			}
+
+			if (platform::isLMouseHeld() || platform::isRMouseHeld() || platform::mouseMoved())
+			{
+				usesController = false;
+			}
+
+			fireInputActive = platform::mouseMoved() ||
+				(glm::length(platform::getControllerButtons().RStick) > 0.4f);
+
+			move += platform::getControllerButtons().LStick * glm::vec2(1, -1);
+
+			if (glm::length(move) != 0)
+			{
+				move = glm::normalize(move);
+				move *= simDelta * 6.f * player.statusSpeedMultiplier; //player speed
+			}
+
+			player.physics.getPos() += move;
+			player.animator.setAnimationBasedOnMovement(move);
+
+			bool swapWand = input.buttons[platform::Button::E].pressed ||
+				input.controller.buttons[platform::Controller::A].pressed;
+			droppedItems.trySwapWithPlayer(player.physics.getPos(), currentWand, swapWand);
+
+			//fire dirrection
+			{
+				if (!usesController)
 				{
-					fireDirection = c * glm::vec2(1,-1);
+					fireDirection = cursorPos - screenCenter;
+				}
+				else
+				{
+					auto c = platform::getControllerButtons().RStick;
+					float l = glm::length(c);
+					if (l > 0.4)
+					{
+						fireDirection = c * glm::vec2(1,-1);
+					}
+				}
+
+				float l = glm::length(fireDirection);
+				if (l <= 0.000000001)
+				{
+					fireDirection = {1,0};
+				}
+				else
+				{
+					fireDirection /= l;
+				}
+
+				if (!usesController)
+				{
+					fireTargetPos = {
+						viewRect.x + (cursorPos.x / renderer.windowW) * viewRect.z,
+						viewRect.y + (cursorPos.y / renderer.windowH) * viewRect.w
+					};
+				}
+				else
+				{
+					fireTargetPos = player.physics.getPos() + fireDirection * 1000.0f;
 				}
 			}
-
-			float l = glm::length(fireDirection);
-			if (l <= 0.000000001)
-			{
-				fireDirection = {1,0};
-			}
-			else
-			{
-				fireDirection /= l;
-			}
-
-			if (!usesController)
-			{
-				fireTargetPos = {
-					viewRect.x + (cursorPos.x / renderer.windowW) * viewRect.z,
-					viewRect.y + (cursorPos.y / renderer.windowH) * viewRect.w
-				};
-			}
-			else
-			{
-				fireTargetPos = player.physics.getPos() + fireDirection * 1000.0f;
-			}
+		}
+		else
+		{
+			fireInputActive = false;
 		}
 
 		platform::showMouse(!usesController);
@@ -393,27 +420,35 @@ bool GameLogic::update(float deltaTime,
 
 	player.physics.updateMove();
 
-	standbyProjectiles.update(deltaTime, map, projectiles, rng, player, entityHolder,
+	standbyProjectiles.update(simDelta, map, projectiles, rng, player, entityHolder,
 		fireDirection, fireInputActive);
-	projectiles.update(deltaTime, map, particleSystem, rng, entityHolder);
+	projectiles.update(simDelta, map, particleSystem, rng, entityHolder);
 
-	particleSystem.update(deltaTime);
-	damageViewerSystem.update(deltaTime);
-	droppedItems.update(deltaTime);
+	particleSystem.update(simDelta);
+	damageViewerSystem.update(simDelta);
+	droppedItems.update(simDelta);
 
-	summons.update(deltaTime, map, particleSystem, projectiles, rng, player, entityHolder);
+	summons.update(simDelta, map, particleSystem, projectiles, rng, player, entityHolder);
 
 #pragma endregion
 
 
 	renderer.currentCamera.zoom = zoom;
 	renderer.currentCamera.follow(player.physics.transform.getCenter(),
-		deltaTime * 4.f, 0.00001, 0,
+		simDelta * 4.f, 0.00001, 0,
 		renderer.windowW, renderer.windowH);
 
 	particlePostProcessRenderer.updateWindowMetrics(renderer);
 
 #pragma region rendering
+	bool paletteGame = paletteEffect.enabledGame && paletteEffect.hasPalette();
+	bool paletteParticles = paletteEffect.enabledParticles && paletteEffect.hasPalette() && !paletteGame;
+	if (paletteGame)
+	{
+		gameFbo.resize(renderer.windowW, renderer.windowH);
+		gameFbo.clear();
+		gameFbo.bind();
+	}
 
 	map.renderMap(renderer, assetsManager);
 
@@ -422,12 +457,12 @@ bool GameLogic::update(float deltaTime,
 	spellsHolder.renderBeforeEntities(renderer, particlePostProcessRenderer);
 	droppedItems.render(renderer, assetsManager);
 
-	entityHolder.update(deltaTime, map, particleSystem, rng, player, summons);
+	entityHolder.update(simDelta, map, particleSystem, rng, player, summons);
 	resolveEntityPush(entityHolder, player);
 	resolveSummonEntityPush(entityHolder, summons);
 
 	// contact damage from enemies
-	playerDamageCooldown = std::max(0.0f, playerDamageCooldown - deltaTime);
+	playerDamageCooldown = std::max(0.0f, playerDamageCooldown - simDelta);
 	if (playerDamageCooldown <= 0.0f)
 	{
 		for (auto &entity : entityHolder.entities)
@@ -455,7 +490,7 @@ bool GameLogic::update(float deltaTime,
 	// temporary: spawn enemies for testing
 	{
 		static float spawnTimer = 0.0f;
-		spawnTimer -= deltaTime;
+		spawnTimer -= simDelta;
 
 		int maxEnemies = 30;
 		if (spawnTimer <= 0.0f && entityHolder.entities.size() < maxEnemies && !floorInfo.rooms.empty())
@@ -528,7 +563,7 @@ bool GameLogic::update(float deltaTime,
 
 
 	//renderer.renderRectangle(player.physical.getAABB(), Colors_Red);
-	player.update(deltaTime);
+	player.update(simDelta);
 	player.render(renderer, assetsManager, currentWand, fireDirection);
 
 	auto renderStatusIcons = [&](glm::vec4 aabb, const StatusEffects &effects)
@@ -586,7 +621,26 @@ bool GameLogic::update(float deltaTime,
 
 	particleSystem.render(renderer, particlePostProcessRenderer, {});
 
-	particlePostProcessRenderer.finalRender(renderer);
+	if (paletteParticles)
+	{
+		if (paletteEffect.applyToTexture(renderer, particlePostProcessRenderer.fbo.texture,
+			paletteEffect.particlesTexture, paletteEffect.particlesSize,
+			{particlePostProcessRenderer.fbo.w, particlePostProcessRenderer.fbo.h}))
+		{
+			renderer.pushCamera();
+			renderer.renderRectangle({0,0, renderer.windowW, renderer.windowH},
+				paletteEffect.particlesTexture, {1,1,1,2}, {}, {}, {0,0,1,1});
+			renderer.popCamera();
+		}
+		else
+		{
+			particlePostProcessRenderer.finalRender(renderer);
+		}
+	}
+	else
+	{
+		particlePostProcessRenderer.finalRender(renderer);
+	}
 
 	map.renderMapAfterEntities(renderer, assetsManager);
 	damageViewerSystem.render(renderer, assetsManager.font);
@@ -622,33 +676,179 @@ bool GameLogic::update(float deltaTime,
 		renderer.popCamera();
 	}
 
-	// current wand display
+	if (paletteGame)
 	{
-		float cameraZoom = renderer.currentCamera.zoom;
+		gameFbo.unbind();
 		renderer.pushCamera();
-		glui::Frame screenFrame({0, 0, renderer.windowW, renderer.windowH});
+		if (paletteEffect.applyToTexture(renderer, gameFbo.texture, paletteEffect.gameTexture,
+			paletteEffect.gameSize, {gameFbo.w, gameFbo.h}))
+		{
+			renderer.renderRectangle({0,0, renderer.windowW, renderer.windowH},
+				paletteEffect.gameTexture, {1,1,1,1}, {}, {}, {0,0,1,1});
+		}
+		else
+		{
+			renderer.renderRectangle({0,0, renderer.windowW, renderer.windowH},
+				gameFbo.texture, {1,1,1,1}, {}, {}, {0,0,1,1});
+		}
+		renderer.popCamera();
+	}
 
-		int size = (int)(PIXEL_SIZE * 16 * cameraZoom);
-		int padding = (int)(PIXEL_SIZE * 3 * cameraZoom);
-		auto wandBox = glui::Box().xLeft(padding).yTop(padding)
-			.xDimensionPixels(size).yDimensionPixels(size)();
+	if (!inventoryOpen)
+	{
+		// current wand display
+		{
+			float cameraZoom = renderer.currentCamera.zoom;
+			renderer.pushCamera();
+			glui::Frame screenFrame({0, 0, renderer.windowW, renderer.windowH});
 
-		renderer.renderRectangle(wandBox, assetsManager.wands.texture, {1, 1, 1, 1}, {}, 0,
-			assetsManager.wands.atlas.get(currentWand.wandSprite, 0));
+			int size = (int)(PIXEL_SIZE * 16 * cameraZoom);
+			int padding = (int)(PIXEL_SIZE * 3 * cameraZoom);
+			auto wandBox = glui::Box().xLeft(padding).yTop(padding)
+				.xDimensionPixels(size).yDimensionPixels(size)();
+
+			renderer.renderRectangle(wandBox, assetsManager.wands.texture, {1, 1, 1, 1}, {}, 0,
+				assetsManager.wands.atlas.get(currentWand.wandSprite, 0));
+
+			renderer.popCamera();
+		}
+
+		// magic ui
+		{
+			spellSelectionInputLogic.update(simDelta, renderer, assetsManager,
+				spellRecepie, spellsHolder, map, projectiles, entityHolder,
+				player, fireDirection, usesController, currentWand, input);
+		}
+	}
+
+	if (inventoryOpen)
+	{
+		// inventory overlay
+		float cameraZoom = renderer.currentCamera.zoom;
+		float uiScale = std::min(renderer.windowW / 1280.0f, renderer.windowH / 720.0f);
+		float uiZoom = cameraZoom * uiScale;
+		renderer.pushCamera();
+		renderer.renderRectangle({0, 0, (float)renderer.windowW, (float)renderer.windowH},
+			{0.02f, 0.02f, 0.03f, 0.75f});
+		// inventory book background
+		float bookScale = 0.8f;
+		float bookW = renderer.windowW * bookScale;
+		float bookH = renderer.windowH * bookScale;
+		glm::vec2 bookPos = {(renderer.windowW - bookW) * 0.5f, (renderer.windowH - bookH) * 0.5f};
+		bookPos.y += renderer.windowH * 0.03f;
+		renderer.renderRectangle({bookPos.x, bookPos.y, bookW, bookH},
+			assetsManager.book, {1, 1, 1, 1});
+
+		glm::vec2 shadowOffset = {PIXEL_SIZE * 2.0f * uiZoom, PIXEL_SIZE * 2.0f * uiZoom};
+		glm::vec2 wandShadowOffset = {-shadowOffset.x, shadowOffset.y * 0.9f};
+		float shadowAlpha = 0.45f;
+
+		gl2d::Texture &wandTexture = assetsManager.getWandIcon(currentWand.wandSprite);
+		if (wandTexture.isValid())
+		{
+			auto wandSize = wandTexture.GetSize();
+			float maxW = renderer.windowW * 0.432f;
+			float maxH = renderer.windowH * 0.696f;
+			float scaleX = maxW / (float)wandSize.x;
+			float scaleY = maxH / (float)wandSize.y;
+			float scale = std::min(scaleX, scaleY);
+			float drawW = wandSize.x * scale;
+			float drawH = wandSize.y * scale;
+			glm::vec2 wandCenter = {renderer.windowW * 0.38f, renderer.windowH * 0.47f};
+			glm::vec4 wandRect = {wandCenter.x - drawW * 0.5f, wandCenter.y - drawH * 0.5f, drawW, drawH};
+			glm::vec4 wandShadowRect = {wandRect.x + wandShadowOffset.x, wandRect.y + wandShadowOffset.y,
+				wandRect.z, wandRect.w};
+			renderer.renderRectangle(wandShadowRect, wandTexture, {0, 0, 0, shadowAlpha});
+			renderer.renderRectangle(wandRect, wandTexture, {1, 1, 1, 1});
+		}
+
+		// wand stats ring (right side)
+		{
+			int upRemaining = currentWand.up.type == WandSlotType::Element ? currentWand.up.castCount : 0;
+			int downRemaining = currentWand.down.type == WandSlotType::Element ? currentWand.down.castCount : 0;
+			int leftRemaining = currentWand.left.type == WandSlotType::Element ? currentWand.left.castCount : 0;
+			int rightRemaining = currentWand.right.type == WandSlotType::Element ? currentWand.right.castCount : 0;
+
+			glm::vec2 ringCenter = {renderer.windowW * 0.66f, renderer.windowH * 0.52f};
+			float ringSize = PIXEL_SIZE * 44.0f * uiZoom * (2.0f / 2.2f);
+			float ringOffset = ringSize * 0.4f;
+			float iconSize = ringSize * 0.34f;
+			float textSize = iconSize * 0.55f;
+			float textOffset = iconSize * 0.6f;
+
+			glm::vec4 ringRect = {ringCenter.x - ringSize * 0.5f, ringCenter.y - ringSize * 0.5f,
+				ringSize, ringSize};
+			glm::vec4 ringShadowRect = {ringRect.x + shadowOffset.x, ringRect.y + shadowOffset.y,
+				ringRect.z, ringRect.w};
+
+			auto renderRingPiece = [&](gl2d::Texture t, const WandSlot &slot, int remaining)
+			{
+				bool hasElement = slot.type == WandSlotType::Element;
+				glm::vec3 baseColor = hasElement ? elementToColor(slot.element) : glm::vec3{0.25f, 0.25f, 0.25f};
+				if (hasElement && remaining <= 0)
+				{
+					baseColor = glm::mix(baseColor, glm::vec3{0.2f, 0.2f, 0.2f}, 0.6f);
+				}
+				float opacity = 1.0f;
+				renderer.renderRectangle(ringShadowRect, t, {0, 0, 0, shadowAlpha});
+				renderer.renderRectangle(ringRect, t, {baseColor, opacity});
+			};
+
+			renderRingPiece(assetsManager.upCircle, currentWand.up, upRemaining);
+			renderRingPiece(assetsManager.downCircle, currentWand.down, downRemaining);
+			renderRingPiece(assetsManager.leftCircle, currentWand.left, leftRemaining);
+			renderRingPiece(assetsManager.rightCircle, currentWand.right, rightRemaining);
+
+			auto renderRingIcon = [&](const WandSlot &slot, int remaining, glm::vec2 dir)
+			{
+				if (slot.type != WandSlotType::Element) { return; }
+				glm::vec2 center = ringCenter + dir * ringOffset;
+				glm::vec4 iconRect = {center.x - iconSize * 0.5f, center.y - iconSize * 0.5f,
+					iconSize, iconSize};
+				glm::vec4 iconShadowRect = {iconRect.x + shadowOffset.x, iconRect.y + shadowOffset.y,
+					iconRect.z, iconRect.w};
+				renderer.renderRectangle(iconShadowRect, assetsManager.elements.texture,
+					{0, 0, 0, shadowAlpha}, {}, 0,
+					assetsManager.elements.atlas.get(slot.element, 0));
+				renderer.renderRectangle(iconRect, assetsManager.elements.texture,
+					{1, 1, 1, 1}, {}, 0,
+					assetsManager.elements.atlas.get(slot.element, 0));
+
+				char countText[8] = {};
+				snprintf(countText, sizeof(countText), "%d", std::max(0, remaining));
+				glm::vec2 textPos = {center.x + textOffset, center.y + textSize * 0.35f};
+				float textAlpha = remaining > 0 ? 0.9f : 0.5f;
+				renderer.renderText(textPos, countText, assetsManager.font,
+					{1, 1, 1, textAlpha}, textSize, 4, 3, false);
+			};
+
+			renderRingIcon(currentWand.up, upRemaining, {0, -1});
+			renderRingIcon(currentWand.down, downRemaining, {0, 1});
+			renderRingIcon(currentWand.left, leftRemaining, {-1, 0});
+			renderRingIcon(currentWand.right, rightRemaining, {1, 0});
+
+			if (currentWand.alwaysCast.type == WandSlotType::Element)
+			{
+				float centerSize = ringSize * 0.38f;
+				glm::vec4 centerRect = {ringCenter.x - centerSize * 0.5f, ringCenter.y - centerSize * 0.5f,
+					centerSize, centerSize};
+				glm::vec4 centerShadowRect = {centerRect.x + shadowOffset.x, centerRect.y + shadowOffset.y,
+					centerRect.z, centerRect.w};
+				renderer.renderRectangle(centerShadowRect, assetsManager.elements.texture,
+					{0, 0, 0, shadowAlpha}, {}, 0,
+					assetsManager.elements.atlas.get(currentWand.alwaysCast.element, 0));
+				renderer.renderRectangle(centerRect, assetsManager.elements.texture,
+					{1, 1, 1, 1}, {}, 0,
+					assetsManager.elements.atlas.get(currentWand.alwaysCast.element, 0));
+			}
+		}
 
 		renderer.popCamera();
 	}
 
-	// magic ui
-	{
-		spellSelectionInputLogic.update(deltaTime, renderer, assetsManager,
-			spellRecepie, spellsHolder, map, projectiles, entityHolder,
-			player, fireDirection, usesController, currentWand, input);
-	}
-
 
 	//we want the first frame of the spell to happen in the same frame it was cast
-	spellsHolder.update(deltaTime, map, particleSystem,
+	spellsHolder.update(simDelta, map, particleSystem,
 		projectiles, rng, player, entityHolder, fireDirection);
 
 

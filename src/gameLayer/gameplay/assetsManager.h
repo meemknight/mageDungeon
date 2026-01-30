@@ -1,6 +1,7 @@
 #pragma once
 #include <gl2d/gl2d.h>
 #include <gameplay/blocks.h>
+#include <vector>
 
 struct TileSet
 {
@@ -32,6 +33,9 @@ struct AssetsManager
 	gl2d::Texture downCircle;
 	gl2d::Texture leftCircle;
 	gl2d::Texture rightCircle;
+	gl2d::Texture book;
+	std::vector<gl2d::Texture> wandIcons; // per-sprite textures for UI
+	gl2d::Texture wandFallback;
 
 	gl2d::Texture particleCircle;
 	gl2d::Texture particleSmoke;
@@ -42,6 +46,7 @@ struct AssetsManager
 
 
 	void loadAllAssets();
+	gl2d::Texture &getWandIcon(int index);
 
 
 };

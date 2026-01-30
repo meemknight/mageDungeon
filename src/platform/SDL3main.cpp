@@ -345,7 +345,7 @@ int main(int, char **)
 		}
 		else
 		{
-			io.Fonts->AddFontFromFileTTF(RESOURCES_PATH "arial.ttf", 16);
+			io.Fonts->AddFontFromFileTTF(RESOURCES_PATH "font/arial.ttf", 16);
 		}
 
 		ImFontConfig config;
@@ -354,7 +354,7 @@ int main(int, char **)
 		config.GlyphMinAdvanceX = 16.0f;
 
 		static const ImWchar icon_ranges[] = {ICON_MIN_FK, ICON_MAX_FK, 0};
-		io.Fonts->AddFontFromFileTTF(RESOURCES_PATH "fontawesome-webfont.ttf", 16.0f, &config, icon_ranges);
+		io.Fonts->AddFontFromFileTTF(RESOURCES_PATH "font/fontawesome-webfont.ttf", 16.0f, &config, icon_ranges);
 
 		io.Fonts->Build();
 	}

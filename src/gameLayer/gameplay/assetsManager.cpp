@@ -1,12 +1,18 @@
 #include <gameplay/assetsManager.h>
+#include <gameplay/paletteEffect.h>
 #include <logs.h>
 #include <magic_enum.hpp>
+#include <stb_image/stb_image.h>
+#include <vector>
+#include <filesystem>
+#include <algorithm>
+#include <cctype>
 
 
 void AssetsManager::loadAllAssets()
 {
 
-	font.createFromFile(RESOURCES_PATH "font/roboto_black.TTF");
+	font.createFromFile(RESOURCES_PATH "font/pixel.ttf");
 
 	//RESOURCES_PATH "map/Damp Dungeon Tileset.png"
 
@@ -151,14 +157,101 @@ void AssetsManager::loadAllAssets()
 	s = wands.texture.GetSize();
 	wands.atlas = gl2d::TextureAtlasPadding(32, 1, s.x, s.y);
 
+	PaletteEffect palette;
+	palette.loadPalette();
+	bool hasPalette = palette.hasPalette();
+	auto loadPalettedTexture = [&](gl2d::Texture &tex, const std::string &path)
+	{
+		int w = 0;
+		int h = 0;
+		int channels = 0;
+		unsigned char *data = stbi_load(path.c_str(), &w, &h, &channels, 4);
+		if (!data)
+		{
+			std::string err = "Error couldn't load texture: ";
+			err += path;
+			platform::log(err.c_str(), LogManager::logError);
+			return false;
+		}
+
+		std::vector<unsigned char> buffer(data, data + (size_t)w * (size_t)h * 4);
+		STBI_FREE(data);
+		if (hasPalette)
+		{
+			palette.applyToBuffer(buffer);
+		}
+		tex.createFromBuffer((const char *)buffer.data(), w, h, true, true);
+		if (!tex.isValid())
+		{
+			std::string err = "Error couldn't load texture: ";
+			err += path;
+			platform::log(err.c_str(), LogManager::logError);
+			return false;
+		}
+		return true;
+	};
+
 	upCircle.loadFromFile(RESOURCES_PATH "ui/upCircle.png");
 	downCircle.loadFromFile(RESOURCES_PATH "ui/downCircle.png");
 	leftCircle.loadFromFile(RESOURCES_PATH "ui/leftCircle.png");
 	rightCircle.loadFromFile(RESOURCES_PATH "ui/rightCircle.png");
+
+	// palette the inventory book texture so it matches the UI palette
+	loadPalettedTexture(book, RESOURCES_PATH "ui/book.png");
+
+	// load per-wand textures for the inventory UI
+	{
+		std::string wandDirectory = std::string(RESOURCES_PATH) + "wands/";
+		int maxIndex = -1;
+		if (std::filesystem::exists(wandDirectory))
+		{
+			for (auto &entry : std::filesystem::directory_iterator(wandDirectory))
+			{
+				if (!entry.is_regular_file()) { continue; }
+				auto path = entry.path();
+				if (path.extension() != ".png") { continue; }
+				std::string stem = path.stem().string();
+				if (stem.empty()) { continue; }
+				bool allDigits = std::all_of(stem.begin(), stem.end(), [](unsigned char c)
+				{
+					return std::isdigit(c) != 0;
+				});
+				if (!allDigits) { continue; }
+				int index = std::stoi(stem);
+				maxIndex = std::max(maxIndex, index);
+			}
+		}
+
+		if (maxIndex < 0) { maxIndex = 0; }
+		loadPalettedTexture(wandFallback, wandDirectory + "0.png");
+		wandIcons.clear();
+		wandIcons.resize(maxIndex + 1);
+		for (int i = 0; i <= maxIndex; i++)
+		{
+			std::string path = wandDirectory + std::to_string(i) + ".png";
+			if (std::filesystem::exists(path))
+			{
+				loadPalettedTexture(wandIcons[i], path);
+			}
+		}
+	}
 
 	particleCircle.loadFromFile(RESOURCES_PATH "circle.png");
 	particleSmoke.loadFromFile(RESOURCES_PATH "smoke.png");
 	target.loadFromFile(RESOURCES_PATH "target.png");
 	thorn.loadFromFile(RESOURCES_PATH "thorn.png");
 
+}
+
+gl2d::Texture &AssetsManager::getWandIcon(int index)
+{
+	if (index < 0 || index >= (int)wandIcons.size())
+	{
+		return wandFallback;
+	}
+	if (!wandIcons[index].isValid())
+	{
+		return wandFallback;
+	}
+	return wandIcons[index];
 }
