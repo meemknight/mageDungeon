@@ -229,17 +229,20 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 	if (controller.buttons[platform::Controller::Right].pressed) { quickIndex = 3; }
 	if (quickIndex >= 0)
 	{
-		bool quickReady = tryQuickCast(wand.quickActions[quickIndex]);
-		if (kQuickCastInstant && quickReady)
+		if (castCooldownTimer <= 0.0f)
 		{
-			if (spellRecepie.count > 0)
+			bool quickReady = tryQuickCast(wand.quickActions[quickIndex]);
+			if (kQuickCastInstant && quickReady)
 			{
-				auto spell = SpellTypes::getSpellFromRecepie(spellRecepie);
-				spellsHolder.addSpell(std::move(spell), player.physics.getPos(), fireDirection);
-				spellRecepie.clear();
-				resetCastState();
-				applyAlwaysCast();
-				castCooldownTimer = CAST_COOLDOWN;
+				if (spellRecepie.count > 0)
+				{
+					auto spell = SpellTypes::getSpellFromRecepie(spellRecepie);
+					spellsHolder.addSpell(std::move(spell), player.physics.getPos(), fireDirection);
+					spellRecepie.clear();
+					resetCastState();
+					applyAlwaysCast();
+					castCooldownTimer = CAST_COOLDOWN;
+				}
 			}
 		}
 	}

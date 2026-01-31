@@ -15,6 +15,7 @@
 #include <worldGen/floorGen.h>
 #include <gameplay/wand.h>
 #include <gameplay/droppedItems.h>
+#include <gameplay/spellbookPage.h>
 #include "spellSelectionInputLogic.h"
 
 //this is an instance of the game.
@@ -55,8 +56,9 @@ struct GameLogic
 	bool draggingStone = false;
 	int quickActionEditIndex = -1;
 	float wandHoverTimer = 0.0f;
-	float wandFailTimer = 0.0f;
 	DroppedItemSystem droppedItems; // dropped items like wands
+	SpellbookPage spellbookPage;
+	int inventoryPage = 0;
 
 	ParticleSystem particleSystem;
 	ParticlePostProcessRenderer particlePostProcessRenderer;

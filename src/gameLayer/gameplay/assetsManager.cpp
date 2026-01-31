@@ -131,7 +131,7 @@ void AssetsManager::loadAllAssets()
 
 	skeleton.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "characters/skeleton.png", 48);
 	s = skeleton.texture.GetSize();
-	skeleton.atlas = gl2d::TextureAtlasPadding(6, 13, s.x, s.y);
+	skeleton.atlas = gl2d::TextureAtlasPadding(6, 10, s.x, s.y);
 
 	waterSlime.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "characters/waterSlime.png", 32);
 	s = waterSlime.texture.GetSize();

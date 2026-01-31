@@ -5,10 +5,9 @@
 namespace SpellTypes
 {
 
-	std::unique_ptr<Spell> getSpellFromRecepie(SpellRecepie recepie)
+	static const SpellRecepie *getAllRecepies()
 	{
-
-		SpellRecepie allRecepies[] =
+		static SpellRecepie allRecepies[] =
 		{
 			{},
 			{},
@@ -51,12 +50,15 @@ namespace SpellTypes
 			{Elements::Earth,Elements::Earth,Elements::Earth,Elements::Ice},	//earthRicochetIce,
 			{Elements::Earth,Elements::Earth,Elements::Earth,Elements::Water},	//earthRicochetWater,
 			{Elements::Ice,Elements::Ice,Elements::Ice},	//bigIceBlock,
-
-
-
 		};
 
 		static_assert(sizeof(allRecepies) / sizeof(allRecepies[0]) == SPELLS_COUNT);
+		return allRecepies;
+	}
+
+	std::unique_ptr<Spell> getSpellFromRecepie(SpellRecepie recepie)
+	{
+		const SpellRecepie *allRecepies = getAllRecepies();
 
 		for (int i = 0; i < SPELLS_COUNT; i++)
 		{
@@ -93,6 +95,71 @@ namespace SpellTypes
 
 		return getSpell((Spells)0);
 
+	}
+
+	SpellRecepie getSpellRecepie(int spellType)
+	{
+		const SpellRecepie *allRecepies = getAllRecepies();
+		if (spellType < 0 || spellType >= SPELLS_COUNT)
+		{
+			return {};
+		}
+		return allRecepies[spellType];
+	}
+
+	const char *getSpellName(int spellType)
+	{
+		static const char *names[] =
+		{
+			"None",
+			"Spark Bolt",
+			"Fire Bolt",
+			"Water Bolt",
+			"Water Homing",
+			"Earth Bolt",
+			"Earth Thorn",
+			"Fire Standby",
+			"Water Standby",
+			"Ice Standby",
+			"Water Homing Standby",
+			"Ice Standby Volley",
+			"Summon Water Slime",
+			"Summon Fire Slime",
+			"Summon Ice Slime",
+			"Cinder Compass",
+			"Thorn Wall",
+			"Wild Growth",
+			"Earth Water Thorn",
+			"Ice Bolt",
+			"Dragon Breath",
+			"Ice Trap",
+			"Fire Trap",
+			"Water Trap",
+			"Earth Trap",
+			"Fire Homing",
+			"Earth Homing",
+			"Ice Homing",
+			"Fast Fire Bolt",
+			"Fast Ice Bolt",
+			"Aimable Fire Bolt",
+			"Aimable Ice Bolt",
+			"Aimable Earth Bolt",
+			"Flame Wall",
+			"Ice Wall",
+			"Boulder",
+			"Water Siphon",
+			"Earth Ricochet",
+			"Earth Ricochet Ice",
+			"Earth Ricochet Water",
+			"Big Ice Block",
+		};
+
+		static_assert(sizeof(names) / sizeof(names[0]) == SPELLS_COUNT);
+		if (spellType < 0 || spellType >= SPELLS_COUNT)
+		{
+			return "Spell";
+		}
+		return names[spellType];
 	}
 
 	std::unique_ptr<Spell> getSpell(int spellType)

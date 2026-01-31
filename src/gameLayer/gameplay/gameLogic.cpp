@@ -42,6 +42,8 @@ bool GameLogic::init()
 	spellRecepies[1].clear();
 	spellSelectionLogic[0] = {};
 	spellSelectionLogic[1] = {};
+	spellbookPage.init();
+	inventoryPage = 0;
 	stoneInventory.clear();
 	for (int wandIndex = 0; wandIndex < 2; wandIndex++)
 	{
@@ -577,7 +579,6 @@ bool GameLogic::update(float deltaTime,
 	// pause gameplay updates while inventory is open
 	float simDelta = inventoryOpen ? 0.0f : deltaTime;
 	wandHoverTimer += deltaTime;
-	wandFailTimer = std::max(0.0f, wandFailTimer - deltaTime);
 
 	{
 		auto statusTick = updateStatusEffects(player.statusEffects, player.statusImmunities, simDelta);
@@ -1062,18 +1063,58 @@ bool GameLogic::update(float deltaTime,
 		float bookH = renderer.windowH * bookScale;
 		glm::vec2 bookPos = {(renderer.windowW - bookW) * 0.5f, (renderer.windowH - bookH) * 0.5f};
 		bookPos.y += renderer.windowH * 0.03f;
-		renderer.renderRectangle({bookPos.x, bookPos.y, bookW, bookH},
-			assetsManager.book, {1, 1, 1, 1});
-
-		glm::vec2 shadowOffset = {PIXEL_SIZE * 2.0f * uiZoom, PIXEL_SIZE * 2.0f * uiZoom};
-		glm::vec2 wandShadowOffset = {-shadowOffset.x, shadowOffset.y * 0.9f};
-		float shadowAlpha = 0.45f;
+		glm::vec4 bookRect = {bookPos.x, bookPos.y, bookW, bookH};
 
 		auto isInsideRect = [&](glm::vec4 rect, glm::vec2 pos)
 		{
 			return pos.x >= rect.x && pos.x <= rect.x + rect.z &&
 				pos.y >= rect.y && pos.y <= rect.y + rect.w;
 		};
+
+		// bookmarks behind the book
+		{
+			float tabW = bookW * 0.18f;
+			float tabH = bookH * 0.09f;
+			float tabGap = bookW * 0.02f;
+			float tabX = bookPos.x + bookW * 0.1f;
+			float tabY = bookPos.y - tabH * 0.9f;
+			const char *tabNames[] = {"Wands", "Spells"};
+			for (int i = 0; i < 2; i++)
+			{
+				glm::vec4 tabRect = {tabX + i * (tabW + tabGap), tabY, tabW, tabH};
+				glm::vec4 tabColor = {0.18f, 0.16f, 0.12f, 0.85f};
+				if (inventoryPage == i)
+				{
+					tabColor = {0.32f, 0.28f, 0.2f, 0.95f};
+				}
+				renderer.renderRectangle(tabRect, tabColor);
+				float tabTextSize = tabH * 0.45f;
+				glm::vec2 tabTextPos = {tabRect.x + tabRect.z * 0.5f, tabRect.y + tabRect.w * 0.2f};
+				renderer.renderText(tabTextPos, tabNames[i], assetsManager.font,
+					{0.9f, 0.9f, 0.9f, 0.9f}, tabTextSize, 4, 3, true);
+				if (input.lMouse.pressed && isInsideRect(tabRect, cursorPos))
+				{
+					inventoryPage = i;
+					quickActionEditIndex = -1;
+					draggingStoneIndex = -1;
+					draggingStone = false;
+				}
+			}
+		}
+
+		renderer.renderRectangle({bookPos.x, bookPos.y, bookW, bookH},
+			assetsManager.book, {1, 1, 1, 1});
+
+		spellbookPage.update(deltaTime, rng);
+		if (inventoryPage == 1)
+		{
+			spellbookPage.render(renderer, assetsManager, bookRect, cursorPos, input.lMouse.pressed);
+		}
+		else
+		{
+			glm::vec2 shadowOffset = {PIXEL_SIZE * 2.0f * uiZoom, PIXEL_SIZE * 2.0f * uiZoom};
+			glm::vec2 wandShadowOffset = {-shadowOffset.x, shadowOffset.y * 0.9f};
+			float shadowAlpha = 0.45f;
 
 		float largeWandMaxW = renderer.windowW * 0.38f;
 		float largeWandMaxH = renderer.windowH * 0.62f;
@@ -1392,27 +1433,27 @@ bool GameLogic::update(float deltaTime,
 				{
 					if (spellSelectionLogic[activeWandIndex].currentMana < 1.0f)
 					{
-						wandFailTimer = 0.2f;
+						// no mana feedback handled by selection logic
 					}
 					else
 					{
-					WandSlot *slot = getWandSlot(inventoryWand, selectSlot);
-					int *remainingPtr = nullptr;
-					switch (selectSlot)
-					{
+						WandSlot *slot = getWandSlot(inventoryWand, selectSlot);
+						int *remainingPtr = nullptr;
+						switch (selectSlot)
+						{
 						case 0: remainingPtr = &upRemaining; break;
 						case 1: remainingPtr = &downRemaining; break;
 						case 2: remainingPtr = &leftRemaining; break;
 						case 3: remainingPtr = &rightRemaining; break;
 						default: break;
 					}
-					if (slot && remainingPtr && slot->type == WandSlotType::Element && *remainingPtr > 0)
-					{
-						if (editAction->add(slot->element, maxElements))
+						if (slot && remainingPtr && slot->type == WandSlotType::Element && *remainingPtr > 0)
 						{
-							recomputeRemaining();
+							if (editAction->add(slot->element, maxElements))
+							{
+								recomputeRemaining();
+							}
 						}
-					}
 					}
 				}
 			}
@@ -1621,6 +1662,7 @@ bool GameLogic::update(float deltaTime,
 			glm::vec4 dragRect = {dragPos.x, dragPos.y, stoneSize, stoneSize};
 			renderStone(dragRect, stoneInventory[draggingStoneIndex], 0.95f);
 		}
+		} // inventoryPage == 0
 
 		renderer.popCamera();
 	}

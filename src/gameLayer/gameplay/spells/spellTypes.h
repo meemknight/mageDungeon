@@ -612,6 +612,8 @@ namespace SpellTypes
 	std::unique_ptr<Spell> getSpellFromRecepie(SpellRecepie recepie);
 
 	std::unique_ptr<Spell> getSpell(int spellType);
+	SpellRecepie getSpellRecepie(int spellType);
+	const char *getSpellName(int spellType);
 
 
 };
