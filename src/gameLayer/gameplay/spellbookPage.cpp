@@ -1,6 +1,8 @@
 #include <gameplay/spellbookPage.h>
 #include <gameplay/assetsManager.h>
 #include <gameplay/blocks.h>
+#include <gameplay/wand.h>
+#include <gameLayer.h>
 #include <randomStuff.h>
 #include <gl2d/gl2d.h>
 #include <algorithm>
@@ -13,19 +15,97 @@ void SpellbookPage::init()
 
 	for (int i = 1; i < SpellTypes::SPELLS_COUNT; i++)
 	{
-		SpellbookEntry entry;
+		entries.emplace_back();
+		auto &entry = entries.back();
 		entry.spellType = i;
 		entry.recipe = SpellTypes::getSpellRecepie(i);
 		entry.name = SpellTypes::getSpellName(i);
-		entries.push_back(entry);
 	}
 
-	SpellbookEntry unstable;
+	entries.emplace_back();
+	auto &unstable = entries.back();
 	unstable.spellType = -1;
 	unstable.recipe = {};
 	unstable.name = "Wild Magic";
 	unstable.unstable = true;
-	entries.push_back(unstable);
+}
+
+// Initializes the tiny simulation used for spell previews.
+static void initPreviewContext(SpellPreviewContext &ctx, std::ranlux24_base &rng)
+{
+	if (ctx.initialized) { return; }
+	ctx.initialized = true;
+	ctx.particleRenderer.init();
+	ctx.map.create(6, 4);
+	for (int y = 0; y < ctx.map.size.y; y++)
+	{
+		for (int x = 0; x < ctx.map.size.x; x++)
+		{
+			int variant = getRandomInt(rng, 0, 4);
+			ctx.map.firstLayer.getBlockUnsafe(x, y).type =
+				variant == 0 ? Blocks::grassDecoration : Blocks::grass;
+		}
+	}
+	ctx.player.physics.teleport({ctx.map.size.x * 0.5f, ctx.map.size.y * 0.45f});
+	ctx.player.animator.setAnimationBasedOnMovement({0.0f, 1.0f});
+	ctx.player.life = ctx.player.maxLife;
+	ctx.previewWand = makeStarterWand(rng);
+}
+
+static void resetPreviewContext(SpellPreviewContext &ctx, int spellType, std::ranlux24_base &rng)
+{
+	ctx.spellType = spellType;
+	ctx.spells.spells.clear();
+	ctx.projectiles.projectiles.clear();
+	ctx.projectiles.pendingProjectiles.clear();
+	ctx.particleSystem.particles.clear();
+	ctx.summons.clear();
+	ctx.standbyProjectiles.standbyProjectiles.clear();
+	ctx.standbyProjectiles.insertIndex = 1;
+	ctx.entities.entities.clear();
+	ctx.damageViewer = {};
+	ctx.castTimer = 0.0f;
+	ctx.standbyFireTimer = 0.0f;
+	ctx.player.physics.teleport({ctx.map.size.x * 0.5f, ctx.map.size.y * 0.45f});
+	ctx.player.animator.setAnimationBasedOnMovement({0.0f, 1.0f});
+	ctx.player.life = ctx.player.maxLife;
+}
+
+static void updatePreviewContext(SpellPreviewContext &ctx, float deltaTime, std::ranlux24_base &rng,
+	int spellType, bool unstable)
+{
+	ctx.castTimer -= deltaTime;
+	ctx.standbyFireTimer -= deltaTime;
+	if (ctx.castTimer <= 0.0f)
+	{
+		ctx.castTimer = 1.1f;
+		if (unstable)
+		{
+			auto spell = SpellTypes::getWildMagicSpell();
+			ctx.spells.addSpell(std::move(spell), ctx.player.physics.getPos(), ctx.aimDirection);
+		}
+		else
+		{
+			auto spell = SpellTypes::getSpell(spellType);
+			ctx.spells.addSpell(std::move(spell), ctx.player.physics.getPos(), ctx.aimDirection);
+		}
+	}
+
+	ctx.spells.update(deltaTime, ctx.map, ctx.particleSystem,
+		ctx.projectiles, rng, ctx.player, ctx.entities, ctx.aimDirection);
+
+	if (ctx.standbyFireTimer <= 0.0f)
+	{
+		ctx.standbyFireTimer = 0.9f;
+		ctx.standbyProjectiles.tryFire(ctx.map, ctx.projectiles, ctx.player, ctx.entities, ctx.aimDirection);
+	}
+	ctx.standbyProjectiles.update(deltaTime, ctx.map, ctx.projectiles, rng,
+		ctx.player, ctx.entities, ctx.aimDirection, true);
+
+	ctx.projectiles.update(deltaTime, ctx.map, ctx.particleSystem, rng, ctx.entities);
+	ctx.particleSystem.update(deltaTime);
+	ctx.summons.update(deltaTime, ctx.map, ctx.particleSystem, ctx.projectiles, rng, ctx.player, ctx.entities);
+	ctx.player.update(deltaTime);
 }
 
 void SpellbookPage::update(float deltaTime, std::ranlux24_base &rng)
@@ -50,7 +130,7 @@ void SpellbookPage::update(float deltaTime, std::ranlux24_base &rng)
 }
 
 void SpellbookPage::render(gl2d::Renderer2D &renderer, AssetsManager &assetsManager,
-	const glm::vec4 &bookRect, const glm::vec2 &cursorPos, bool click)
+	std::ranlux24_base &rng, const glm::vec4 &bookRect, const glm::vec2 &cursorPos, bool click)
 {
 	if (entries.empty()) { return; }
 	const int perPage = 4;
@@ -111,7 +191,7 @@ void SpellbookPage::render(gl2d::Renderer2D &renderer, AssetsManager &assetsMana
 		glm::vec4 slotRect = {slotX, slotY, columnWidth, slotHeight};
 		renderer.renderRectangle(slotRect, {0.16f, 0.13f, 0.1f, 0.2f});
 
-		const SpellbookEntry &entry = entries[entryIndex];
+		SpellbookEntry &entry = entries[entryIndex];
 		SpellRecepie recipe = entry.unstable ? unstableRecipe : entry.recipe;
 
 		float previewPad = slotRect.z * 0.04f;
@@ -135,28 +215,35 @@ void SpellbookPage::render(gl2d::Renderer2D &renderer, AssetsManager &assetsMana
 		renderer.schisor(previewRect);
 		renderer.renderRectangle(previewRect, {0.12f, 0.18f, 0.12f, 0.9f});
 
-		auto &grass = assetsManager.tileSets[TileSets::grass];
-		float tileSize = previewRect.z / 4.0f;
-		for (int ty = 0; ty < 2; ty++)
+		initPreviewContext(entry.preview, rng);
+		if (entry.preview.spellType != entry.spellType)
 		{
-			for (int tx = 0; tx < 4; tx++)
-			{
-				glm::vec4 tileRect = {previewRect.x + tx * tileSize, previewRect.y + previewRect.w - (ty + 1) * tileSize,
-					tileSize, tileSize};
-				int variant = ((entryIndex + tx + ty * 3) % 5 == 0) ? 1 : 0;
-				renderer.renderRectangle(tileRect, grass.texture, {1, 1, 1, 0.9f}, {}, 0,
-					grass.atlas.get(variant, 0));
-			}
+			resetPreviewContext(entry.preview, entry.spellType, rng);
 		}
+		entry.preview.aimDirection = {1.0f, 0.0f};
+		setSpellPreviewContext(&entry.preview);
+		updatePreviewContext(entry.preview, 0.016f, rng, entry.spellType, entry.unstable);
 
-		float playerSize = previewRect.w * 0.48f;
-		glm::vec2 playerPos = {previewRect.x + previewRect.z * 0.5f, previewRect.y + previewRect.w * 0.70f};
-		glm::vec4 playerRect = {playerPos.x - playerSize * 0.5f, playerPos.y - playerSize * 0.5f,
-			playerSize, playerSize};
-		renderer.renderRectangle(playerRect, assetsManager.player.texture,
-			{1, 1, 1, 1}, {}, 0, assetsManager.player.atlas.get(0, 0));
+		// preview camera
+		float viewWidth = 3.2f;
+		gl2d::Camera previewCam = renderer.currentCamera;
+		previewCam.zoom = previewRect.z / viewWidth;
+		float viewHeight = previewRect.w / previewCam.zoom;
+		glm::vec2 screenCenter = {renderer.windowW * 0.5f, renderer.windowH * 0.5f};
+		glm::vec2 previewCenter = {previewRect.x + previewRect.z * 0.5f, previewRect.y + previewRect.w * 0.5f};
+		glm::vec2 offset = (previewCenter - screenCenter) / previewCam.zoom;
+		glm::vec2 worldCenter = entry.preview.player.physics.getPos();
+		previewCam.position = {worldCenter.x - offset.x, worldCenter.y + offset.y - viewHeight * 0.18f};
+		renderer.pushCamera(previewCam);
 
-		// actual spell preview will be rendered here
+		entry.preview.map.renderMap(renderer, assetsManager);
+		entry.preview.spells.renderBeforeEntities(renderer, entry.preview.particleRenderer);
+		entry.preview.projectiles.render(renderer, assetsManager, entry.preview.particleRenderer);
+		entry.preview.summons.render(renderer, entry.preview.particleRenderer);
+		entry.preview.player.render(renderer, assetsManager, entry.preview.previewWand, entry.preview.aimDirection);
+
+		renderer.popCamera();
+		clearSpellPreviewContext();
 		renderer.stopSchisor();
 
 		float nameSize = slotRect.w * 0.16f;

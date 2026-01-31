@@ -1072,6 +1072,8 @@ bool GameLogic::update(float deltaTime,
 		};
 
 		// bookmarks behind the book
+		// tab buttons disabled for now
+		/*
 		{
 			float tabW = bookW * 0.18f;
 			float tabH = bookH * 0.09f;
@@ -1101,6 +1103,7 @@ bool GameLogic::update(float deltaTime,
 				}
 			}
 		}
+		*/
 
 		renderer.renderRectangle({bookPos.x, bookPos.y, bookW, bookH},
 			assetsManager.book, {1, 1, 1, 1});
@@ -1108,7 +1111,7 @@ bool GameLogic::update(float deltaTime,
 		spellbookPage.update(deltaTime, rng);
 		if (inventoryPage == 1)
 		{
-			spellbookPage.render(renderer, assetsManager, bookRect, cursorPos, input.lMouse.pressed);
+			spellbookPage.render(renderer, assetsManager, rng, bookRect, cursorPos, input.lMouse.pressed);
 		}
 		else
 		{

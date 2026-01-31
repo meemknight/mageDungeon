@@ -55,3 +55,7 @@ namespace platform
 #include <gl2d/gl2d.h>
 
 gl2d::Renderer2D &getRenderer();
+
+struct SpellPreviewContext;
+void setSpellPreviewContext(SpellPreviewContext *context);
+void clearSpellPreviewContext();

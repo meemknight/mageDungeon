@@ -5,6 +5,7 @@
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 #include <gameplay/spells/spellTypes.h>
+#include <gameplay/spellPreviewContext.h>
 
 struct AssetsManager;
 
@@ -20,6 +21,7 @@ struct SpellbookEntry
 	SpellRecepie recipe = {};
 	const char *name = "";
 	bool unstable = false;
+	SpellPreviewContext preview;
 };
 
 struct SpellbookPage
@@ -33,5 +35,6 @@ struct SpellbookPage
 	void init();
 	void update(float deltaTime, std::ranlux24_base &rng);
 	void render(gl2d::Renderer2D &renderer, AssetsManager &assetsManager,
-		const glm::vec4 &bookRect, const glm::vec2 &cursorPos, bool click);
+		std::ranlux24_base &rng, const glm::vec4 &bookRect,
+		const glm::vec2 &cursorPos, bool click);
 };

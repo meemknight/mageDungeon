@@ -14,6 +14,7 @@
 #include <imguiTools.h>
 
 #include <gameplay/gameLogic.h>
+#include <gameplay/spellPreviewContext.h>
 #include <gameplay/assetsManager.h>
 
 
@@ -22,6 +23,7 @@ static gl2d::Renderer2D renderer;
 static GameLogic game;
 static AssetsManager assetsManager;
 static glui::RendererUi uirenderer;
+static SpellPreviewContext *spellPreviewContext = nullptr;
 
 AssetsManager &getAssetManager()
 {
@@ -30,21 +32,25 @@ AssetsManager &getAssetManager()
 
 ParticlePostProcessRenderer &getParticlePostProcessRenderer()
 {
+	if (spellPreviewContext) { return spellPreviewContext->particleRenderer; }
 	return game.particlePostProcessRenderer;
 }
 
 DamageViewerSystem &getDamageViewerSystem()
 {
+	if (spellPreviewContext) { return spellPreviewContext->damageViewer; }
 	return game.damageViewerSystem;
 }
 
 ProjectileHolder &getProjectileHolder()
 {
+	if (spellPreviewContext) { return spellPreviewContext->projectiles; }
 	return game.projectiles;
 }
 
 SummonHolder &getSummonHolder()
 {
+	if (spellPreviewContext) { return spellPreviewContext->summons; }
 	return game.summons;
 }
 
@@ -60,7 +66,18 @@ glm::vec2 getFireTargetPos()
 
 StandbyProjectileSystem &getStandbyProjectilesSystem()
 {
+	if (spellPreviewContext) { return spellPreviewContext->standbyProjectiles; }
 	return game.standbyProjectiles;
+}
+
+void setSpellPreviewContext(SpellPreviewContext *context)
+{
+	spellPreviewContext = context;
+}
+
+void clearSpellPreviewContext()
+{
+	spellPreviewContext = nullptr;
 }
 
 gl2d::Renderer2D &getRenderer()
