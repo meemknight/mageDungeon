@@ -1,205 +1,129 @@
 #include "entity.h"
 #include "gameplay/entities/entity.h"
 #include "gameplay/summons.h"
+#include "gameplay/projectiles/projectiles.h"
+
+// Start death animation - called when life <= 0
+bool BasicMeleEnemy::startDying()
+{
+	animator.setAnimation(deathAnimationY);
+	animator.positionX = 0;
+	animator.timer = deathFrameDuration;
+	return true;
+}
+
+// Update death animation - returns true to keep dying, false when done
+bool BasicMeleEnemy::updateDying(float deltaTime)
+{
+	animator.timer -= deltaTime;
+	if (animator.timer <= 0.0f)
+	{
+		animator.timer += deathFrameDuration;
+		animator.positionX++;
+	}
+
+	// Death animation finished when we've played all frames
+	if (animator.positionX >= deathAnimationFrames)
+	{
+		return false; // done dying, remove entity
+	}
+	return true; // still dying
+}
 
 bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
-	std::ranlux24_base &rng, Player &player, SummonHolder &summons)
+	std::ranlux24_base &rng, Player &player, SummonHolder &summons,
+	ProjectileHolder &projectiles)
 {
+	// Handle hit animation timer
+	if (playingHitAnimation)
+	{
+		hitAnimationTimer -= deltaTime;
+		if (hitAnimationTimer <= 0.0f)
+		{
+			playingHitAnimation = false;
+		}
+	}
+
 	animator.update(deltaTime, 0.12, 6);
 
-	const glm::vec2 enemyPos = physics.getPos();
-	const glm::vec2 playerPos = player.physics.getPos();
+	// Update movement behavior and get move direction
+	glm::vec2 moveDir = behavior.update(deltaTime, map, rng,
+		physics.getPos(), player.physics.getPos(), summons);
 
-	glm::vec2 targetPos = playerPos;
-	glm::ivec2 targetTile = WorldToTile(playerPos);
-
-	float bestSummonDist2 = summonAggroRange * summonAggroRange;
-	for (auto &summon : summons.summons)
+	// Shoot if behavior wants to shoot
+	if (behavior.wantsToShoot)
 	{
-		if (!summon->canBeTargeted()) { continue; }
-		glm::vec2 summonPos = summon->physics.getPos();
-		float distToSummon2 = glm::length2(summonPos - enemyPos);
-		if (distToSummon2 > bestSummonDist2)
-		{
-			continue;
-		}
-		if (!HasLineOfSightTiles(map, WorldToTile(enemyPos), WorldToTile(summonPos)))
-		{
-			continue;
-		}
-		bestSummonDist2 = distToSummon2;
-		targetPos = summonPos;
-		targetTile = WorldToTile(summonPos);
-	}
-
-	const glm::vec2 toTarget = targetPos - enemyPos;
-	const float dist2 = glm::length2(toTarget);
-
-	// LOS-based aggro/forget (with optional distance cap)
-	const bool hasLOS = seeThroughWalls
-		? true
-		: HasLineOfSightTiles(map, WorldToTile(enemyPos), targetTile);
-
-	const bool withinAggro = (dist2 <= chaseAcquireRange * chaseAcquireRange);
-
-	// Can "see" player either via LOS+range, or just range if seeThroughWalls
-	const bool canSeeTarget = seeThroughWalls ? withinAggro : (hasLOS && withinAggro);
-
-	if (canSeeTarget)
-	{
-		chasing = true;
-		noLOSTimer = 0.0f;
-
-		// Remember last seen position/tile
-		lastSeenPlayerPos = targetPos;
-		lastSeenPlayerTile = targetTile;
-		hasLastSeen = true;
-	}
-	else
-	{
-		if (chasing)
-		{
-			noLOSTimer += deltaTime;
-			if (noLOSTimer >= forgetAfterNoLOS)
-			{
-				chasing = false;
-				pathTiles.clear();
-				pathIndex = 0;
-				hasLastSeen = false;
-			}
-		}
-	}
-
-	glm::vec2 moveDir(0.0f);
-
-	if (chasing)
-	{
-		// During grace period, chase last seen target if we can't currently see the player
-		const bool useLastSeen = (!canSeeTarget && hasLastSeen);
-		const glm::vec2 chaseTargetPos = useLastSeen ? lastSeenPlayerPos : targetPos;
-		const glm::ivec2 chaseTargetTile = useLastSeen ? lastSeenPlayerTile : targetTile;
-
-		const glm::vec2 toTarget = chaseTargetPos - enemyPos;
-		const float distTarget2 = glm::length2(toTarget);
-
-		// 1) If direct chase is possible (or walls ignored), go straight for smoothness
-		if (seeThroughWalls || CanChaseDirect(map, enemyPos, chaseTargetPos))
-		{
-			if (distTarget2 > 0.0001f)
-				moveDir = glm::normalize(toTarget);
-
-			// When going direct, drop the current path (prevents robotic stepping)
-			pathTiles.clear();
-			pathIndex = 0;
-			repathTimer = 0.0f;
-			lastPathGoalTile = glm::ivec2(999999); // force rebuild next time we need A*
-		}
-		else
-		{
-			// 2) Otherwise fall back to your old A* path
-			repathTimer -= deltaTime;
-
-			// Rebuild if timer elapsed OR path empty OR finished OR target tile changed
-			if (repathTimer <= 0.0f ||
-				pathTiles.empty() ||
-				pathIndex >= (int)pathTiles.size() ||
-				chaseTargetTile != lastPathGoalTile)
-			{
-				repathTimer = repathInterval;
-
-				glm::ivec2 startT = WorldToTile(enemyPos);
-				glm::ivec2 goalT = chaseTargetTile;
-
-				lastPathGoalTile = goalT;
-
-				pathTiles = findPathAStar8(map, startT, goalT);
-				pathIndex = 0;
-
-				// If A* fails, don't freeze: just keep trying to move roughly toward target
-				// (still blocked by collisions later)
-				if (pathTiles.empty())
-				{
-					if (distTarget2 > 0.0001f)
-						moveDir = glm::normalize(toTarget);
-				}
-			}
-
-			// Follow the path
-			if (!pathTiles.empty() && pathIndex < (int)pathTiles.size())
-			{
-				// Skip current tile if included
-				glm::ivec2 currT = WorldToTile(enemyPos);
-				while (pathIndex < (int)pathTiles.size() && pathTiles[pathIndex] == currT)
-					pathIndex++;
-
-				if (pathIndex < (int)pathTiles.size())
-				{
-					const glm::vec2 nextCenter = glm::vec2(pathTiles[pathIndex]) + glm::vec2(0.5f);
-					glm::vec2 toNext = nextCenter - enemyPos;
-
-					// Advance node when close
-					if (glm::length2(toNext) < 0.05f * 0.05f)
-					{
-						pathIndex++;
-					}
-					else
-					{
-						moveDir = glm::normalize(toNext);
-					}
-				}
-			}
-		}
-	}
-	else
-	{
-		// Idle behavior
-		if (wanderWhenIdle)
-		{
-			wanderTimer -= deltaTime;
-			if (wanderTimer <= 0.0f)
-			{
-				wanderTimer = getRandomFloat(rng, 0.6f, 1.4f);
-
-				// random 8-dir
-				static const glm::vec2 dirs[8] = {
-					{ 1, 0},{-1, 0},{ 0, 1},{ 0,-1},
-					{ 1, 1},{ 1,-1},{-1, 1},{-1,-1}
-				};
-				idleDir = glm::normalize(dirs[getRandomInt(rng, 0, 7)]);
-			}
-
-			// optional: small chance to stand still even in wander mode
-			if (getRandomChance(rng, 0.10f))
-				moveDir = glm::vec2(0.0f);
-			else
-				moveDir = idleDir;
-		}
-		else
-		{
-			// stay put
-			moveDir = glm::vec2(0.0f);
-		}
+		behavior.shoot(physics.getPos(), projectiles, player, summons, rng);
 	}
 
 	// Apply movement
 	if (glm::dot(moveDir, moveDir) > 0.0f)
 	{
-		float finalSpeed = speed * statusSpeedMultiplier;
+		float finalSpeed = behavior.speed * statusSpeedMultiplier;
 		physics.getPos() += moveDir * finalSpeed * deltaTime;
 	}
 
-	animator.setAnimationBasedOnMovement(moveDir);
+	// Determine current facing direction from movement (0=down, 1=side, 2=up) and flipX
+	// Use direction to target if not moving but chasing (for shooting direction)
+	int facingDirection = animator.positionY % 3;
+	bool facingFlipX = animator.flipX;
+	glm::vec2 facingDir = moveDir;
+	if (glm::length2(facingDir) < 1e-6f && behavior.chasing)
+	{
+		facingDir = behavior.directionToTarget;
+	}
+	if (glm::length2(facingDir) > 1e-6f)
+	{
+		glm::vec2 dir = glm::normalize(facingDir);
+		float dRight = glm::dot(dir, glm::vec2(1.f, 0.f));
+		float dLeft = glm::dot(dir, glm::vec2(-1.f, 0.f));
+		float dUp = glm::dot(dir, glm::vec2(0.f, -1.f));
+		float dDown = glm::dot(dir, glm::vec2(0.f, 1.f));
+
+		float best = dDown;
+		int bestDir = 0;
+		facingFlipX = false;
+
+		if (dRight > best) { best = dRight; bestDir = 1; facingFlipX = false; }
+		if (dLeft > best) { best = dLeft; bestDir = 1; facingFlipX = true; }
+		if (dUp > best) { best = dUp; bestDir = 2; facingFlipX = false; }
+		facingDirection = bestDir;
+	}
+
+	// Detect animation wrap (frame went from non-zero back to 0)
+	bool animationWrapped = (lastAnimationFrame > 0 && animator.positionX == 0);
+	lastAnimationFrame = animator.positionX;
+
+	// Check if touching player to trigger hit animation (melee attack)
+	if (!playingHitAnimation && physics.transform.intersectTransform(player.physics.transform))
+	{
+		playingHitAnimation = true;
+		hitAnimationTimer = hitAnimationDuration;
+		hitAnimationBaseY = 6 + facingDirection;
+		animator.setAnimation(hitAnimationBaseY);
+		animator.flipX = facingFlipX;
+	}
+
+	// If playing hit animation and animation just wrapped, allow direction change
+	if (playingHitAnimation && animationWrapped)
+	{
+		int newHitY = 6 + facingDirection;
+		hitAnimationBaseY = newHitY;
+		animator.positionY = hitAnimationBaseY;
+		animator.flipX = facingFlipX;
+	}
+
+	// Set animation based on movement, but only if not playing hit animation
+	if (!playingHitAnimation)
+	{
+		animator.setAnimationBasedOnMovement(moveDir);
+	}
 
 	basicPhysicsAndCollisionsCheck(deltaTime, map);
 	if ((physics.leftTouch || physics.rightTouch || physics.upTouch || physics.downTouch) &&
 		glm::dot(moveDir, moveDir) > 0.0001f)
 	{
-		repathTimer = 0.0f;
-		lastPathGoalTile = glm::ivec2(999999);
-		if (!pathTiles.empty() && pathIndex < (int)pathTiles.size())
-		{
-			pathIndex++;
-		}
+		behavior.onWallHit();
 	}
 	return true;
 }

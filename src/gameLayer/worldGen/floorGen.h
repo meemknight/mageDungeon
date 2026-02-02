@@ -34,6 +34,7 @@ struct FloorRoom
 	std::vector<glm::vec2> wandSpawnPositions; // optional item spawn points
 	std::vector<glm::ivec2> doorPositions; // tile positions for future door placement
 	bool isSpawnRoom = false;
+	bool isBigRoom = false;
 
 	glm::ivec2 center() const { return {pos.x + size.x / 2, pos.y + size.y / 2}; }
 };
@@ -53,27 +54,134 @@ struct FloorGenerator
 	FastNoiseSIMD *dirtNoise = nullptr;
 	FastNoiseSIMD *dirtDecorNoise = nullptr;
 
+	// Cosmetic tuning values for world generation.
+	struct CosmeticTuning
+	{
+		float caveRoomChance = 0.18f;
+		float woodRoomChance = 0.18f;
+		float grassRoomChance = 0.20f;
+		int caveRoomRadiusMin = 5;
+		int caveRoomRadiusMax = 9;
+		int caveRoomExtentPadding = 2;
+		float caveRoomSetpieceChance = 0.85f;
+		int caveRoomWallClustersMin = 2;
+		int caveRoomWallClustersMax = 4;
+		int caveRoomWallClusterSizeMin = 2;
+		int caveRoomWallClusterSizeMax = 4;
+		int caveDoorClearRadius = 3;
+		float bigRoomChance = 0.12f;
+		int bigRoomMinSize = 22;
+		int bigRoomMaxSize = 30;
+		int bigRoomAreaThreshold = 520;
+		float bigRoomSetpieceChance = 0.95f;
+		int bigRoomSpawnMargin = 4;
+		int doorSpawnMinDist = 4;
+		int bigRoomDoorMinDist = 6;
+
+		float floor2Chance = 0.12f;
+		float grassRoomDirtSpotChance = 0.08f;
+		float roadDirtDecorChance = 0.18f;
+
+		float grassDecorNoiseFrequency = 0.1f;
+		int grassDecorNoiseOctaves = 3;
+		float grassDecorNoiseLacunarity = 2.0f;
+		float grassDecorNoiseGain = 0.5f;
+
+		float dirtNoiseFrequency = 0.08f;
+		int dirtNoiseOctaves = 2;
+		float dirtNoiseLacunarity = 2.0f;
+		float dirtNoiseGain = 0.5f;
+
+		float dirtDecorNoiseFrequency = 0.75f;
+		float dirtCutoffBase = 0.95f;
+		float dirtCutoffScale = 0.45f;
+		float dirtDecorCutoff = 0.80f;
+
+		float plainsDirtThreshold = 0.4f;
+		float grassRoomDirtThreshold = 0.18f;
+
+		float grassDecorThresholdPlains = 0.48f;
+		float grassDecorThresholdDungeon = 0.55f;
+		float grassFlowerPatchThreshold = 0.80f;
+		float grassFlowerPatchChance = 0.85f;
+		float grassMushroomChance = 0.02f;
+		float grassStoneChance = 0.25f;
+		float grassFlowerChance = 0.45f;
+
+		float grassRoomRoadChance = 0.5f;
+		float grassRoomTreeChance = 0.85f;
+		int grassRoomTreeAreaDiv = 55;
+		int grassRoomTreeMin = 1;
+		int grassRoomTreeMax = 6;
+
+		float dungeonFloorPatternChance = 0.32f;
+		int bigTileAreaDiv = 24;
+		int bigTileMax = 6;
+		int bigTileAttempts = 20;
+	};
+
+	CosmeticTuning cosmetics = {};
+
+	// Stable hash used for per-tile decoration choices.
+	static unsigned int hashPosition(int x, int y, int seed)
+	{
+		unsigned int h = 2166136261u;
+		h = (h ^ (unsigned int)(x + seed * 31)) * 16777619u;
+		h = (h ^ (unsigned int)(y + seed * 131)) * 16777619u;
+		h = (h ^ (unsigned int)seed) * 16777619u;
+		return h;
+	}
+
+	static float hashToFloat01(int x, int y, int seed)
+	{
+		unsigned int h = hashPosition(x, y, seed);
+		return (h & 0x00FFFFFFu) / 16777216.0f;
+	}
+
+	BlockType pickGrassDecorationType(int x, int y, int seed)
+	{
+		float roll = hashToFloat01(x, y, seed + 17);
+		float patch = hashToFloat01(x, y, seed + 911);
+		if (patch > cosmetics.grassFlowerPatchThreshold && roll < cosmetics.grassFlowerPatchChance)
+		{
+			return Blocks::grassDecorationFlowers;
+		}
+		if (roll < cosmetics.grassMushroomChance)
+		{
+			return Blocks::grassDecorationMushrooms;
+		}
+		if (roll < cosmetics.grassStoneChance)
+		{
+			return Blocks::grassDecorationStones;
+		}
+		if (roll < cosmetics.grassFlowerChance)
+		{
+			return Blocks::grassDecorationFlowers;
+		}
+		return Blocks::grassDecoration;
+	}
+
 	void init()
 	{
 		grassDecorNoise = FastNoiseSIMD::NewFastNoiseSIMD();
 		grassDecorNoise->SetNoiseType(FastNoiseSIMD::NoiseType::SimplexFractal);
-		grassDecorNoise->SetFrequency(0.1f);
-		grassDecorNoise->SetFractalOctaves(3);
-		grassDecorNoise->SetFractalLacunarity(2.0f);
-		grassDecorNoise->SetFractalGain(0.5f);
+		grassDecorNoise->SetFrequency(cosmetics.grassDecorNoiseFrequency);
+		grassDecorNoise->SetFractalOctaves(cosmetics.grassDecorNoiseOctaves);
+		grassDecorNoise->SetFractalLacunarity(cosmetics.grassDecorNoiseLacunarity);
+		grassDecorNoise->SetFractalGain(cosmetics.grassDecorNoiseGain);
 
 		// --- Dirt blobs (small circular-ish patches) ---
 		dirtNoise = FastNoiseSIMD::NewFastNoiseSIMD();
 		dirtNoise->SetNoiseType(FastNoiseSIMD::NoiseType::SimplexFractal);
-		dirtNoise->SetFrequency(0.08f);        // higher than grass -> smaller blobs
-		dirtNoise->SetFractalOctaves(2);       // less detail -> fewer weird tendrils
-		dirtNoise->SetFractalLacunarity(2.0f);
-		dirtNoise->SetFractalGain(0.5f);
+		dirtNoise->SetFrequency(cosmetics.dirtNoiseFrequency);        // higher than grass -> smaller blobs
+		dirtNoise->SetFractalOctaves(cosmetics.dirtNoiseOctaves);       // less detail -> fewer weird tendrils
+		dirtNoise->SetFractalLacunarity(cosmetics.dirtNoiseLacunarity);
+		dirtNoise->SetFractalGain(cosmetics.dirtNoiseGain);
 
 		// --- Dirt decoration (sparse random dots, not clumps) ---
 		dirtDecorNoise = FastNoiseSIMD::NewFastNoiseSIMD();
 		dirtDecorNoise->SetNoiseType(FastNoiseSIMD::NoiseType::Simplex); // no fractal -> less clumping
-		dirtDecorNoise->SetFrequency(0.75f);   // high freq -> small isolated hits
+		dirtDecorNoise->SetFrequency(cosmetics.dirtDecorNoiseFrequency);   // high freq -> small isolated hits
 	}
 
 	void placeGrassLayer(Map &map, int seed)
@@ -91,7 +199,7 @@ struct FloorGenerator
 
 		float *n = grassDecorNoise->GetNoiseSet(0, 0, 0, sx, sy, 1);
 
-		const float threshold = 0.6f;
+		const float threshold = cosmetics.grassDecorThresholdPlains;
 
 		for (int y = 0; y < sy; y++)
 		{
@@ -104,7 +212,7 @@ struct FloorGenerator
 				{
 					auto &b = map.firstLayer.getBlockUnsafe(x, y);
 					if (b.type == Blocks::grass)
-						b.type = Blocks::grassDecoration;
+						b.type = pickGrassDecorationType(x, y, seed);
 				}
 			}
 		}
@@ -130,7 +238,7 @@ struct FloorGenerator
 
 		// Make low tresshold => HIGH cutoff => fewer hits.
 		// 0.2 -> about 0.90 (few patches)
-		const float dirtCutoff = 0.95f - (tresshold * 0.45f); // range ~[0.95 .. 0.50]
+		const float dirtCutoff = cosmetics.dirtCutoffBase - (tresshold * cosmetics.dirtCutoffScale);
 
 		float *dn = dirtNoise->GetNoiseSet(0, 0, 0, sx, sy, 1);
 
@@ -146,7 +254,10 @@ struct FloorGenerator
 					auto &b = map.firstLayer.getBlockUnsafe(x, y);
 
 					// only paint dirt on top of grass layer types
-					if (b.type == Blocks::grass || b.type == Blocks::grassDecoration)
+					if (b.type == Blocks::grass || b.type == Blocks::grassDecoration
+						|| b.type == Blocks::grassDecorationStones
+						|| b.type == Blocks::grassDecorationFlowers
+						|| b.type == Blocks::grassDecorationMushrooms)
 						b.type = Blocks::dirt;
 				}
 			}
@@ -158,7 +269,7 @@ struct FloorGenerator
 		// Use a different seed so it doesn't correlate with blobs too much
 		dirtDecorNoise->SetSeed(seed + 1337);
 
-		const float decorCutoff = 0.80f;
+		const float decorCutoff = cosmetics.dirtDecorCutoff;
 
 		float *ddn = dirtDecorNoise->GetNoiseSet(0, 0, 0, sx, sy, 1);
 
@@ -193,7 +304,7 @@ struct FloorGenerator
 
 		float *n = grassDecorNoise->GetNoiseSet(0, 0, 0, sx, sy, 1);
 
-		const float threshold = 0.72f;
+		const float threshold = cosmetics.grassDecorThresholdDungeon;
 
 		for (int y = 0; y < sy; y++)
 		{
@@ -206,7 +317,7 @@ struct FloorGenerator
 				{
 					auto &b = map.firstLayer.getBlockUnsafe(x, y);
 					if (b.type == Blocks::grass)
-						b.type = Blocks::grassDecoration;
+						b.type = pickGrassDecorationType(x, y, seed);
 				}
 			}
 		}
@@ -227,6 +338,9 @@ struct FloorGenerator
 
 				if (over.type != Blocks::none) { continue; }
 				if (base.type != Blocks::grass && base.type != Blocks::grassDecoration
+					&& base.type != Blocks::grassDecorationStones
+					&& base.type != Blocks::grassDecorationFlowers
+					&& base.type != Blocks::grassDecorationMushrooms
 					&& base.type != Blocks::dirt && base.type != Blocks::dirtDecoration)
 				{
 					continue;
@@ -254,7 +368,7 @@ struct FloorGenerator
 
 		placeGrassLayer(map, seed);
 
-		placeRandomDirtSpots(map, seed + 10, 0.4f);
+		placeRandomDirtSpots(map, seed + 10, cosmetics.plainsDirtThreshold);
 
 
 		//map.secondLayer.getBlockUnsafe(32, 30).type = Blocks::smallTree;
@@ -378,6 +492,8 @@ struct FloorGenerator
 			bool isCave = false;
 			int caveRadius = 0;
 			bool isGrassRoom = false;
+			bool isWoodRoom = false;
+			bool isBigRoom = false;
 
 			int x2() const { return x + w; }
 			int y2() const { return y + h; }
@@ -391,8 +507,8 @@ struct FloorGenerator
 
 		std::vector<Rect> rooms;
 		int attempts = std::max(28, (sizeX * sizeY) / 140);
-		int minRoomSize = 10;
-		int maxRoomSize = 18;
+		int minRoomSize = 12;
+		int maxRoomSize = 20;
 		int padding = 4;
 		int maxRoomConnections = 2;
 
@@ -407,7 +523,7 @@ struct FloorGenerator
 			if (x < 0 || y < 0 || x >= sizeX || y >= sizeY) { return; }
 			auto &b = map.firstLayer.getBlockUnsafe(x, y);
 			b.type = Blocks::floor1;
-			if (getRandomFloat(rng, 0.0f, 1.0f) < 0.12f)
+			if (getRandomFloat(rng, 0.0f, 1.0f) < cosmetics.floor2Chance)
 			{
 				b.type = Blocks::floor2;
 			}
@@ -504,7 +620,7 @@ struct FloorGenerator
 			for (auto c : centers)
 			{
 				int r = innerRadius + getRandomInt(rng, -1, 1);
-				paintCircle(c, r, Blocks::floor2, Blocks::cobbleStoneWall);
+				paintCircle(c, r, Blocks::caveFloor, Blocks::cobbleStoneWall);
 			}
 		};
 
@@ -519,7 +635,7 @@ struct FloorGenerator
 					if (b.type == Blocks::floor1 || b.type == Blocks::floor2)
 					{
 						b.type = Blocks::grass;
-						if (getRandomChance(rng, 0.08f))
+						if (getRandomChance(rng, cosmetics.grassRoomDirtSpotChance))
 						{
 							b.type = Blocks::dirt;
 						}
@@ -528,12 +644,79 @@ struct FloorGenerator
 			}
 		};
 
-		// Adds a few trees to grassy rooms.
-		auto placeTreesInRoom = [&](const Rect &room)
+		// Converts a room into wooden floor tiles.
+		auto paintWoodRoom = [&](const Rect &room)
 		{
+			for (int y = room.y; y < room.y2(); y++)
+			{
+				for (int x = room.x; x < room.x2(); x++)
+				{
+					auto &b = map.firstLayer.getBlockUnsafe(x, y);
+					if (b.type == Blocks::floor1 || b.type == Blocks::floor2
+						|| b.type == Blocks::floorPatern1
+						|| b.type == Blocks::floorBigTileTopLeft
+						|| b.type == Blocks::floorBigTileTopRight
+						|| b.type == Blocks::floorBigTileBottomLeft
+						|| b.type == Blocks::floorBigTileBottomRight)
+					{
+						b.type = Blocks::woodenFloor;
+					}
+				}
+			}
+		};
+
+		// Converts the surrounding walls of a wooden room to wooden walls.
+		auto paintWoodRoomWalls = [&](const Rect &room)
+		{
+			int minX = std::max(1, room.x - 1);
+			int maxX = std::min(sizeX - 2, room.x2());
+			int minY = std::max(1, room.y - 1);
+			int maxY = std::min(sizeY - 2, room.y2());
+
+			for (int y = minY; y <= maxY; y++)
+			{
+				for (int x = minX; x <= maxX; x++)
+				{
+					if (x >= room.x && x < room.x2() && y >= room.y && y < room.y2())
+					{
+						continue;
+					}
+					auto &b = map.firstLayer.getBlockUnsafe(x, y);
+					if (b.type == Blocks::dungeonWall)
+					{
+						b.type = Blocks::woodenWall;
+					}
+				}
+			}
+		};
+
+		// Adds a few trees to grassy rooms.
+		auto isDoorNearbyLocal = [&](const std::vector<glm::ivec2> &doors, int x, int y, int dist)
+		{
+			for (auto d : doors)
+			{
+				for (int dy = 0; dy <= 1; dy++)
+				{
+					for (int dx = 0; dx <= 1; dx++)
+					{
+						int distValue = std::abs((d.x + dx) - x) + std::abs((d.y + dy) - y);
+						if (distValue <= dist)
+						{
+							return true;
+						}
+					}
+				}
+			}
+			return false;
+		};
+
+		auto placeTreesInRoom = [&](const Rect &room, const std::vector<glm::ivec2> &doors)
+		{
+			if (!getRandomChance(rng, cosmetics.grassRoomTreeChance)) { return; }
 			int area = room.w * room.h;
-			int maxTrees = std::clamp(area / 70, 1, 4);
-			int treeCount = getRandomInt(rng, 0, maxTrees);
+			int maxTrees = std::clamp(area / cosmetics.grassRoomTreeAreaDiv,
+				cosmetics.grassRoomTreeMin, cosmetics.grassRoomTreeMax);
+			int treeCount = getRandomInt(rng, cosmetics.grassRoomTreeMin, maxTrees);
 			for (int i = 0; i < treeCount; i++)
 			{
 				bool placed = false;
@@ -541,10 +724,14 @@ struct FloorGenerator
 				{
 					int x = getRandomInt(rng, room.x + 1, room.x2() - 2);
 					int y = getRandomInt(rng, room.y + 1, room.y2() - 2);
+					if (isDoorNearbyLocal(doors, x, y, 2)) { continue; }
 					auto &base = map.firstLayer.getBlockUnsafe(x, y);
 					auto &over = map.secondLayer.getBlockUnsafe(x, y);
 					if (over.type != Blocks::none) { continue; }
-					if (base.type == Blocks::grass || base.type == Blocks::grassDecoration)
+					if (base.type == Blocks::grass || base.type == Blocks::grassDecoration
+						|| base.type == Blocks::grassDecorationStones
+						|| base.type == Blocks::grassDecorationFlowers
+						|| base.type == Blocks::grassDecorationMushrooms)
 					{
 						over.type = Blocks::smallTree;
 						placed = true;
@@ -558,7 +745,7 @@ struct FloorGenerator
 		// Organic dirt roads that connect corridor exits inside a grass room.
 		auto carveGrassRoomRoads = [&](int roomIndex, const Rect &room)
 		{
-			if (!getRandomChance(rng, 0.5f)) { return; }
+			if (!getRandomChance(rng, cosmetics.grassRoomRoadChance)) { return; }
 
 			std::vector<glm::ivec2> exits;
 			exits.reserve(6);
@@ -631,10 +818,13 @@ struct FloorGenerator
 				if (x < room.x || x >= room.x2() || y < room.y || y >= room.y2()) { return; }
 				auto &b = map.firstLayer.getBlockUnsafe(x, y);
 				if (b.type == Blocks::grass || b.type == Blocks::grassDecoration
+					|| b.type == Blocks::grassDecorationStones
+					|| b.type == Blocks::grassDecorationFlowers
+					|| b.type == Blocks::grassDecorationMushrooms
 					|| b.type == Blocks::dirt || b.type == Blocks::dirtDecoration)
 				{
 					b.type = Blocks::dirt;
-					if (getRandomChance(rng, 0.18f))
+					if (getRandomChance(rng, cosmetics.roadDirtDecorChance))
 					{
 						b.type = Blocks::dirtDecoration;
 					}
@@ -737,7 +927,69 @@ struct FloorGenerator
 			}
 		};
 
-		auto carveCorridor = [&](glm::ivec2 from, glm::ivec2 to)
+		enum CorridorStyle
+		{
+			Corridor_Dungeon = 0,
+			Corridor_Cave = 1,
+			Corridor_Wood = 2
+		};
+
+		auto paintCorridorTile = [&](int x, int y, int style)
+		{
+			if (x < 0 || y < 0 || x >= sizeX || y >= sizeY) { return; }
+			auto &b = map.firstLayer.getBlockUnsafe(x, y);
+			if (!isWall(b.type) && b.type != Blocks::none)
+			{
+				return;
+			}
+
+			auto applyWoodCorridorWalls = [&](int cx, int cy)
+			{
+				const int offsets[4][2] = {{1,0}, {-1,0}, {0,1}, {0,-1}};
+				for (auto &o : offsets)
+				{
+					int nx = cx + o[0];
+					int ny = cy + o[1];
+					if (nx < 0 || ny < 0 || nx >= sizeX || ny >= sizeY) { continue; }
+					auto &nb = map.firstLayer.getBlockUnsafe(nx, ny);
+					if (nb.type == Blocks::dungeonWall)
+					{
+						nb.type = Blocks::woodenWall;
+					}
+				}
+			};
+
+			switch (style)
+			{
+				case Corridor_Cave:
+					b.type = Blocks::caveFloor;
+					break;
+				case Corridor_Wood:
+					b.type = Blocks::woodenFloor;
+					applyWoodCorridorWalls(x, y);
+					break;
+				default:
+					b.type = Blocks::floor1;
+					if (getRandomFloat(rng, 0.0f, 1.0f) < cosmetics.floor2Chance)
+					{
+						b.type = Blocks::floor2;
+					}
+					break;
+			}
+		};
+
+		auto carveDoorOpening = [&](glm::ivec2 pos, int style)
+		{
+			for (int y = pos.y; y <= pos.y + 1; y++)
+			{
+				for (int x = pos.x; x <= pos.x + 1; x++)
+				{
+					paintCorridorTile(x, y, style);
+				}
+			}
+		};
+
+		auto carveCorridorWithStyle = [&](glm::ivec2 from, glm::ivec2 to, int style)
 		{
 			int width = getRandomChance(rng, 0.25f) ? 3 : 2;
 			auto carveLine = [&](glm::ivec2 start, glm::ivec2 end)
@@ -750,7 +1002,7 @@ struct FloorGenerator
 					{
 						for (int x = start.x; x < start.x + width; x++)
 						{
-							carveFloor(x, y);
+							paintCorridorTile(x, y, style);
 						}
 					}
 				}
@@ -762,7 +1014,7 @@ struct FloorGenerator
 					{
 						for (int y = start.y; y < start.y + width; y++)
 						{
-							carveFloor(x, y);
+							paintCorridorTile(x, y, style);
 						}
 					}
 				}
@@ -780,7 +1032,12 @@ struct FloorGenerator
 			}
 		};
 
-		auto carveMazeCorridor = [&](glm::ivec2 from, glm::ivec2 to)
+		auto carveCorridor = [&](glm::ivec2 from, glm::ivec2 to)
+		{
+			carveCorridorWithStyle(from, to, Corridor_Dungeon);
+		};
+
+		auto carveMazeCorridorWithStyle = [&](glm::ivec2 from, glm::ivec2 to, int style)
 		{
 			glm::ivec2 current = from;
 			int steps = 0;
@@ -817,23 +1074,42 @@ struct FloorGenerator
 				next.x = std::clamp(next.x, 2, sizeX - 3);
 				next.y = std::clamp(next.y, 2, sizeY - 3);
 
-				carveCorridor(current, next);
+				carveCorridorWithStyle(current, next, style);
 				current = next;
 			}
 		};
 
+		auto carveMazeCorridor = [&](glm::ivec2 from, glm::ivec2 to)
+		{
+			carveMazeCorridorWithStyle(from, to, Corridor_Dungeon);
+		};
+
 		for (int i = 0; i < attempts; i++)
 		{
-			bool isCave = getRandomChance(rng, 0.18f);
-			bool isGrassRoom = (!isCave) && getRandomChance(rng, 0.2f);
+			bool isCave = getRandomChance(rng, cosmetics.caveRoomChance);
+			bool isGrassRoom = false;
+			bool isWoodRoom = false;
+			bool isBigRoom = false;
+			if (!isCave)
+			{
+				float typeRoll = getRandomFloat(rng, 0.0f, 1.0f);
+				if (typeRoll < cosmetics.woodRoomChance)
+				{
+					isWoodRoom = true;
+				}
+				else if (typeRoll < cosmetics.woodRoomChance + cosmetics.grassRoomChance)
+				{
+					isGrassRoom = true;
+				}
+			}
 			int w = randRange(minRoomSize, maxRoomSize);
 			int h = randRange(minRoomSize, maxRoomSize);
 			int caveRadius = 0;
 
 			if (isCave)
 			{
-				caveRadius = randRange(6, 11);
-				int caveExtent = caveRadius + caveRadius / 2 + 2;
+				caveRadius = randRange(cosmetics.caveRoomRadiusMin, cosmetics.caveRoomRadiusMax);
+				int caveExtent = caveRadius + cosmetics.caveRoomExtentPadding;
 				w = caveExtent * 2 + 1;
 				h = caveExtent * 2 + 1;
 			}
@@ -842,24 +1118,31 @@ struct FloorGenerator
 				int roomType = getRandomInt(rng, 0, 4);
 				if (roomType == 1)
 				{
-					w = randRange(12, 20);
-					h = randRange(10, 14);
+					w = randRange(14, 22);
+					h = randRange(12, 16);
 				}
 				else if (roomType == 2)
 				{
-					w = randRange(10, 14);
-					h = randRange(12, 20);
+					w = randRange(12, 16);
+					h = randRange(14, 22);
 				}
 				else if (roomType == 3)
 				{
-					w = randRange(14, 22);
-					h = randRange(8, 12);
+					w = randRange(16, 24);
+					h = randRange(12, 14);
 				}
 				else if (roomType == 4)
 				{
-					w = randRange(10, 16);
-					h = randRange(10, 16);
+					w = randRange(12, 18);
+					h = randRange(12, 18);
 				}
+			}
+
+			if (!isCave && !isGrassRoom && !isWoodRoom && getRandomChance(rng, cosmetics.bigRoomChance))
+			{
+				w = randRange(cosmetics.bigRoomMinSize, cosmetics.bigRoomMaxSize);
+				h = randRange(cosmetics.bigRoomMinSize, cosmetics.bigRoomMaxSize);
+				isBigRoom = true;
 			}
 
 			if (w >= sizeX - 4 || h >= sizeY - 4)
@@ -875,6 +1158,9 @@ struct FloorGenerator
 			room.isCave = isCave;
 			room.caveRadius = caveRadius;
 			room.isGrassRoom = isGrassRoom;
+			room.isWoodRoom = isWoodRoom;
+			room.isBigRoom = (!room.isCave && !room.isGrassRoom && !room.isWoodRoom)
+				&& (isBigRoom || (room.w * room.h >= cosmetics.bigRoomAreaThreshold));
 
 			bool valid = true;
 			for (const auto &other : rooms)
@@ -909,6 +1195,7 @@ struct FloorGenerator
 			FloorRoom outRoom;
 			outRoom.pos = {room.x, room.y};
 			outRoom.size = {room.w, room.h};
+			outRoom.isBigRoom = room.isBigRoom;
 			outInfo.rooms.push_back(std::move(outRoom));
 		}
 
@@ -957,6 +1244,13 @@ struct FloorGenerator
 				? glm::ivec2{(dx >= 0 ? 1 : -1), 0}
 				: glm::ivec2{0, (dy >= 0 ? 1 : -1)};
 
+			auto clampDoorTopLeft = [&](glm::ivec2 pos)
+			{
+				pos.x = std::clamp(pos.x, room.x, room.x2() - 2);
+				pos.y = std::clamp(pos.y, room.y, room.y2() - 2);
+				return pos;
+			};
+
 			if (room.isCave)
 			{
 				glm::ivec2 pos = center;
@@ -968,7 +1262,7 @@ struct FloorGenerator
 						break;
 					}
 					auto &b = map.firstLayer.getBlockUnsafe(pos.x, pos.y);
-					if (b.type == Blocks::floor2)
+					if (b.type == Blocks::caveFloor || b.type == Blocks::floor2)
 					{
 						last = pos;
 					}
@@ -978,7 +1272,7 @@ struct FloorGenerator
 					}
 					pos += dir;
 				}
-				return last;
+				return clampDoorTopLeft(last);
 			}
 
 			glm::ivec2 best = center;
@@ -987,18 +1281,20 @@ struct FloorGenerator
 			{
 				if (dir.x != 0)
 				{
-					int x = dir.x > 0 ? room.x2() - 1 : room.x;
+					int x = dir.x > 0 ? room.x2() - 2 : room.x;
 					int offset = getRandomInt(rng, -room.h / 3, room.h / 3);
-					int y = std::clamp(center.y + offset, room.y + 1, room.y2() - 2);
+					int y = std::clamp(center.y + offset, room.y, room.y2() - 2);
 					best = {x, y};
 				}
 				else
 				{
-					int y = dir.y > 0 ? room.y2() - 1 : room.y;
+					int y = dir.y > 0 ? room.y2() - 2 : room.y;
 					int offset = getRandomInt(rng, -room.w / 3, room.w / 3);
-					int x = std::clamp(center.x + offset, room.x + 1, room.x2() - 2);
+					int x = std::clamp(center.x + offset, room.x, room.x2() - 2);
 					best = {x, y};
 				}
+
+				best = clampDoorTopLeft(best);
 
 				bool occupied = false;
 				for (auto d : outInfo.rooms[roomIndex].doorPositions)
@@ -1019,19 +1315,30 @@ struct FloorGenerator
 		{
 			if (a == b) { return; }
 			if (roomLinks[a][b]) { return; }
+			int style = Corridor_Dungeon;
+			if (rooms[a].isCave || rooms[b].isCave)
+			{
+				style = Corridor_Cave;
+			}
+			else if (rooms[a].isWoodRoom || rooms[b].isWoodRoom)
+			{
+				style = Corridor_Wood;
+			}
 
 			glm::ivec2 doorA = pickDoorPos(a, rooms[b].center());
 			glm::ivec2 doorB = pickDoorPos(b, rooms[a].center());
 			registerDoor(a, doorA);
 			registerDoor(b, doorB);
+			carveDoorOpening(doorA, style);
+			carveDoorOpening(doorB, style);
 
 			if (allowMaze && getRandomChance(rng, 0.15f))
 			{
-				carveMazeCorridor(doorA, doorB);
+				carveMazeCorridorWithStyle(doorA, doorB, style);
 			}
 			else
 			{
-				carveCorridor(doorA, doorB);
+				carveCorridorWithStyle(doorA, doorB, style);
 			}
 
 			roomConnections[a]++;
@@ -1046,9 +1353,16 @@ struct FloorGenerator
 			if (roomIndex < 0 || roomIndex >= (int)outInfo.rooms.size()) { return false; }
 			for (auto d : outInfo.rooms[roomIndex].doorPositions)
 			{
-				if (std::abs(d.x - x) + std::abs(d.y - y) <= dist)
+				for (int dy = 0; dy <= 1; dy++)
 				{
-					return true;
+					for (int dx = 0; dx <= 1; dx++)
+					{
+						int distValue = std::abs((d.x + dx) - x) + std::abs((d.y + dy) - y);
+						if (distValue <= dist)
+						{
+							return true;
+						}
+					}
 				}
 			}
 			return false;
@@ -1057,7 +1371,7 @@ struct FloorGenerator
 		auto applyRoomSetpiece = [&](int roomIndex)
 		{
 			const Rect &room = rooms[roomIndex];
-			if (room.isCave || room.isGrassRoom) { return; }
+			if (room.isCave || room.isGrassRoom || room.isBigRoom) { return; }
 			if (!getRandomChance(rng, 0.7f)) { return; }
 
 			int left = room.x + 2;
@@ -1065,6 +1379,7 @@ struct FloorGenerator
 			int top = room.y + 2;
 			int bottom = room.y2() - 3;
 			if (left > right || top > bottom) { return; }
+			BlockType innerWallType = room.isWoodRoom ? Blocks::woodenWall : Blocks::dungeonWall;
 
 			auto placeWall = [&](int x, int y)
 			{
@@ -1073,7 +1388,8 @@ struct FloorGenerator
 				auto &b = map.firstLayer.getBlockUnsafe(x, y);
 				if (b.type == Blocks::floor1 || b.type == Blocks::floor2)
 				{
-					b.type = Blocks::dungeonWall;
+					// TODO: replace some inner walls with decorative walls later.
+					b.type = innerWallType;
 				}
 			};
 
@@ -1103,6 +1419,7 @@ struct FloorGenerator
 						int y = std::clamp(center.y + getRandomInt(rng, -1, 1), top, bottom);
 						for (int x = left + inset; x <= right - inset; x++)
 						{
+							if (std::abs(x - center.x) <= 1) { continue; }
 							placeWall(x, y);
 						}
 					}
@@ -1111,6 +1428,7 @@ struct FloorGenerator
 						int x = std::clamp(center.x + getRandomInt(rng, -1, 1), left, right);
 						for (int y = top + inset; y <= bottom - inset; y++)
 						{
+							if (std::abs(y - center.y) <= 1) { continue; }
 							placeWall(x, y);
 						}
 					}
@@ -1188,6 +1506,305 @@ struct FloorGenerator
 					placeWallRect(center.x - size / 2, center.y - size / 2, size, size);
 					break;
 				}
+			}
+		};
+
+		// Extra cover layouts for large rooms.
+		auto applyBigRoomSetpiece = [&](int roomIndex)
+		{
+			const Rect &room = rooms[roomIndex];
+			if (!room.isBigRoom || room.isCave || room.isGrassRoom || room.isWoodRoom) { return; }
+			if (!getRandomChance(rng, cosmetics.bigRoomSetpieceChance)) { return; }
+
+			int left = room.x + 2;
+			int right = room.x2() - 3;
+			int top = room.y + 2;
+			int bottom = room.y2() - 3;
+			if (left > right || top > bottom) { return; }
+			BlockType innerWallType = Blocks::dungeonWall;
+
+			auto placeWall = [&](int x, int y)
+			{
+				if (x < left || x > right || y < top || y > bottom) { return; }
+				if (isDoorNearby(roomIndex, x, y, 2)) { return; }
+				auto &b = map.firstLayer.getBlockUnsafe(x, y);
+				if (b.type == Blocks::floor1 || b.type == Blocks::floor2
+					|| b.type == Blocks::floorPatern1
+					|| b.type == Blocks::floorBigTileTopLeft
+					|| b.type == Blocks::floorBigTileTopRight
+					|| b.type == Blocks::floorBigTileBottomLeft
+					|| b.type == Blocks::floorBigTileBottomRight)
+				{
+					// TODO: replace some inner walls with decorative walls later.
+					b.type = innerWallType;
+				}
+			};
+
+			auto placeWallRect = [&](int x0, int y0, int w, int h)
+			{
+				for (int y = y0; y < y0 + h; y++)
+				{
+					for (int x = x0; x < x0 + w; x++)
+					{
+						placeWall(x, y);
+					}
+				}
+			};
+
+			glm::ivec2 center = room.center();
+			int pattern = getRandomInt(rng, 0, 3);
+			switch (pattern)
+			{
+				case 0:
+				{
+					bool horizontal = room.w >= room.h;
+					int gap = 2;
+					if (horizontal)
+					{
+						int y1 = std::clamp(center.y - gap, top, bottom);
+						int y2 = std::clamp(center.y + gap, top, bottom);
+						for (int x = left + 1; x <= right - 1; x++)
+						{
+							placeWall(x, y1);
+							placeWall(x, y2);
+						}
+					}
+					else
+					{
+						int x1 = std::clamp(center.x - gap, left, right);
+						int x2 = std::clamp(center.x + gap, left, right);
+						for (int y = top + 1; y <= bottom - 1; y++)
+						{
+							placeWall(x1, y);
+							placeWall(x2, y);
+						}
+					}
+					break;
+				}
+				case 1:
+				{
+					for (int x = left + 1; x <= right - 1; x++)
+					{
+						if (std::abs(x - center.x) <= 1) { continue; }
+						placeWall(x, center.y);
+					}
+					for (int y = top + 1; y <= bottom - 1; y++)
+					{
+						if (std::abs(y - center.y) <= 1) { continue; }
+						placeWall(center.x, y);
+					}
+					break;
+				}
+				case 2:
+				{
+					int pillar = 3;
+					int px1 = left + 2;
+					int px2 = right - 2 - (pillar - 1);
+					int py1 = top + 2;
+					int py2 = bottom - 2 - (pillar - 1);
+					placeWallRect(px1, py1, pillar, pillar);
+					placeWallRect(px2, py1, pillar, pillar);
+					placeWallRect(px1, py2, pillar, pillar);
+					placeWallRect(px2, py2, pillar, pillar);
+					break;
+				}
+				default:
+				{
+					int len = std::min(8, right - left);
+					int startX = std::clamp(center.x - len / 2, left + 1, right - 1);
+					int startY = std::clamp(center.y - len / 2, top + 1, bottom - 1);
+					for (int i = 0; i < len; i++)
+					{
+						placeWall(startX + i, startY + (i % 2));
+						placeWall(startX + i, startY + 3 + (i % 2));
+					}
+					break;
+				}
+			}
+		};
+
+		// Rock clusters inside caves for cover.
+		auto applyCaveRoomSetpiece = [&](int roomIndex)
+		{
+			const Rect &room = rooms[roomIndex];
+			if (!room.isCave) { return; }
+			if (!getRandomChance(rng, cosmetics.caveRoomSetpieceChance)) { return; }
+
+			auto clearCaveDoorArea = [&]()
+			{
+				int radius = cosmetics.caveDoorClearRadius;
+				for (auto d : outInfo.rooms[roomIndex].doorPositions)
+				{
+					int minX = std::max(room.x, d.x - radius);
+					int maxX = std::min(room.x2() - 1, d.x + 1 + radius);
+					int minY = std::max(room.y, d.y - radius);
+					int maxY = std::min(room.y2() - 1, d.y + 1 + radius);
+
+					for (int y = minY; y <= maxY; y++)
+					{
+						for (int x = minX; x <= maxX; x++)
+						{
+							auto &tile = map.firstLayer.getBlockUnsafe(x, y);
+							if (tile.type == Blocks::cobbleStoneWall)
+							{
+								tile.type = Blocks::caveFloor;
+							}
+						}
+					}
+				}
+			};
+
+			int clusters = getRandomInt(rng, cosmetics.caveRoomWallClustersMin,
+				cosmetics.caveRoomWallClustersMax);
+			for (int i = 0; i < clusters; i++)
+			{
+				for (int attempt = 0; attempt < 10; attempt++)
+				{
+					int x = getRandomInt(rng, room.x + 2, room.x2() - 3);
+					int y = getRandomInt(rng, room.y + 2, room.y2() - 3);
+					if (isDoorNearby(roomIndex, x, y, 3)) { continue; }
+					int r = getRandomInt(rng, cosmetics.caveRoomWallClusterSizeMin,
+						cosmetics.caveRoomWallClusterSizeMax);
+					paintCircle({x, y}, r, Blocks::cobbleStoneWall, Blocks::caveFloor);
+					break;
+				}
+			}
+
+			clearCaveDoorArea();
+		};
+
+		// Softly blends dungeon floors into cave entrances.
+		auto blendCaveEntrance = [&](int roomIndex)
+		{
+			if (roomIndex < 0 || roomIndex >= (int)rooms.size()) { return; }
+			const Rect &room = rooms[roomIndex];
+			if (!room.isCave) { return; }
+
+			auto &doors = outInfo.rooms[roomIndex].doorPositions;
+			if (doors.empty()) { return; }
+
+			int radius = 3;
+			for (auto door : doors)
+			{
+				for (int y = door.y - radius; y <= door.y + radius; y++)
+				{
+					for (int x = door.x - radius; x <= door.x + radius; x++)
+					{
+						if (x < room.x || x >= room.x2() || y < room.y || y >= room.y2()) { continue; }
+						auto &tile = map.firstLayer.getBlockUnsafe(x, y);
+						if (tile.type != Blocks::caveFloor) { continue; }
+
+						float dx = (float)(x - door.x);
+						float dy = (float)(y - door.y);
+						float dist = std::sqrt(dx * dx + dy * dy);
+						float strength = 1.0f - dist / (radius + 0.5f);
+						if (strength <= 0.0f) { continue; }
+
+						if (getRandomFloat(rng, 0.0f, 1.0f) < strength * 0.65f)
+						{
+							tile.type = Blocks::floor2;
+						}
+					}
+				}
+			}
+		};
+
+		auto isDungeonFloorTile = [&](BlockType type)
+		{
+			return type == Blocks::floor1 || type == Blocks::floor2
+				|| type == Blocks::floorPatern1
+				|| type == Blocks::floorBigTileTopLeft
+				|| type == Blocks::floorBigTileTopRight
+				|| type == Blocks::floorBigTileBottomLeft
+				|| type == Blocks::floorBigTileBottomRight;
+		};
+
+		auto tryPlaceBigFloorTile = [&](int roomIndex, const Rect &room, int x, int y)
+		{
+			if (x < room.x + 2 || y < room.y + 2 || x + 1 >= room.x2() - 2 || y + 1 >= room.y2() - 2)
+			{
+				return false;
+			}
+			if (isDoorNearby(roomIndex, x, y, 2) || isDoorNearby(roomIndex, x + 1, y + 1, 2))
+			{
+				return false;
+			}
+
+			for (int yy = y - 1; yy <= y + 2; yy++)
+			{
+				for (int xx = x - 1; xx <= x + 2; xx++)
+				{
+					if (xx < room.x + 1 || xx >= room.x2() - 1 || yy < room.y + 1 || yy >= room.y2() - 1)
+					{
+						return false;
+					}
+					if (isWall(map.firstLayer.getBlockUnsafe(xx, yy).type))
+					{
+						return false;
+					}
+				}
+			}
+
+			for (int yy = y; yy <= y + 1; yy++)
+			{
+				for (int xx = x; xx <= x + 1; xx++)
+				{
+					auto &tile = map.firstLayer.getBlockUnsafe(xx, yy);
+					if (!isDungeonFloorTile(tile.type))
+					{
+						return false;
+					}
+				}
+			}
+
+			map.firstLayer.getBlockUnsafe(x, y).type = Blocks::floorBigTileTopLeft;
+			map.firstLayer.getBlockUnsafe(x + 1, y).type = Blocks::floorBigTileTopRight;
+			map.firstLayer.getBlockUnsafe(x, y + 1).type = Blocks::floorBigTileBottomLeft;
+			map.firstLayer.getBlockUnsafe(x + 1, y + 1).type = Blocks::floorBigTileBottomRight;
+			return true;
+		};
+
+		// Adds floor patterns and big tiles for larger rooms.
+		auto decorateDungeonRoomFloor = [&](int roomIndex)
+		{
+			const Rect &room = rooms[roomIndex];
+			if (room.isCave || room.isGrassRoom || room.isWoodRoom) { return; }
+
+			for (int y = room.y + 1; y < room.y2() - 1; y++)
+			{
+				for (int x = room.x + 1; x < room.x2() - 1; x++)
+				{
+					if (isDoorNearby(roomIndex, x, y, 1)) { continue; }
+					auto &tile = map.firstLayer.getBlockUnsafe(x, y);
+					if (tile.type == Blocks::floor1 || tile.type == Blocks::floor2)
+					{
+					if (getRandomChance(rng, cosmetics.dungeonFloorPatternChance))
+					{
+						tile.type = Blocks::floorPatern1;
+					}
+					}
+				}
+			}
+
+			if (room.w < 6 || room.h < 6) { return; }
+
+			int area = room.w * room.h;
+			int maxBigTiles = std::clamp(area / cosmetics.bigTileAreaDiv, 0, cosmetics.bigTileMax);
+			int bigTiles = getRandomInt(rng, 0, maxBigTiles);
+			for (int i = 0; i < bigTiles; i++)
+			{
+				bool placed = false;
+				for (int attempt = 0; attempt < cosmetics.bigTileAttempts; attempt++)
+				{
+					int x = getRandomInt(rng, room.x + 2, room.x2() - 3);
+					int y = getRandomInt(rng, room.y + 2, room.y2() - 3);
+					if (tryPlaceBigFloorTile(roomIndex, room, x, y))
+					{
+						placed = true;
+						break;
+					}
+				}
+				if (!placed) { break; }
 			}
 		};
 
@@ -1323,8 +1940,8 @@ struct FloorGenerator
 			if (conn.side == FloorConnection::Side::West) { end.x += 6; }
 			if (conn.side == FloorConnection::Side::East) { end.x -= 6; }
 
-			carveCorridor(start, end);
-
+			int style = Corridor_Dungeon;
+			int nearestIndex = -1;
 			if (!rooms.empty())
 			{
 				glm::ivec2 nearest = rooms.front().center();
@@ -1340,7 +1957,6 @@ struct FloorGenerator
 					}
 				}
 
-				int nearestIndex = 0;
 				for (int i = 0; i < (int)rooms.size(); i++)
 				{
 					if (rooms[i].center() == nearest)
@@ -1350,10 +1966,41 @@ struct FloorGenerator
 					}
 				}
 
+				if (nearestIndex >= 0)
+				{
+					if (rooms[nearestIndex].isCave)
+					{
+						style = Corridor_Cave;
+					}
+					else if (rooms[nearestIndex].isWoodRoom)
+					{
+						style = Corridor_Wood;
+					}
+				}
+			}
+
+			carveCorridorWithStyle(start, end, style);
+
+			if (nearestIndex >= 0)
+			{
 				glm::ivec2 door = pickDoorPos(nearestIndex, end);
 				registerDoor(nearestIndex, door);
-				carveCorridor(end, door);
+				carveDoorOpening(door, style);
+				if (nearestIndex >= 0 && nearestIndex < (int)roomConnections.size())
+				{
+					roomConnections[nearestIndex]++;
+				}
+				carveCorridorWithStyle(end, door, style);
 			}
+		}
+
+		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
+		{
+			blendCaveEntrance(roomIndex);
+			applyRoomSetpiece(roomIndex);
+			applyBigRoomSetpiece(roomIndex);
+			applyCaveRoomSetpiece(roomIndex);
+			decorateDungeonRoomFloor(roomIndex);
 		}
 
 		bool hasGrassRooms = false;
@@ -1364,21 +2011,148 @@ struct FloorGenerator
 				hasGrassRooms = true;
 				paintGrassRoom(room);
 			}
+			else if (room.isWoodRoom)
+			{
+				paintWoodRoom(room);
+				paintWoodRoomWalls(room);
+			}
 		}
 
 		if (hasGrassRooms)
 		{
-			placeRandomDirtSpots(map, seed + 140, 0.18f);
+			placeRandomDirtSpots(map, seed + 140, cosmetics.grassRoomDirtThreshold);
 			decorateGrassPatches(map, seed + 303);
-			for (const auto &room : rooms)
+			for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
 			{
+				const auto &room = rooms[roomIndex];
 				if (room.isGrassRoom)
 				{
-					//NOTE FOR AGENT, FINISH IMPLEMENTING THIS LINE !!!!!
-					//carveGrassRoomRoads(room); 
-					placeTreesInRoom(room);
+					carveGrassRoomRoads(roomIndex, room);
+					placeTreesInRoom(room, outInfo.rooms[roomIndex].doorPositions);
 				}
 			}
+		}
+
+		auto canSpawnOnTile = [&](const Rect &room, BlockType type)
+		{
+			if (room.isGrassRoom)
+			{
+				return type == Blocks::grass || type == Blocks::grassDecoration
+					|| type == Blocks::grassDecorationStones
+					|| type == Blocks::grassDecorationFlowers
+					|| type == Blocks::grassDecorationMushrooms
+					|| type == Blocks::dirt || type == Blocks::dirtDecoration;
+			}
+			if (room.isCave)
+			{
+				return type == Blocks::caveFloor || type == Blocks::floor2;
+			}
+			if (room.isWoodRoom)
+			{
+				return type == Blocks::woodenFloor;
+			}
+			return type == Blocks::floor1 || type == Blocks::floor2
+				|| type == Blocks::floorPatern1
+				|| type == Blocks::floorBigTileTopLeft
+				|| type == Blocks::floorBigTileTopRight
+				|| type == Blocks::floorBigTileBottomLeft
+				|| type == Blocks::floorBigTileBottomRight;
+		};
+
+		auto isDoorTooClose = [&](int roomIndex, glm::ivec2 pos, int minDist)
+		{
+			if (roomIndex < 0 || roomIndex >= (int)outInfo.rooms.size()) { return false; }
+			for (auto d : outInfo.rooms[roomIndex].doorPositions)
+			{
+				for (int dy = 0; dy <= 1; dy++)
+				{
+					for (int dx = 0; dx <= 1; dx++)
+					{
+						int dist = std::abs(pos.x - (d.x + dx)) + std::abs(pos.y - (d.y + dy));
+						if (dist < minDist)
+						{
+							return true;
+						}
+					}
+				}
+			}
+			return false;
+		};
+
+		auto pickSpawnPosition = [&](int roomIndex, const Rect &room) -> std::optional<glm::ivec2>
+		{
+			int margin = room.isBigRoom ? cosmetics.bigRoomSpawnMargin : 2;
+			int minDist = room.isBigRoom ? cosmetics.bigRoomDoorMinDist : cosmetics.doorSpawnMinDist;
+			int attempts = room.isBigRoom ? 12 : 6;
+			glm::ivec2 center = room.center();
+
+			int minX = room.x + margin;
+			int maxX = room.x2() - margin - 1;
+			int minY = room.y + margin;
+			int maxY = room.y2() - margin - 1;
+			if (minX > maxX || minY > maxY) { return {}; }
+
+			for (int attempt = 0; attempt < attempts; attempt++)
+			{
+				glm::ivec2 spawn = {
+					getRandomInt(rng, minX, maxX),
+					getRandomInt(rng, minY, maxY)
+				};
+
+				if (room.isBigRoom)
+				{
+					if (std::abs(spawn.x - center.x) > room.w / 3
+						|| std::abs(spawn.y - center.y) > room.h / 3)
+					{
+						continue;
+					}
+				}
+
+				if (isDoorTooClose(roomIndex, spawn, minDist)) { continue; }
+				auto &tile = map.firstLayer.getBlockUnsafe(spawn.x, spawn.y);
+				if (!canSpawnOnTile(room, tile.type)) { continue; }
+				return spawn;
+			}
+
+			return {};
+		};
+
+		auto clearDoorTilesForRoom = [&](int roomIndex)
+		{
+			if (roomIndex < 0 || roomIndex >= (int)rooms.size()) { return; }
+			const auto &room = rooms[roomIndex];
+			BlockType doorFloor = Blocks::floor1;
+			if (room.isGrassRoom) { doorFloor = Blocks::grass; }
+			else if (room.isCave) { doorFloor = Blocks::caveFloor; }
+			else if (room.isWoodRoom) { doorFloor = Blocks::woodenFloor; }
+
+			for (auto d : outInfo.rooms[roomIndex].doorPositions)
+			{
+				for (int dy = 0; dy <= 1; dy++)
+				{
+					for (int dx = 0; dx <= 1; dx++)
+					{
+						int x = d.x + dx;
+						int y = d.y + dy;
+						if (x < room.x || x >= room.x2() || y < room.y || y >= room.y2()) { continue; }
+						auto &tile = map.firstLayer.getBlockUnsafe(x, y);
+						if (isWall(tile.type) || tile.type == Blocks::none)
+						{
+							tile.type = doorFloor;
+						}
+						auto &over = map.secondLayer.getBlockUnsafe(x, y);
+						if (over.type != Blocks::none && isBlockColidable(over.type))
+						{
+							over.type = Blocks::none;
+						}
+					}
+				}
+			}
+		};
+
+		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
+		{
+			clearDoorTilesForRoom(roomIndex);
 		}
 
 		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
@@ -1394,38 +2168,54 @@ struct FloorGenerator
 			for (int i = 0; i < count; i++)
 			{
 				bool placed = false;
-				for (int attempt = 0; attempt < 6; attempt++)
+				auto spawnPick = pickSpawnPosition(roomIndex, room);
+				if (spawnPick)
 				{
-					glm::ivec2 spawn = {
-						room.x + 2 + getRandomInt(rng, 0, room.w - 4),
-						room.y + 2 + getRandomInt(rng, 0, room.h - 4)
-					};
-
-					auto &tile = map.firstLayer.getBlockUnsafe(spawn.x, spawn.y);
-				bool canSpawn = false;
-				if (room.isGrassRoom)
-				{
-					canSpawn = tile.type == Blocks::grass || tile.type == Blocks::grassDecoration
-						|| tile.type == Blocks::dirt || tile.type == Blocks::dirtDecoration;
-				}
-				else
-				{
-					canSpawn = tile.type == Blocks::floor1 || tile.type == Blocks::floor2;
-				}
-
-				if (canSpawn)
-				{
-					glm::vec2 spawnPos = {spawn.x + 0.5f, spawn.y + 0.5f};
+					glm::vec2 spawnPos = {spawnPick->x + 0.5f, spawnPick->y + 0.5f};
 					outRoom.enemySpawnPositions.push_back(spawnPos);
-						outInfo.enemySpawnPositions.push_back(spawnPos);
-						placed = true;
-						break;
-					}
+					outInfo.enemySpawnPositions.push_back(spawnPos);
+					placed = true;
 				}
 
 				if (!placed)
 				{
-					glm::vec2 spawnPos = {room.center().x + 0.5f, room.center().y + 0.5f};
+					glm::ivec2 fallback = room.center();
+					int minDist = room.isBigRoom ? cosmetics.bigRoomDoorMinDist : cosmetics.doorSpawnMinDist;
+					if (isDoorTooClose(roomIndex, fallback, minDist))
+					{
+						glm::ivec2 away = fallback;
+						int bestDist = INT_MAX;
+						glm::ivec2 nearest = fallback;
+						for (auto d : outInfo.rooms[roomIndex].doorPositions)
+						{
+							for (int dy = 0; dy <= 1; dy++)
+							{
+								for (int dx = 0; dx <= 1; dx++)
+								{
+									int dist = std::abs(fallback.x - (d.x + dx)) + std::abs(fallback.y - (d.y + dy));
+									if (dist < bestDist)
+									{
+										bestDist = dist;
+										nearest = {d.x + dx, d.y + dy};
+									}
+								}
+							}
+						}
+						glm::ivec2 dir = fallback - nearest;
+						if (dir.x == 0 && dir.y == 0) { dir = {1, 0}; }
+						if (std::abs(dir.x) >= std::abs(dir.y))
+						{
+							away.x += (dir.x >= 0 ? minDist : -minDist);
+						}
+						else
+						{
+							away.y += (dir.y >= 0 ? minDist : -minDist);
+						}
+						away.x = std::clamp(away.x, room.x + 1, room.x2() - 2);
+						away.y = std::clamp(away.y, room.y + 1, room.y2() - 2);
+						fallback = away;
+					}
+					glm::vec2 spawnPos = {fallback.x + 0.5f, fallback.y + 0.5f};
 					outRoom.enemySpawnPositions.push_back(spawnPos);
 					outInfo.enemySpawnPositions.push_back(spawnPos);
 				}

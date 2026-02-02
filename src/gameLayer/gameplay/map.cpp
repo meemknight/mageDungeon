@@ -2,6 +2,22 @@
 #include <imgui.h>
 #include <imguiTools.h>
 
+// Hash-based offsets for per-tile atlas variation.
+static unsigned int hashPosition(int x, int y)
+{
+	unsigned int h = 2166136261u;
+	h = (h ^ (unsigned int)x) * 16777619u;
+	h = (h ^ (unsigned int)y) * 16777619u;
+	return h;
+}
+
+static int pickAtlasOffset(unsigned int h, int maxOffset, unsigned int salt)
+{
+	if (maxOffset <= 0) { return 0; }
+	h ^= salt + 0x9e3779b9u + (h << 6) + (h >> 2);
+	return int(h % (unsigned int)(maxOffset + 1));
+}
+
 void Map::create(int sizeX, int sizeY)
 {
 	*this = {};
@@ -256,13 +272,14 @@ void MapLayer::renderMap(gl2d::Renderer2D &renderer,
 			if (b.type)
 			{
 
-				int tileSet = getTileSetIndex(b.type);
-				auto uv = getBlockAtlasPos(b.type);
+			int tileSet = getTileSetIndex(b.type);
+			auto uv = getBlockAtlasPos(b.type);
+			auto randomOffsets = getRandomAtlasOffsets(b.type);
 
-				auto tile = assetManager.tileSets[tileSet];
+			auto tile = assetManager.tileSets[tileSet];
 
-				if (tile.texture.isValid())
-				{
+			if (tile.texture.isValid())
+			{
 
 					if (isChunkyTile(b.type))
 					{
@@ -278,11 +295,18 @@ void MapLayer::renderMap(gl2d::Renderer2D &renderer,
 							{0,0.5,1,0}
 						);
 					}
-					else
+				else
+				{
+					if (randomOffsets.x != 0 || randomOffsets.y != 0)
 					{
-						renderer.renderRectangle({x,y,1,1},
-							tile.texture,
-							Colors_White,
+						unsigned int h = hashPosition(x, y);
+						uv.x += pickAtlasOffset(h, randomOffsets.x, 0x68bc21ebu);
+						uv.y += pickAtlasOffset(h, randomOffsets.y, 0x9e3779b9u);
+					}
+
+					renderer.renderRectangle({x,y,1,1},
+						tile.texture,
+						Colors_White,
 							{},
 							0,
 							tile.atlas.get(uv.x, uv.y)

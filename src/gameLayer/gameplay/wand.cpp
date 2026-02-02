@@ -32,7 +32,7 @@ Wand makeStarterWand(std::ranlux24_base &rng)
 	wand.up = {WandSlotType::Element, element, 1};
 	wand.down = {WandSlotType::Disabled, Elements::NoneElement, 1};
 	wand.left = {WandSlotType::Disabled, Elements::NoneElement, 1};
-	wand.right = {WandSlotType::Disabled, Elements::NoneElement, 1};
+	wand.right = {WandSlotType::Empty, Elements::NoneElement, 1};
 	wand.alwaysCast = {WandSlotType::Disabled};
 	wand.maxMana = 3;
 	wand.manaChargeSpeed = 0.4f;

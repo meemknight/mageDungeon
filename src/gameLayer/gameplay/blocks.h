@@ -14,11 +14,27 @@ namespace Blocks
 		grass,
 		dirt,
 		grassDecoration,
+		grassDecorationStones,
+		grassDecorationFlowers,
+		grassDecorationMushrooms,
+
 		dirtDecoration,
 		fence,
 		hill,
 		smallTree,
 		cobbleStoneWall,
+
+		floorBigTileTopLeft,
+		floorBigTileTopRight,
+		floorBigTileBottomLeft,
+		floorBigTileBottomRight,
+
+		floorPatern1,
+
+		caveFloor,
+
+		woodenFloor,
+		woodenWall,
 
 		BLOCKS_COUNT
 
@@ -52,6 +68,11 @@ namespace TileSets
 		hillWall3D,
 		smallTree,
 		stoneWall3D,
+		caveFloor,
+		grassDecor,
+		woodenFloor,
+		woodenWall3D,
+
 		TILE_SETS_COUNT
 	};
 }
@@ -70,6 +91,10 @@ struct BlockSettings
 	bool isSmallWall = 0;
 	bool chunkyTile = 0;
 	int wall3DTileSet = 0; 
+
+	//if this is not 0, than the block can have up to
+	// this extra offsets selected randomly
+	glm::ivec2 randomAtlasOffsets = {};
 
 
 	BlockSettings &setCollidable()
@@ -93,6 +118,12 @@ struct BlockSettings
 	BlockSettings &setAtlasPos(glm::ivec2 pos)
 	{
 		this->atlasPos = pos;
+		return *this;
+	}
+
+	BlockSettings &setRandomAtlasOffsets(glm::ivec2 pos)
+	{
+		this->randomAtlasOffsets = pos;
 		return *this;
 	}
 
@@ -131,6 +162,7 @@ struct BlockSettings
 
 
 glm::ivec2 getBlockAtlasPos(BlockType block);
+glm::ivec2 getRandomAtlasOffsets(BlockType block);
 int getTileSetIndex(BlockType block);
 int getWall3DTileSetIndex(BlockType block);
 int isBlockColidable(BlockType block);

@@ -32,6 +32,10 @@ void AssetsManager::loadAllAssets()
 		16, //hill3D
 		0, //smallTree   0 for no texture atlas
 		16, //stoneWall3D
+		16, //caveFloor,
+		16, //grassDecor,
+		16, //wooden floor,
+		16, //wooden wall 3D,
 	};
 
 	//if you see an error that means you added a sprite but forgot to add
@@ -55,6 +59,10 @@ void AssetsManager::loadAllAssets()
 		{6, 4}, //hill3D
 		{1, 1}, //smallTree
 		{6, 4}, //stone wall 3D
+		{8,1}, //caveFloor,
+		{4,4}, //grassDecor,
+		{4,1}, //wooden floor
+		{6,4}, //wooden wall 3D
 
 	};
 
@@ -124,14 +132,35 @@ void AssetsManager::loadAllAssets()
 	}
 
 
+	auto loadCharacter = [&](TileSet &set, const char *path, int cellSize, glm::ivec2 atlasSize)
+	{
+		set.texture.loadFromFileWithPixelPadding(path, cellSize);
+		auto size = set.texture.GetSize();
+		set.atlas = gl2d::TextureAtlasPadding(atlasSize.x, atlasSize.y, size.x, size.y);
+	};
+
 	player.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "characters/player.png",	48);
 	auto s = player.texture.GetSize();
 	player.atlas = gl2d::TextureAtlasPadding(6, 10, s.x, s.y);
 
+	loadCharacter(skeleton, RESOURCES_PATH "characters/skeleton.png", 48, {6, 10});
+	loadCharacter(templarOriginal, RESOURCES_PATH "characters/templarOriginal.png", 48, {6, 10});
+	loadCharacter(earthTemplar, RESOURCES_PATH "characters/earthTemplar.png", 48, {6, 10});
+	loadCharacter(fireTemplar, RESOURCES_PATH "characters/fireTemplar.png", 48, {6, 10});
+	loadCharacter(iceTemplar, RESOURCES_PATH "characters/iceTemplar.png", 48, {6, 10});
+	loadCharacter(waterTemplar, RESOURCES_PATH "characters/waterTemplar.png", 48, {6, 10});
+	loadCharacter(goblinArcher, RESOURCES_PATH "characters/goblinArcher.png", 48, {6, 10});
+	loadCharacter(goblinSpearman, RESOURCES_PATH "characters/goblinSpearman.png", 48, {6, 10});
+	loadCharacter(orcArcher, RESOURCES_PATH "characters/orcArcher.png", 48, {6, 10});
+	loadCharacter(goblinHeavy, RESOURCES_PATH "characters/goblinHeavy.png", 32, {6, 10});
+	loadCharacter(goblinThief, RESOURCES_PATH "characters/golbinThief.png", 32, {6, 10});
 
-	skeleton.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "characters/skeleton.png", 48);
-	s = skeleton.texture.GetSize();
-	skeleton.atlas = gl2d::TextureAtlasPadding(6, 10, s.x, s.y);
+	// dark angel uses variable column count, compute from texture width
+	int darkCellSize = 64;
+	darkAngel.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "characters/darkAngel.png", darkCellSize);
+	s = darkAngel.texture.GetSize();
+	int darkCols = std::max(1, (s.x + darkCellSize / 2) / darkCellSize);
+	darkAngel.atlas = gl2d::TextureAtlasPadding(darkCols, 10, s.x, s.y);
 
 	waterSlime.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "characters/waterSlime.png", 32);
 	s = waterSlime.texture.GetSize();

@@ -10,11 +10,14 @@
 #include <random>
 #include <particles/particleCreator.h>
 #include <gameplay/characterAnimator.h>
+#include <gameplay/entities/enemyBehavior.h>
+#include <gameplay/assetsManager.h>
 
 #include <gameplay/player.h>
 #include <gameplay/aStar.h>
 
 struct SummonHolder;
+struct ProjectileHolder;
 
 struct HitStats
 {
@@ -98,6 +101,10 @@ struct Entity
 
 	int element = 0;
 
+	// Death animation state - when true, entity is playing death animation
+	// and should not interact with anything (no collision, no damage, etc.)
+	bool dying = false;
+
 	Entity()
 	{
 	}
@@ -110,9 +117,16 @@ struct Entity
 
 	}
 
+	// Called when entity should start dying (life <= 0). Override to start death animation.
+	// Return true if death animation is used, false to die immediately.
+	virtual bool startDying() { return false; }
+
+	// Called each frame while dying. Return true to keep dying, false to remove entity.
+	virtual bool updateDying(float deltaTime) { return false; }
 
 	virtual bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
-		std::ranlux24_base &rng, Player &player, SummonHolder &summons) = 0;
+		std::ranlux24_base &rng, Player &player, SummonHolder &summons,
+		ProjectileHolder &projectiles) = 0;
 
 	virtual void render(gl2d::Renderer2D &renderer, ParticlePostProcessRenderer &particlePostProcessRenderer) = 0;
 
@@ -144,13 +158,31 @@ struct EntityHolder
 	}
 
 	void update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
-		std::ranlux24_base &rng, Player &player, SummonHolder &summons)
+		std::ranlux24_base &rng, Player &player, SummonHolder &summons,
+		ProjectileHolder &projectiles)
 	{
 
 		for (auto it = entities.begin(); it != entities.end(); )
 		{
 			Entity &p = **it;
 
+			// If dying, only update the death animation
+			if (p.dying)
+			{
+				if (!p.updateDying(deltaTime))
+				{
+					// Death animation finished, remove entity
+					p.onKill();
+					mainParticleSystem.copyParticles(
+						p.particleSystem, rng, p.physics.getPos());
+					it = entities.erase(it);
+					continue;
+				}
+				++it;
+				continue;
+			}
+
+			// Normal update - skip status effects and damage if dying
 			auto statusTick = updateStatusEffects(p.statusEffects, p.statusImmunities, deltaTime);
 			p.statusSpeedMultiplier = statusTick.speedMultiplier;
 			if (statusTick.damage > 0.0f)
@@ -162,12 +194,43 @@ struct EntityHolder
 			}
 			updateStatusEffectParticles(p.statusEffects, mainParticleSystem, rng, p.physics.getPos(), deltaTime);
 
-			if ((p.life.life <= 0) ||  !p.update(deltaTime, map, mainParticleSystem, rng, player, summons) ||
-				(p.life.life <= 0)
-				)
+			// Check if entity should start dying
+			if (p.life.life <= 0)
+			{
+				if (p.startDying())
+				{
+					// Entity has death animation, continue to next frame
+					p.dying = true;
+					++it;
+					continue;
+				}
+				// No death animation, remove immediately
+				p.onKill();
+				mainParticleSystem.copyParticles(
+					p.particleSystem, rng, p.physics.getPos());
+				it = entities.erase(it);
+				continue;
+			}
+
+			if (!p.update(deltaTime, map, mainParticleSystem, rng, player, summons, projectiles))
 			{
 				p.onKill();
+				mainParticleSystem.copyParticles(
+					p.particleSystem, rng, p.physics.getPos());
+				it = entities.erase(it);
+				continue;
+			}
 
+			// Check again after update in case update caused death
+			if (p.life.life <= 0)
+			{
+				if (p.startDying())
+				{
+					p.dying = true;
+					++it;
+					continue;
+				}
+				p.onKill();
 				mainParticleSystem.copyParticles(
 					p.particleSystem, rng, p.physics.getPos());
 				it = entities.erase(it);
@@ -244,8 +307,10 @@ inline void resolveEntityPush(EntityHolder &holder, Player &player)
 
 	for (size_t i = 0; i < holder.entities.size(); i++)
 	{
+		if (holder.entities[i]->dying) continue; // skip dying entities
 		for (size_t j = i + 1; j < holder.entities.size(); j++)
 		{
+			if (holder.entities[j]->dying) continue; // skip dying entities
 			applyPush(holder.entities[i]->physics, entityWeight,
 				holder.entities[j]->physics, entityWeight);
 		}
@@ -253,123 +318,37 @@ inline void resolveEntityPush(EntityHolder &holder, Player &player)
 
 	for (auto &entity : holder.entities)
 	{
+		if (entity->dying) continue; // skip dying entities
 		applyPush(player.physics, playerWeight, entity->physics, entityWeight);
 	}
 }
 
 struct BasicMeleEnemy : public Entity
 {
-
 	TileSet tileSet;
 
-	enum class AIState { Wander, Chase, Investigate };
+	// Movement/AI behavior - handles chasing, pathfinding, wandering
+	EnemyBehavior behavior;
 
-	AIState aiState = AIState::Wander;
+	// Hit animation state - triggers when enemy touches player
+	bool playingHitAnimation = false;
+	float hitAnimationTimer = 0.0f;
+	float hitAnimationDuration = 0.36f; // 6 frames * 0.06s per frame
+	int hitAnimationBaseY = 0; // base Y for current hit animation direction
+	int lastAnimationFrame = 0; // track previous frame to detect animation wrap
 
-	std::vector<glm::ivec2> pathTiles;
-	int pathIndex = 0;
+	// Death animation state
+	static constexpr int deathAnimationY = 9; // death animation row
+	static constexpr int deathAnimationFrames = 6;
+	static constexpr float deathFrameDuration = 0.10f;
 
-	float repathTimer = 0.0f;
-	float forgetTimer = 0.0f;
-	float wanderTimer = 0.0f;
-	glm::vec2 idleDir = glm::vec2(0.0f);
-
-	bool wanderWhenIdle = false;          // option requested
-	bool chasing = false;
-	float timeSinceSeen = 0.0f;
-	glm::ivec2 lastGoalTile = {-9999,-9999};
-	std::vector<glm::ivec2> path;
-	glm::vec2 moveDir = glm::vec2(1,0);
-
-
-	glm::vec2 wanderTargetWorld = glm::vec2(0.0f);
-
-	// Tuning
-	float speed = 2.2f;
-	float chaseAcquireRange = 13.0f;      // start chasing if within this distance
-	float chaseLoseRange    = 15.0f;     // keep chasing until beyond this distance
-	float summonAggroRange = 5.0f;       // switch to summon target if very close
-	float turnRate          = 14.0f;     // higher = snappier steering
-	float noLOSTimer = 0.0f;
-	float forgetAfterNoLOS = 2.0f;     // seconds with no LOS before forgetting
-	float repathInterval = 0.25f;      // how often to rebuild A* when needed
-	bool seeThroughWalls = false;
-
-	glm::vec2 lastSeenPlayerPos = glm::vec2(0.0f);
-	glm::ivec2 lastSeenPlayerTile = glm::ivec2(0);
-	bool hasLastSeen = false;
-
-	glm::ivec2 lastPathGoalTile = glm::ivec2(999999); // forces first rebuild
-
-
-	static inline glm::ivec2 worldToTile(glm::vec2 p) { return glm::ivec2((int)std::floor(p.x), (int)std::floor(p.y)); }
-	static inline glm::vec2  tileCenter(glm::ivec2 t) { return glm::vec2(t) + glm::vec2(0.5f, 0.5f); }
-
-	static inline bool isCornerCutBlocked(Map &map, glm::ivec2 from, glm::ivec2 to)
-	{
-		glm::ivec2 d = to - from;
-		if (std::abs(d.x) == 1 && std::abs(d.y) == 1)
-		{
-			// If moving diagonally, disallow squeezing through a corner:
-			// both adjacent orthogonal tiles must be free.
-			if (IsBlockedTile(map, from.x + d.x, from.y) || IsBlockedTile(map, from.x, from.y + d.y))
-				return true;
-		}
-		return false;
-	}
-
-	// Supercover line walk on grid (good for "direct chase" feel). Returns false if any tile along the line is blocked.
-	// Also checks the "no corner cutting" rule for diagonal steps.
-	static bool hasClearGridLine8(Map &map, glm::ivec2 start, glm::ivec2 goal)
-	{
-		int x0 = start.x, y0 = start.y;
-		int x1 = goal.x, y1 = goal.y;
-
-		int dx = std::abs(x1 - x0);
-		int dy = std::abs(y1 - y0);
-		int sx = (x0 < x1) ? 1 : -1;
-		int sy = (y0 < y1) ? 1 : -1;
-
-		int err = dx - dy;
-
-		glm::ivec2 prev(x0, y0);
-
-		// Check start (optional)
-		if (IsBlockedTile(map, prev.x, prev.y)) return false;
-
-		while (!(x0 == x1 && y0 == y1))
-		{
-			int e2 = err * 2;
-
-			int nx = x0;
-			int ny = y0;
-
-			if (e2 > -dy) { err -= dy; nx += sx; }
-			if (e2 < dx) { err += dx; ny += sy; }
-
-			glm::ivec2 curr(nx, ny);
-
-			if (IsBlockedTile(map, curr.x, curr.y)) return false;
-			if (isCornerCutBlocked(map, prev, curr)) return false;
-
-			prev = curr;
-			x0 = nx; y0 = ny;
-		}
-		return true;
-	}
-
-	static inline glm::vec2 safeNormalize(glm::vec2 v)
-	{
-		float len2 = glm::dot(v, v);
-		if (len2 <= 1e-8f) return glm::vec2(0, 0);
-		return v * (1.0f / std::sqrt(len2));
-	}
-
+	bool startDying() override;
+	bool updateDying(float deltaTime) override;
 
 	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
-		std::ranlux24_base &rng, Player &player, SummonHolder &summons) override;
+		std::ranlux24_base &rng, Player &player, SummonHolder &summons,
+		ProjectileHolder &projectiles) override;
 
 	void render(gl2d::Renderer2D &renderer, ParticlePostProcessRenderer &particlePostProcessRenderer) override;
-
 };
 

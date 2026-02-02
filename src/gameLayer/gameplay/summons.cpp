@@ -162,6 +162,7 @@ void resolveSummonEntityPush(EntityHolder &entityHolder, SummonHolder &summons)
 		if (summon->isDying()) { continue; }
 		for (auto &entity : entityHolder.entities)
 		{
+			if (entity->dying) continue; // skip dying entities
 			applyPush(summon->physics, summonWeight, entity->physics, entityWeight);
 		}
 	}
@@ -255,6 +256,7 @@ bool SlimeSummon::update(float deltaTime, Map &map, ParticleSystem &mainParticle
 	{
 		for (auto &enemy : entityHolder.entities)
 		{
+			if (enemy->dying) continue; // skip dying entities
 			if (physics.transform.intersectTransform(enemy->physics.transform))
 			{
 				life -= 1.0f;
@@ -401,6 +403,7 @@ bool SlimeSummon::update(float deltaTime, Map &map, ParticleSystem &mainParticle
 		float bestDist2 = attackRange * attackRange;
 		for (auto &enemy : entityHolder.entities)
 		{
+			if (enemy->dying) continue; // skip dying entities
 			glm::vec2 diff = enemy->physics.getPos() - summonPos;
 			float dist2 = glm::dot(diff, diff);
 			if (dist2 > bestDist2)

@@ -362,106 +362,114 @@ bool GameLogic::update(float deltaTime,
 	{
 		ImGui::Begin("Game Debug");
 
-	ImGui::DragFloat2("Position", &player.physics.getPos()[0], 0.01);
-	ImGui::DragFloat("zoom", &zoom);
-	static int randomWandTier = 1;
-	ImGui::SliderInt("Random Wand Tier", &randomWandTier, 0, 5);
-	if (ImGui::Button("Random Wand"))
+	if (ImGui::CollapsingHeader("Player", ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		returnStonesFromWand(activeWandIndex, wands[activeWandIndex]);
-		wands[activeWandIndex] = getRandomWand(randomWandTier, rng);
-		spellSelectionLogic[activeWandIndex].resetSelectionForWand(
-			wands[activeWandIndex], spellRecepies[activeWandIndex], true);
+		ImGui::DragFloat2("Position", &player.physics.getPos()[0], 0.01);
+		ImGui::DragFloat("zoom", &zoom);
 	}
-
-	ImGui::Separator();
-	ImGui::Text("Magic Stones");
-	if (ImGui::Button("Add Fire Stone"))
+	if (ImGui::CollapsingHeader("Wands", ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		stoneInventory.push_back({Elements::Fire, 2});
-	}
-	ImGui::SameLine();
-	if (ImGui::Button("Add Water Stone"))
-	{
-		stoneInventory.push_back({Elements::Water, 2});
-	}
-	if (ImGui::Button("Add Earth Stone"))
-	{
-		stoneInventory.push_back({Elements::Earth, 2});
-	}
-	ImGui::SameLine();
-	if (ImGui::Button("Add Ice Stone"))
-	{
-		stoneInventory.push_back({Elements::Ice, 2});
-	}
-	if (ImGui::Button("Remove Last Stone") && !stoneInventory.empty())
-	{
-		stoneInventory.pop_back();
-	}
-
-	ImGui::Separator();
-	ImGui::Text("Wand Elements");
-	ImGui::Text("Max Elements Per Cast: %d", currentWand.maxElementsPerCast);
-	int elementUses[Elements::Ice + 1] = {};
-	auto addElementUses = [&](const WandSlot &slot)
-	{
-		if (slot.type == WandSlotType::Element)
+		static int randomWandTier = 1;
+		ImGui::SliderInt("Random Wand Tier", &randomWandTier, 0, 5);
+		if (ImGui::Button("Random Wand"))
 		{
-			elementUses[slot.element] += slot.castCount;
+			returnStonesFromWand(activeWandIndex, wands[activeWandIndex]);
+			wands[activeWandIndex] = getRandomWand(randomWandTier, rng);
+			spellSelectionLogic[activeWandIndex].resetSelectionForWand(
+				wands[activeWandIndex], spellRecepies[activeWandIndex], true);
 		}
-	};
-	addElementUses(currentWand.up);
-	addElementUses(currentWand.down);
-	addElementUses(currentWand.left);
-	addElementUses(currentWand.right);
-	addElementUses(currentWand.alwaysCast);
 
-	const char *elementNames[] = {"None", "Fire", "Water", "Earth", "Ice"};
-	for (int element = Elements::Fire; element <= Elements::Ice; element++)
-	{
-		if (elementUses[element] > 0)
+		ImGui::Separator();
+		ImGui::Text("Magic Stones");
+		if (ImGui::Button("Add Fire Stone"))
 		{
-			ImGui::Text("%s: %d", elementNames[element], elementUses[element]);
+			stoneInventory.push_back({Elements::Fire, 2});
 		}
-	}
-	if (currentWand.alwaysCast.type == WandSlotType::Element)
-	{
-		ImGui::Text("Always Cast: %s x%d", elementNames[currentWand.alwaysCast.element],
-			currentWand.alwaysCast.castCount);
-	}
-	else if (currentWand.alwaysCast.type == WandSlotType::Empty)
-	{
-		ImGui::Text("Always Cast: Empty");
-	}
-	else
-	{
-		ImGui::Text("Always Cast: Disabled");
-	}
+		ImGui::SameLine();
+		if (ImGui::Button("Add Water Stone"))
+		{
+			stoneInventory.push_back({Elements::Water, 2});
+		}
+		if (ImGui::Button("Add Earth Stone"))
+		{
+			stoneInventory.push_back({Elements::Earth, 2});
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Add Ice Stone"))
+		{
+			stoneInventory.push_back({Elements::Ice, 2});
+		}
+		if (ImGui::Button("Remove Last Stone") && !stoneInventory.empty())
+		{
+			stoneInventory.pop_back();
+		}
 
-	ImGui::Separator();
-	ImGui::Text("Wand Slots");
-	const char *slotNames[] = {"Up", "Down", "Left", "Right"};
-	const WandSlot *slots[] = {&currentWand.up, &currentWand.down, &currentWand.left, &currentWand.right};
-	for (int i = 0; i < 4; i++)
-	{
-		auto &slot = *slots[i];
-		if (slot.type == WandSlotType::Element)
+		ImGui::Separator();
+		ImGui::Text("Wand Elements");
+		ImGui::Text("Max Elements Per Cast: %d", currentWand.maxElementsPerCast);
+		int elementUses[Elements::Ice + 1] = {};
+		auto addElementUses = [&](const WandSlot &slot)
 		{
-			ImGui::Text("%s: %s x%d", slotNames[i], elementNames[slot.element], slot.castCount);
+			if (slot.type == WandSlotType::Element)
+			{
+				elementUses[slot.element] += slot.castCount;
+			}
+		};
+		addElementUses(currentWand.up);
+		addElementUses(currentWand.down);
+		addElementUses(currentWand.left);
+		addElementUses(currentWand.right);
+		addElementUses(currentWand.alwaysCast);
+
+		const char *elementNames[] = {"None", "Fire", "Water", "Earth", "Ice"};
+		for (int element = Elements::Fire; element <= Elements::Ice; element++)
+		{
+			if (elementUses[element] > 0)
+			{
+				ImGui::Text("%s: %d", elementNames[element], elementUses[element]);
+			}
 		}
-		else if (slot.type == WandSlotType::Empty)
+		if (currentWand.alwaysCast.type == WandSlotType::Element)
 		{
-			ImGui::Text("%s: Empty", slotNames[i]);
+			ImGui::Text("Always Cast: %s x%d", elementNames[currentWand.alwaysCast.element],
+				currentWand.alwaysCast.castCount);
+		}
+		else if (currentWand.alwaysCast.type == WandSlotType::Empty)
+		{
+			ImGui::Text("Always Cast: Empty");
 		}
 		else
 		{
-			ImGui::Text("%s: Disabled", slotNames[i]);
+			ImGui::Text("Always Cast: Disabled");
+		}
+
+		ImGui::Separator();
+		ImGui::Text("Wand Slots");
+		const char *slotNames[] = {"Up", "Down", "Left", "Right"};
+		const WandSlot *slots[] = {&currentWand.up, &currentWand.down, &currentWand.left, &currentWand.right};
+		for (int i = 0; i < 4; i++)
+		{
+			auto &slot = *slots[i];
+			if (slot.type == WandSlotType::Element)
+			{
+				ImGui::Text("%s: %s x%d", slotNames[i], elementNames[slot.element], slot.castCount);
+			}
+			else if (slot.type == WandSlotType::Empty)
+			{
+				ImGui::Text("%s: Empty", slotNames[i]);
+			}
+			else
+			{
+				ImGui::Text("%s: Disabled", slotNames[i]);
+			}
 		}
 	}
-	ImGui::Separator();
 
+	ImGui::Separator();
 	static bool particleUseVelocity = false;
-	ImGui::Checkbox("Particle Velocity", &particleUseVelocity);
+	if (ImGui::CollapsingHeader("Particles"))
+	{
+		ImGui::Checkbox("Particle Velocity", &particleUseVelocity);
 
 	auto spawnParticleTest = [&](ParticleSettings particle)
 	{
@@ -511,13 +519,109 @@ bool GameLogic::update(float deltaTime,
 		spawnParticleTest(getBobParticle({0.9f, 0.7f, 0.5f, 0.9f}, {0.6f, 0.4f, 0.3f, 0.7f}));
 	}
 
+	}
+
 	ImGui::Separator();
-	ImGui::Text("Palette");
-	ImGui::Checkbox("Palette Particles", &paletteEffect.enabledParticles);
-	ImGui::Checkbox("Palette Game", &paletteEffect.enabledGame);
-	if (!paletteEffect.hasPalette())
+	if (ImGui::CollapsingHeader("Palette"))
 	{
-		ImGui::Text("Palette: not loaded");
+		ImGui::Checkbox("Palette Particles", &paletteEffect.enabledParticles);
+		ImGui::Checkbox("Palette Game", &paletteEffect.enabledGame);
+		if (!paletteEffect.hasPalette())
+		{
+			ImGui::Text("Palette: not loaded");
+		}
+	}
+
+	ImGui::Separator();
+	if (ImGui::CollapsingHeader("Enemy Projectiles"))
+	{
+		if (ImGui::Button("Shoot Enemy Orb"))
+		{
+			EnemyOrbProjectile orb;
+			orb.targetPlayer = &player;
+			orb.targetSummons = &summons;
+			orb.showCollider = true;
+			// Shoot in aim direction with offset
+			glm::vec2 screenCenterDebug = {renderer.windowW / 2.f, renderer.windowH / 2.f};
+			glm::vec2 dir = glm::vec2(platform::getRelMousePosition()) - screenCenterDebug;
+			if (glm::length(dir) > 0.0001f)
+			{
+				dir = glm::normalize(dir);
+			}
+			else
+			{
+				dir = {1.0f, 0.0f};
+			}
+			orb.setDirection(dir);
+			glm::vec2 spawnPos = player.physics.getPos() + dir * 1.5f;
+			projectiles.addProjectile(orb, spawnPos);
+		}
+	}
+
+	ImGui::Separator();
+	if (ImGui::CollapsingHeader("Spawn Enemies"))
+	{
+		auto spawnEnemyNearPlayer = [&](auto enemy)
+		{
+			glm::vec2 spawnPos = player.physics.getPos() + glm::vec2(1.6f, 0.0f);
+			entityHolder.addEntity(enemy, spawnPos);
+		};
+		if (ImGui::Button("Skeleton"))
+		{
+			spawnEnemyNearPlayer(EnemyTypes::getSkeletonEnemy());
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Templar"))
+		{
+			spawnEnemyNearPlayer(EnemyTypes::getTemplarOriginalEnemy());
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Earth Templar"))
+		{
+			spawnEnemyNearPlayer(EnemyTypes::getEarthTemplarEnemy());
+		}
+		if (ImGui::Button("Fire Templar"))
+		{
+			spawnEnemyNearPlayer(EnemyTypes::getFireTemplarEnemy());
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Ice Templar"))
+		{
+			spawnEnemyNearPlayer(EnemyTypes::getIceTemplarEnemy());
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Water Templar"))
+		{
+			spawnEnemyNearPlayer(EnemyTypes::getWaterTemplarEnemy());
+		}
+		if (ImGui::Button("Goblin Archer"))
+		{
+			spawnEnemyNearPlayer(EnemyTypes::getGoblinArcherEnemy());
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Goblin Spearman"))
+		{
+			spawnEnemyNearPlayer(EnemyTypes::getGoblinSpearmanEnemy());
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Goblin Heavy"))
+		{
+			spawnEnemyNearPlayer(EnemyTypes::getGoblinHeavyEnemy());
+		}
+		if (ImGui::Button("Goblin Thief"))
+		{
+			spawnEnemyNearPlayer(EnemyTypes::getGoblinThiefEnemy());
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Orc Archer"))
+		{
+			spawnEnemyNearPlayer(EnemyTypes::getOrcArcherEnemy());
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Dark Angel"))
+		{
+			spawnEnemyNearPlayer(EnemyTypes::getDarkAngelEnemy());
+		}
 	}
 
 	if (ImGui::Button("Exit"))
@@ -755,7 +859,7 @@ bool GameLogic::update(float deltaTime,
 	spellsHolder.renderBeforeEntities(renderer, particlePostProcessRenderer);
 	droppedItems.render(renderer, assetsManager);
 
-	entityHolder.update(simDelta, map, particleSystem, rng, player, summons);
+	entityHolder.update(simDelta, map, particleSystem, rng, player, summons, projectiles);
 	resolveEntityPush(entityHolder, player);
 	resolveSummonEntityPush(entityHolder, summons);
 
@@ -765,6 +869,7 @@ bool GameLogic::update(float deltaTime,
 	{
 		for (auto &entity : entityHolder.entities)
 		{
+			if (entity->dying) continue; // skip dying entities
 			if (player.physics.transform.intersectTransform(entity->physics.transform))
 			{
 				player.life -= 1.0f;
@@ -947,8 +1052,9 @@ bool GameLogic::update(float deltaTime,
 
 	// player life
 	{
-		float cameraZoom = renderer.currentCamera.zoom;
+		const float uiBaseZoom = 100.0f;
 		renderer.pushCamera();
+		float cameraZoom = uiBaseZoom;
 		float padding = PIXEL_SIZE * 3.0f * cameraZoom;
 		float barWidth = PIXEL_SIZE * 48.0f * cameraZoom;
 		float barHeight = PIXEL_SIZE * 6.0f * cameraZoom;
@@ -996,8 +1102,9 @@ bool GameLogic::update(float deltaTime,
 	{
 		// wand slots ui
 		{
-			float cameraZoom = renderer.currentCamera.zoom;
+			const float uiBaseZoom = 100.0f;
 			renderer.pushCamera();
+			float cameraZoom = uiBaseZoom;
 			float padding = PIXEL_SIZE * 3.0f * cameraZoom;
 			float boxSize = PIXEL_SIZE * 16.0f * cameraZoom;
 			float gap = PIXEL_SIZE * 3.0f * cameraZoom;
@@ -1051,10 +1158,11 @@ bool GameLogic::update(float deltaTime,
 	if (inventoryOpen)
 	{
 		// inventory overlay
-		float cameraZoom = renderer.currentCamera.zoom;
+		const float uiBaseZoom = 100.0f;
+		renderer.pushCamera();
+		float cameraZoom = uiBaseZoom;
 		float uiScale = std::min(renderer.windowW / 1280.0f, renderer.windowH / 720.0f);
 		float uiZoom = cameraZoom * uiScale;
-		renderer.pushCamera();
 		renderer.renderRectangle({0, 0, (float)renderer.windowW, (float)renderer.windowH},
 			{0.02f, 0.02f, 0.03f, 0.75f});
 		// inventory book background

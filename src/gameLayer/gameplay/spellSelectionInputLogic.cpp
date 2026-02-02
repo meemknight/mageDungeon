@@ -296,8 +296,9 @@ void SleppSelectionInputLogic::update(float deltaTime, gl2d::Renderer2D &rendere
 		}
 	}
 
-	float cameraZoom = renderer.currentCamera.zoom;
+	const float uiBaseZoom = 100.0f;
 	renderer.pushCamera();
+	float cameraZoom = uiBaseZoom;
 
 	if (usesController)
 	{

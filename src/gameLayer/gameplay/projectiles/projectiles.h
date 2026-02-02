@@ -587,3 +587,37 @@ struct HomingMagicMissle: public CloneableProjectile<HomingMagicMissle>
 		ParticlePostProcessRenderer &particlePostProcessRenderer) override;
 	void onDestroy(std::ranlux24_base &rng) override;
 };
+
+struct SummonHolder;
+
+// Enemy projectile that hits player and summons instead of entities.
+// Glowing orange orb with particles moving outward slowly.
+struct EnemyOrbProjectile: public CloneableProjectile<EnemyOrbProjectile>
+{
+	// **configuration variables**
+	float damage = 1.0f;
+	float speed = 3.0f;
+	float particleInterval = 0.02f;
+	bool showCollider = false;
+
+	// **state variables**
+	bool firstTime = true;
+	float particleTimer = 0.0f;
+	glm::vec2 moveDir = {1.0f, 0.0f};
+	ParticleSettings coreParticle;
+	ParticleSettings glowParticle;
+
+	// Targets - set these before adding to holder
+	Player *targetPlayer = nullptr;
+	SummonHolder *targetSummons = nullptr;
+
+	EnemyOrbProjectile();
+	void setDirection(glm::vec2 dir);
+	void setupParticles();
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng, EntityHolder &entityHolder) override;
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+		ParticlePostProcessRenderer &particlePostProcessRenderer) override;
+	void onDestroy(std::ranlux24_base &rng) override;
+};

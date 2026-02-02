@@ -19,6 +19,17 @@ struct AssetsManager
 
 	TileSet player;
 	TileSet skeleton;
+	TileSet templarOriginal;
+	TileSet earthTemplar;
+	TileSet fireTemplar;
+	TileSet iceTemplar;
+	TileSet waterTemplar;
+	TileSet goblinArcher;
+	TileSet goblinSpearman;
+	TileSet goblinHeavy;
+	TileSet goblinThief;
+	TileSet orcArcher;
+	TileSet darkAngel;
 	TileSet waterSlime;
 	TileSet fireSlime;
 	TileSet iceSlime;

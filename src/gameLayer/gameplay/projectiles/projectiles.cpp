@@ -5,6 +5,7 @@
 #include <gameplay/assetsManager.h>
 #include <gameplay/aStar.h>
 #include <gameplay/player.h>
+#include <gameplay/summons.h>
 #include <algorithm>
 #include <cmath>
 
@@ -19,6 +20,7 @@ bool basicProjectileHitEntitiesLogic(PhysicalEntity &physics,
 
 	for (auto &e : entities.entities)
 	{
+		if (e->dying) continue; // skip dying entities
 
 		if (projectile.intersectTransform(e->physics.transform))
 		{
@@ -234,6 +236,7 @@ bool StandbyProjectileSystem::tryFire(Map &map, ProjectileHolder &projectileHold
 
 	for (auto &e : entityHolder.entities)
 	{
+		if (e->dying) continue; // skip dying entities
 		glm::vec2 diff = e->physics.getPos() - playerPos;
 		float dist2 = glm::dot(diff, diff);
 		if (dist2 > bestDist2)
@@ -840,6 +843,7 @@ bool TrapProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParti
 	if (!triggered)
 	for (auto &e : entityHolder.entities)
 	{
+		if (e->dying) continue; // skip dying entities
 		if (smallerTransform.intersectTransform(e->physics.transform))
 		{
 			triggered = true;
@@ -854,6 +858,7 @@ bool TrapProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParti
 		{
 			for (auto &e : entityHolder.entities)
 			{
+				if (e->dying) continue; // skip dying entities
 				if (projectile.intersectTransform(e->physics.transform))
 				{
 					glm::vec2 pushBack = {};
@@ -885,6 +890,7 @@ bool ThornProjectile::update(float deltaTime, Map &map, ParticleSystem &mainPart
 	auto projectile = physics.transform;
 	for (auto &e : entityHolder.entities)
 	{
+		if (e->dying) continue; // skip dying entities
 		if (projectile.intersectTransform(e->physics.transform))
 		{
 			glm::vec2 pushBack = {};
@@ -1159,6 +1165,7 @@ bool RicochetProjectile::update(float deltaTime, Map &map, ParticleSystem &mainP
 		auto projectile = physics.transform;
 		for (auto &e : entityHolder.entities)
 		{
+			if (e->dying) continue; // skip dying entities
 			if (projectile.intersectTransform(e->physics.transform))
 			{
 				glm::vec2 pushBack = {};
@@ -1262,6 +1269,7 @@ void FastMagicBoltProjectile::explode(EntityHolder &entityHolder, std::ranlux24_
 	float radius2 = explosionRadius * explosionRadius;
 	for (auto &e : entityHolder.entities)
 	{
+		if (e->dying) continue; // skip dying entities
 		glm::vec2 diff = e->physics.getPos() - physics.getPos();
 		if (glm::dot(diff, diff) <= radius2)
 		{
@@ -1322,6 +1330,7 @@ bool FastMagicBoltProjectile::update(float deltaTime, Map &map, ParticleSystem &
 	auto projectile = physics.transform;
 	for (auto &e : entityHolder.entities)
 	{
+		if (e->dying) continue; // skip dying entities
 		if (projectile.intersectTransform(e->physics.transform))
 		{
 			glm::vec2 pushBack = {};
@@ -1679,6 +1688,7 @@ bool ElementWallProjectile::update(float deltaTime, Map &map, ParticleSystem &ma
 		glm::vec2 axis = glm::vec2(-wallNormal.y, wallNormal.x);
 		for (auto &e : entityHolder.entities)
 		{
+			if (e->dying) continue; // skip dying entities
 			glm::vec2 diff = e->physics.getPos() - physics.getPos();
 			float along = glm::dot(diff, axis);
 			float across = glm::dot(diff, wallNormal);
@@ -1805,6 +1815,7 @@ bool HomingMagicMissle::update(float deltaTime, Map &map, ParticleSystem &mainPa
 
 	for (auto &e : entityHolder.entities)
 	{
+		if (e->dying) continue; // skip dying entities
 		glm::vec2 diff = e->physics.getPos() - physics.getPos();
 		float dist2 = glm::dot(diff, diff);
 		if (dist2 < bestDist2)
@@ -1863,4 +1874,158 @@ void HomingMagicMissle::render(gl2d::Renderer2D &renderer, AssetsManager &assetM
 
 void HomingMagicMissle::onDestroy(std::ranlux24_base &rng)
 {
+}
+
+// Enemy orb projectile - hits player and summons
+EnemyOrbProjectile::EnemyOrbProjectile()
+{
+	physics.transform.size = {PIXEL_SIZE * 10, PIXEL_SIZE * 10};
+	physics.transform.isCircleCollider = true;
+	particleSystem.maxCount = 100;
+	timeAlieve = 8.0f;
+	setupParticles();
+}
+
+void EnemyOrbProjectile::setDirection(glm::vec2 dir)
+{
+	if (glm::length(dir) > 0.0001f)
+	{
+		moveDir = glm::normalize(dir);
+	}
+	physics.velocity = moveDir * speed;
+}
+
+void EnemyOrbProjectile::setupParticles()
+{
+	// Core particle - bright center, stays close
+	coreParticle = {};
+	coreParticle.onCreateCount = 1;
+	coreParticle.positionX = {-PIXEL_SIZE * 2, PIXEL_SIZE * 2};
+	coreParticle.positionY = {-PIXEL_SIZE * 2, PIXEL_SIZE * 2};
+	coreParticle.particleLifeTime = {0.3f, 0.5f};
+	coreParticle.velocityX = {-0.4f, 0.4f};
+	coreParticle.velocityY = {-0.4f, 0.4f};
+	coreParticle.dragX = {0.8f, 1.2f};
+	coreParticle.dragY = {0.8f, 1.2f};
+	// Start bright orange
+	coreParticle.createApearence.color1 = {0.9f, 0.7f, 0.2f, 1.f};
+	coreParticle.createApearence.color2 = {0.9f, 0.6f, 0.1f, 1.f};
+	coreParticle.createApearence.size = {PIXEL_SIZE * 7, PIXEL_SIZE * 7};
+	// Fade to bright white
+	coreParticle.endApearence.color1 = {1.0f, 1.0f, 1.0f, 0.6f};
+	coreParticle.endApearence.color2 = {1.0f, 1.0f, 0.95f, 0.6f};
+	coreParticle.endApearence.size = {PIXEL_SIZE * 4, PIXEL_SIZE * 4};
+	coreParticle.tranzitionType = ParticleSettings::linear;
+	coreParticle.folowParent = true;
+	coreParticle.texture = getAssetManager().particleCircle;
+
+	// Glow particle - outer glow, moves outward slowly
+	glowParticle = {};
+	glowParticle.animationType = glowParticle.animationAtom;
+	glowParticle.onCreateCount = 2;
+	//glowParticle.animationSpeed = {1.f,1.f};
+	//glowParticle.animationAcceleration = {1.f,1.f};
+	//glowParticle.animationScaleX = {0.2f,0.4f};
+	//glowParticle.animationScaleY = {0.2f,0.4f};
+	glowParticle.positionX = {-PIXEL_SIZE * 1.5f, PIXEL_SIZE * 1.5f};
+	glowParticle.positionY = {-PIXEL_SIZE * 1.5f, PIXEL_SIZE * 1.5f};
+	glowParticle.particleLifeTime = {0.4f, 0.7f};
+	glowParticle.velocityX = {-0.6f, 0.6f};
+	glowParticle.velocityY = {-0.6f, 0.6f};
+	glowParticle.dragX = {0.5f, 0.8f};
+	glowParticle.dragY = {0.5f, 0.8f};
+	// Start bright orange
+	glowParticle.createApearence.color1 = {1.0f, 0.65f, 0.15f, 0.8f};
+	glowParticle.createApearence.color2 = {1.0f, 0.55f, 0.1f, 0.8f};
+	glowParticle.createApearence.size = {PIXEL_SIZE * 5, PIXEL_SIZE * 5};
+	// Fade to bright white
+	glowParticle.endApearence.color1 = {1.0f, 1.0f, 1.0f, 0.6f};
+	glowParticle.endApearence.color2 = {1.0f, 1.0f, 0.9f, 0.6f};
+	glowParticle.endApearence.size = {PIXEL_SIZE * 3, PIXEL_SIZE * 3};
+	glowParticle.tranzitionType = ParticleSettings::linear;
+	glowParticle.folowParent = true;
+	glowParticle.texture = getAssetManager().particleCircle;
+
+}
+
+bool EnemyOrbProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+	std::ranlux24_base &rng, EntityHolder &entityHolder)
+{
+	if (firstTime)
+	{
+		firstTime = false;
+		// Emit initial burst
+		ParticleSettings burst = coreParticle;
+		burst.onCreateCount = 8;
+		particleSystem.emitParticles(burst, physics.getPos(), rng, physics.getPos());
+	}
+
+	// Emit particles continuously
+	particleTimer -= deltaTime;
+	while (particleTimer <= 0.0f)
+	{
+		particleTimer += particleInterval;
+		particleSystem.emitParticles(coreParticle, physics.getPos(), rng, physics.getPos());
+		particleSystem.emitParticles(glowParticle, physics.getPos(), rng, physics.getPos());
+	}
+
+	// Check collision with player
+	if (targetPlayer)
+	{
+		if (physics.transform.intersectTransform(targetPlayer->physics.transform))
+		{
+			targetPlayer->life -= damage;
+			glm::vec2 damagePos = targetPlayer->physics.getPos();
+			damagePos.y -= targetPlayer->physics.transform.size.y * 0.6f;
+			getDamageViewerSystem().addDamage(damage, damagePos);
+			return false;
+		}
+	}
+
+	// Check collision with summons
+	if (targetSummons)
+	{
+		for (auto &summon : targetSummons->summons)
+		{
+			if (summon->isDying()) continue;
+			if (physics.transform.intersectTransform(summon->physics.transform))
+			{
+				summon->life -= damage;
+				glm::vec2 damagePos = summon->physics.getPos();
+				damagePos.y -= summon->physics.transform.size.y * 0.6f;
+				getDamageViewerSystem().addDamage(damage, damagePos);
+				return false;
+			}
+		}
+	}
+
+	// Physics and wall collision
+	if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+	{
+		return false;
+	}
+
+	particleSystem.update(deltaTime);
+	return true;
+}
+
+void EnemyOrbProjectile::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+	ParticlePostProcessRenderer &particlePostProcessRenderer)
+{
+	particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+	if (showCollider)
+	{
+		physics.renderCollider(renderer);
+	}
+}
+
+void EnemyOrbProjectile::onDestroy(std::ranlux24_base &rng)
+{
+	// Burst of particles on destroy
+	ParticleSettings burst = glowParticle;
+	burst.onCreateCount = 12;
+	burst.velocityX = {-1.5f, 1.5f};
+	burst.velocityY = {-1.5f, 1.5f};
+	burst.folowParent = false;
+	particleSystem.emitParticles(burst, physics.getPos(), rng, physics.getPos());
 }

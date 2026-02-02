@@ -17,8 +17,8 @@ struct Player
 	StatusEffects statusEffects;
 	StatusImmunities statusImmunities;
 	float statusSpeedMultiplier = 1.0f;
-	float life = 10.0f;
-	float maxLife = 10.0f;
+	float life = 10.f;
+	float maxLife = 100.0f;
 	// last aim direction from input (world space, normalized)
 	glm::vec2 aimDirection = {1.0f, 0.0f};
 	// 0..1, how strongly the player is aiming
