@@ -612,6 +612,8 @@ struct EnemyOrbProjectile: public CloneableProjectile<EnemyOrbProjectile>
 	SummonHolder *targetSummons = nullptr;
 
 	EnemyOrbProjectile();
+	void setDamage(float dmg);
+	void updateDamageColors();
 	void setDirection(glm::vec2 dir);
 	void setupParticles();
 

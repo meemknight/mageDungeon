@@ -53,7 +53,7 @@ struct EntityLifeThings
 	float life = 10;
 	float maxLife = 10;
 
-	float setLifeAndMaxLife(float l)
+	void setLifeAndMaxLife(float l)
 	{
 		life = l;
 		maxLife = l;
@@ -336,6 +336,9 @@ struct BasicMeleEnemy : public Entity
 	float hitAnimationDuration = 0.36f; // 6 frames * 0.06s per frame
 	int hitAnimationBaseY = 0; // base Y for current hit animation direction
 	int lastAnimationFrame = 0; // track previous frame to detect animation wrap
+
+	// Sprite render offset so taller sprites sit lower on the collider.
+	float renderOffsetY = PIXEL_SIZE * 10.0f;
 
 	// Death animation state
 	static constexpr int deathAnimationY = 9; // death animation row

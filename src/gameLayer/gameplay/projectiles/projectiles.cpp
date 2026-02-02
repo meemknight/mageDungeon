@@ -1884,6 +1884,13 @@ EnemyOrbProjectile::EnemyOrbProjectile()
 	particleSystem.maxCount = 100;
 	timeAlieve = 8.0f;
 	setupParticles();
+	updateDamageColors();
+}
+
+void EnemyOrbProjectile::setDamage(float dmg)
+{
+	damage = dmg;
+	updateDamageColors();
 }
 
 void EnemyOrbProjectile::setDirection(glm::vec2 dir)
@@ -1946,6 +1953,28 @@ void EnemyOrbProjectile::setupParticles()
 	glowParticle.folowParent = true;
 	glowParticle.texture = getAssetManager().particleCircle;
 
+	updateDamageColors();
+}
+
+void EnemyOrbProjectile::updateDamageColors()
+{
+	float t = std::clamp((damage - 1.0f) / 2.0f, 0.0f, 1.0f);
+
+	glm::vec4 coreA = {0.9f, 0.7f, 0.2f, 1.f};
+	glm::vec4 coreB = {0.9f, 0.6f, 0.1f, 1.f};
+	glm::vec4 coreAHot = {1.0f, 0.25f, 0.15f, 1.f};
+	glm::vec4 coreBHot = {1.0f, 0.2f, 0.08f, 1.f};
+
+	coreParticle.createApearence.color1 = coreA * (1.0f - t) + coreAHot * t;
+	coreParticle.createApearence.color2 = coreB * (1.0f - t) + coreBHot * t;
+
+	glm::vec4 glowA = {1.0f, 0.65f, 0.15f, 0.8f};
+	glm::vec4 glowB = {1.0f, 0.55f, 0.1f, 0.8f};
+	glm::vec4 glowAHot = {1.0f, 0.25f, 0.12f, 0.8f};
+	glm::vec4 glowBHot = {1.0f, 0.2f, 0.08f, 0.8f};
+
+	glowParticle.createApearence.color1 = glowA * (1.0f - t) + glowAHot * t;
+	glowParticle.createApearence.color2 = glowB * (1.0f - t) + glowBHot * t;
 }
 
 bool EnemyOrbProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,

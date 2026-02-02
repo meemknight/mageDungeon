@@ -139,7 +139,7 @@ void BasicMeleEnemy::render(gl2d::Renderer2D &renderer, ParticlePostProcessRende
 	renderPos.y -= (renderPos.w - physics.transform.size.y);
 	renderPos.x -= (renderPos.z - physics.transform.size.x) / 2;
 
-	renderPos.y += PIXEL_SIZE * 10;
+	renderPos.y += renderOffsetY;
 
 	glm::vec4 tint = getStatusTint(statusEffects);
 	renderer.renderRectangle(renderPos, tileSet.texture,

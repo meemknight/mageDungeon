@@ -16,6 +16,10 @@ enum ShootPattern : unsigned char
 {
 	ShootPattern_None = 0,
 	ShootPattern_TripleSpread = 1 << 0,  // 3 projectiles: center + ±30 degrees
+	ShootPattern_Single = 1 << 1,        // 1 projectile forward
+	ShootPattern_BurstForward = 1 << 2,  // 3 projectiles in sequence forward
+	ShootPattern_Spread5 = 1 << 3,       // 5 projectiles spread
+	ShootPattern_HeavyVolley = 1 << 4,   // 1 forward + 4 side shots
 	// Add more patterns here as needed
 };
 
@@ -39,6 +43,10 @@ struct EnemyBehavior
 	float shootCooldown = 1.5f;           // time between shots
 	float projectileSpeed = 4.0f;         // speed of fired projectiles
 	float spreadAngle = 30.0f;            // degrees for spread patterns
+	float projectileDamage = 1.0f;
+	float sideProjectileDamage = 1.0f;    // used by heavy volley
+	int burstCount = 3;                   // shots per burst
+	float burstInterval = 0.18f;          // time between burst shots
 
 	// Movement state
 	std::vector<glm::ivec2> pathTiles;
@@ -55,6 +63,11 @@ struct EnemyBehavior
 
 	// Shooting state
 	float shootTimer = 0.0f;
+	int burstRemaining = 0;
+	float burstTimer = 0.0f;
+	bool firingBurstShot = false;
+	glm::vec2 burstDir = glm::vec2(1.0f, 0.0f);
+	float burstDamage = 1.0f;
 
 	// Output from last update
 	glm::vec2 moveDir = glm::vec2(0.0f);
@@ -89,6 +102,11 @@ struct EnemyBehavior
 		shootTimer = 0.0f;
 		wantsToMelee = false;
 		wantsToShoot = false;
+		burstRemaining = 0;
+		burstTimer = 0.0f;
+		firingBurstShot = false;
+		burstDir = glm::vec2(1.0f, 0.0f);
+		burstDamage = 1.0f;
 	}
 
 	// Called when enemy hits a wall, forces repath

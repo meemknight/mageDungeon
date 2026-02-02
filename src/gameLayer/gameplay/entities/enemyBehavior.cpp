@@ -8,11 +8,22 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 	// Reset output flags
 	wantsToMelee = false;
 	wantsToShoot = false;
+	firingBurstShot = false;
 
 	// Update shoot cooldown
 	if (shootTimer > 0.0f)
 	{
 		shootTimer -= deltaTime;
+	}
+
+	if (burstRemaining > 0)
+	{
+		burstTimer -= deltaTime;
+		if (burstTimer <= 0.0f)
+		{
+			wantsToShoot = true;
+			firingBurstShot = true;
+		}
 	}
 
 	// Find best target (player or nearby summon)
@@ -175,14 +186,14 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 	}
 
 	// Determine if we should melee or shoot
-	if (chasing && canSeeTarget)
+	if (!firingBurstShot && chasing && canSeeTarget)
 	{
 		if (distanceToTarget <= meleeRange)
 		{
 			// Close range - prefer melee
 			wantsToMelee = true;
 		}
-		else if (shootPatterns != ShootPattern_None &&
+		else if (burstRemaining == 0 && shootPatterns != ShootPattern_None &&
 			distanceToTarget <= shootRange &&
 			shootTimer <= 0.0f)
 		{
@@ -207,24 +218,88 @@ static glm::vec2 rotateVec2(glm::vec2 v, float angleDegrees)
 void EnemyBehavior::shoot(glm::vec2 enemyPos, ProjectileHolder &projectiles,
 	Player &player, SummonHolder &summons, std::ranlux24_base &rng)
 {
+	auto spawnOrb = [&](glm::vec2 dir, float dmg)
+	{
+		EnemyOrbProjectile orb;
+		orb.targetPlayer = &player;
+		orb.targetSummons = &summons;
+		orb.speed = projectileSpeed;
+		orb.setDamage(dmg);
+		orb.setDirection(dir);
+		projectiles.addProjectile(orb, enemyPos);
+	};
+
+	glm::vec2 shootDir = directionToTarget;
+	if (firingBurstShot && burstRemaining > 0)
+	{
+		shootDir = burstDir;
+	}
+
+	if (shootPatterns & ShootPattern_HeavyVolley)
+	{
+		spawnOrb(shootDir, projectileDamage);
+		float a = spreadAngle;
+		spawnOrb(rotateVec2(shootDir, a), sideProjectileDamage);
+		spawnOrb(rotateVec2(shootDir, a * 2.0f), sideProjectileDamage);
+		spawnOrb(rotateVec2(shootDir, -a), sideProjectileDamage);
+		spawnOrb(rotateVec2(shootDir, -a * 2.0f), sideProjectileDamage);
+		return;
+	}
+
+	if (shootPatterns & ShootPattern_Spread5)
+	{
+		glm::vec2 dirs[5] = {
+			rotateVec2(shootDir, -spreadAngle * 2.0f),
+			rotateVec2(shootDir, -spreadAngle),
+			shootDir,
+			rotateVec2(shootDir, spreadAngle),
+			rotateVec2(shootDir, spreadAngle * 2.0f)
+		};
+		for (int i = 0; i < 5; i++)
+		{
+			spawnOrb(dirs[i], projectileDamage);
+		}
+		return;
+	}
+
 	if (shootPatterns & ShootPattern_TripleSpread)
 	{
-		// Shoot 3 projectiles: center, +spreadAngle, -spreadAngle
 		glm::vec2 dirs[3] = {
-			directionToTarget,
-			rotateVec2(directionToTarget, spreadAngle),
-			rotateVec2(directionToTarget, -spreadAngle)
+			shootDir,
+			rotateVec2(shootDir, spreadAngle),
+			rotateVec2(shootDir, -spreadAngle)
 		};
-
 		for (int i = 0; i < 3; i++)
 		{
-			EnemyOrbProjectile orb;
-			orb.targetPlayer = &player;
-			orb.targetSummons = &summons;
-			orb.speed = projectileSpeed;
-			orb.damage = 1.0f;
-			orb.setDirection(dirs[i]);
-			projectiles.addProjectile(orb, enemyPos);
+			spawnOrb(dirs[i], projectileDamage);
 		}
+		return;
+	}
+
+	if (shootPatterns & ShootPattern_BurstForward)
+	{
+		if (!firingBurstShot)
+		{
+			burstRemaining = std::max(0, burstCount - 1);
+			burstDir = directionToTarget;
+			burstDamage = projectileDamage;
+		}
+		else
+		{
+			burstRemaining = std::max(0, burstRemaining - 1);
+		}
+
+		spawnOrb(burstDir, burstDamage);
+		if (burstRemaining > 0)
+		{
+			burstTimer = burstInterval;
+		}
+		return;
+	}
+
+	if (shootPatterns & ShootPattern_Single)
+	{
+		spawnOrb(shootDir, projectileDamage);
+		return;
 	}
 }
