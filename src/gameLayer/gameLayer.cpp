@@ -48,6 +48,12 @@ ProjectileHolder &getProjectileHolder()
 	return game.projectiles;
 }
 
+Player &getPlayer()
+{
+	if (spellPreviewContext) { return spellPreviewContext->player; }
+	return game.player;
+}
+
 SummonHolder &getSummonHolder()
 {
 	if (spellPreviewContext) { return spellPreviewContext->summons; }

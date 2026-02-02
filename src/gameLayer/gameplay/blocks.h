@@ -35,6 +35,7 @@ namespace Blocks
 
 		woodenFloor,
 		woodenWall,
+		carpetFloor,
 
 		BLOCKS_COUNT
 
@@ -72,6 +73,7 @@ namespace TileSets
 		grassDecor,
 		woodenFloor,
 		woodenWall3D,
+		carpetDecals,
 
 		TILE_SETS_COUNT
 	};
@@ -87,6 +89,7 @@ struct BlockSettings
 	int tileSet = 0;
 	bool canHaveGrassDecals = 0; //todo remove
 	bool isGrass = 0;
+	bool isCarpet = 0;
 	bool isWall = 0;
 	bool isSmallWall = 0;
 	bool chunkyTile = 0;
@@ -139,6 +142,12 @@ struct BlockSettings
 		return *this;
 	}
 
+	BlockSettings &setIsCarpet()
+	{
+		this->isCarpet = true;
+		return *this;
+	}
+
 	BlockSettings &setIsWall()
 	{
 		this->isWall = true;
@@ -168,6 +177,8 @@ int getWall3DTileSetIndex(BlockType block);
 int isBlockColidable(BlockType block);
 
 bool canHaveGrassDecals(BlockType block);
+bool canHaveCarpetDecals(BlockType block);
 bool isGrass(BlockType block);
+bool isCarpet(BlockType block);
 bool isWall(BlockType block);
 bool isChunkyTile(BlockType block);

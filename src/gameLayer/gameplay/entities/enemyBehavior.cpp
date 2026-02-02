@@ -1,6 +1,7 @@
 #include "enemyBehavior.h"
 #include "gameplay/summons.h"
 #include "gameplay/projectiles/projectiles.h"
+#include <cmath>
 
 glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &rng,
 	glm::vec2 enemyPos, glm::vec2 playerPos, SummonHolder &summons)
@@ -9,11 +10,17 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 	wantsToMelee = false;
 	wantsToShoot = false;
 	firingBurstShot = false;
+	useSpecialShot = false;
 
 	// Update shoot cooldown
 	if (shootTimer > 0.0f)
 	{
 		shootTimer -= deltaTime;
+	}
+
+	if (hoverMeleeCooldownTimer > 0.0f)
+	{
+		hoverMeleeCooldownTimer -= deltaTime;
 	}
 
 	if (burstRemaining > 0)
@@ -90,9 +97,27 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		}
 	}
 
+	// Trigger a hover melee swoop when close and in LOS
+	if (!hoverMeleeActive && hoverMeleeEnabled && chasing && canSeeTarget &&
+		distanceToTarget <= hoverMeleeRange && hoverMeleeCooldownTimer <= 0.0f)
+	{
+		float chance = hoverMeleeChance * deltaTime;
+		if (chance > 1.0f) { chance = 1.0f; }
+		if (getRandomChance(rng, chance))
+		{
+			hoverMeleeActive = true;
+			hoverMeleeTimer = 0.0f;
+			hoverMeleeArcSign = getRandomChance(rng, 0.5f) ? 1.0f : -1.0f;
+			float effectiveSpeed = speed * hoverMeleeSpeedMultiplier;
+			if (effectiveSpeed < 0.1f) { effectiveSpeed = 0.1f; }
+			hoverMeleeActiveDuration = std::max(hoverMeleeMinDuration,
+				distanceToTarget / effectiveSpeed);
+		}
+	}
+
 	moveDir = glm::vec2(0.0f);
 
-	if (chasing)
+	if (chasing && !hoverMeleeActive)
 	{
 		// Chase last seen position if we can't currently see the target
 		const bool useLastSeen = (!canSeeTarget && hasLastSeen);
@@ -161,7 +186,7 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 			}
 		}
 	}
-	else
+	else if (!chasing)
 	{
 		// Idle behavior
 		if (wanderWhenIdle)
@@ -185,22 +210,134 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		}
 	}
 
+	// Orbit movement when close to the target
+	bool orbiting = false;
+	if (!hoverMeleeActive && orbitEnabled && chasing && canSeeTarget &&
+		distanceToTarget <= orbitRange)
+	{
+		orbiting = true;
+		if (!orbitActive)
+		{
+			orbitActive = true;
+			orbitSign = getRandomChance(rng, 0.5f) ? 1.0f : -1.0f;
+			orbitDirectionTimer = getRandomFloat(rng, orbitDirectionChangeMin, orbitDirectionChangeMax);
+			orbitRadialTimer = getRandomFloat(rng, orbitRadialChangeMin, orbitRadialChangeMax);
+			orbitRadialOffset = 0.0f;
+		}
+		else
+		{
+			orbitDirectionTimer -= deltaTime;
+			orbitRadialTimer -= deltaTime;
+			if (orbitDirectionTimer <= 0.0f)
+			{
+				orbitDirectionTimer = getRandomFloat(rng, orbitDirectionChangeMin, orbitDirectionChangeMax);
+				orbitSign = getRandomChance(rng, 0.5f) ? 1.0f : -1.0f;
+			}
+			if (orbitRadialTimer <= 0.0f)
+			{
+				orbitRadialTimer = getRandomFloat(rng, orbitRadialChangeMin, orbitRadialChangeMax);
+				if (getRandomChance(rng, orbitRadialZeroChance))
+				{
+					orbitRadialOffset = 0.0f;
+				}
+				else
+				{
+					orbitRadialOffset = getRandomFloat(rng, -orbitRadialStrength, orbitRadialStrength);
+				}
+			}
+		}
+
+		glm::vec2 tangential = glm::vec2(-directionToTarget.y, directionToTarget.x) * orbitSign;
+		glm::vec2 orbitDir = tangential + directionToTarget * orbitRadialOffset;
+		if (glm::length2(orbitDir) > 0.0001f)
+		{
+			moveDir = glm::normalize(orbitDir);
+		}
+	}
+	else if (orbitActive)
+	{
+		orbitActive = false;
+		orbitRadialOffset = 0.0f;
+	}
+
+	// Stop near target for ranged enemies
+	if (!hoverMeleeActive && !orbiting && stopChaseRange > 0.0f && chasing && canSeeTarget &&
+		distanceToTarget <= stopChaseRange)
+	{
+		moveDir = glm::vec2(0.0f);
+	}
+
+	// Hover melee swoop movement with a curved trajectory
+	if (hoverMeleeActive)
+	{
+		hoverMeleeTimer += deltaTime;
+		float duration = std::max(0.0001f, hoverMeleeActiveDuration);
+		float t = hoverMeleeTimer / duration;
+		if (t >= 1.0f)
+		{
+			hoverMeleeActive = false;
+			hoverMeleeCooldownTimer = hoverMeleeCooldown;
+		}
+		else
+		{
+			float arc = std::sin(t * 3.14159265f) * hoverMeleeArcStrength;
+			glm::vec2 dir = directionToTarget;
+			glm::vec2 perp = glm::vec2(-dir.y, dir.x) * hoverMeleeArcSign;
+			glm::vec2 curvedDir = dir + perp * arc;
+			if (glm::length2(curvedDir) > 0.0001f)
+			{
+				moveDir = glm::normalize(curvedDir);
+			}
+		}
+	}
+
 	// Determine if we should melee or shoot
-	if (!firingBurstShot && chasing && canSeeTarget)
+	if (!firingBurstShot && chasing && canSeeTarget && !hoverMeleeActive)
 	{
 		if (distanceToTarget <= meleeRange)
 		{
 			// Close range - prefer melee
 			wantsToMelee = true;
 		}
-		else if (burstRemaining == 0 && shootPatterns != ShootPattern_None &&
-			distanceToTarget <= shootRange &&
-			shootTimer <= 0.0f)
+		else if (burstRemaining == 0 && distanceToTarget <= shootRange && shootTimer <= 0.0f)
 		{
-			// In shooting range and cooldown ready
-			wantsToShoot = true;
-			shootTimer = shootCooldown;
+			const bool hasNormalShot = shootPatterns != ShootPattern_None;
+			const bool hasSpecialShot = specialShootPatterns != ShootPattern_None;
+			if (hasNormalShot || hasSpecialShot)
+			{
+				bool pickSpecial = false;
+				if (hasSpecialShot)
+				{
+					float chance = specialShootChance;
+					if (!hasNormalShot)
+					{
+						chance *= deltaTime;
+					}
+					if (chance < 0.0f) { chance = 0.0f; }
+					if (chance > 1.0f) { chance = 1.0f; }
+					if (getRandomChance(rng, chance))
+					{
+						pickSpecial = true;
+					}
+				}
+
+				if (pickSpecial || hasNormalShot)
+				{
+					wantsToShoot = true;
+					useSpecialShot = pickSpecial && hasSpecialShot;
+					if (!hasNormalShot && hasSpecialShot)
+					{
+						useSpecialShot = true;
+					}
+					shootTimer = shootCooldown;
+				}
+			}
 		}
+	}
+
+	if (hoverMeleeActive)
+	{
+		wantsToShoot = false;
 	}
 
 	return moveDir;
@@ -235,7 +372,44 @@ void EnemyBehavior::shoot(glm::vec2 enemyPos, ProjectileHolder &projectiles,
 		shootDir = burstDir;
 	}
 
-	if (shootPatterns & ShootPattern_HeavyVolley)
+	unsigned char patterns = shootPatterns;
+	if (useSpecialShot && specialShootPatterns != ShootPattern_None)
+	{
+		patterns = specialShootPatterns;
+	}
+
+	auto spawnCross = [&](glm::vec2 dir)
+	{
+		EnemyOrbProjectile center;
+		center.targetPlayer = &player;
+		center.targetSummons = &summons;
+		center.speed = projectileSpeed;
+		center.setDamage(crossShotDamage);
+		center.setDirection(dir);
+		projectiles.addProjectile(center, enemyPos);
+
+		const float baseAngle = std::atan2(dir.y, dir.x);
+		const float angleStep = 1.5707963f;
+		for (int i = 0; i < 4; i++)
+		{
+			EnemyOrbProjectile orb;
+			orb.targetPlayer = &player;
+			orb.targetSummons = &summons;
+			orb.speed = projectileSpeed;
+			orb.setDamage(crossShotDamage);
+			orb.setDirection(dir);
+			orb.enableOrbit(crossShotOrbitRadius, crossShotOrbitSpeed, baseAngle + angleStep * (float)i);
+			projectiles.addProjectile(orb, enemyPos);
+		}
+	};
+
+	if (patterns & ShootPattern_RotatingCross)
+	{
+		spawnCross(shootDir);
+		return;
+	}
+
+	if (patterns & ShootPattern_HeavyVolley)
 	{
 		spawnOrb(shootDir, projectileDamage);
 		float a = spreadAngle;
@@ -246,7 +420,7 @@ void EnemyBehavior::shoot(glm::vec2 enemyPos, ProjectileHolder &projectiles,
 		return;
 	}
 
-	if (shootPatterns & ShootPattern_Spread5)
+	if (patterns & ShootPattern_Spread5)
 	{
 		glm::vec2 dirs[5] = {
 			rotateVec2(shootDir, -spreadAngle * 2.0f),
@@ -262,7 +436,7 @@ void EnemyBehavior::shoot(glm::vec2 enemyPos, ProjectileHolder &projectiles,
 		return;
 	}
 
-	if (shootPatterns & ShootPattern_TripleSpread)
+	if (patterns & ShootPattern_TripleSpread)
 	{
 		glm::vec2 dirs[3] = {
 			shootDir,
@@ -276,7 +450,7 @@ void EnemyBehavior::shoot(glm::vec2 enemyPos, ProjectileHolder &projectiles,
 		return;
 	}
 
-	if (shootPatterns & ShootPattern_BurstForward)
+	if (patterns & ShootPattern_BurstForward)
 	{
 		if (!firingBurstShot)
 		{
@@ -297,7 +471,7 @@ void EnemyBehavior::shoot(glm::vec2 enemyPos, ProjectileHolder &projectiles,
 		return;
 	}
 
-	if (shootPatterns & ShootPattern_Single)
+	if (patterns & ShootPattern_Single)
 	{
 		spawnOrb(shootDir, projectileDamage);
 		return;

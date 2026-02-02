@@ -316,6 +316,7 @@ void MapLayer::renderMap(gl2d::Renderer2D &renderer,
 
 			};
 
+
 		}
 
 
@@ -323,6 +324,7 @@ void MapLayer::renderMap(gl2d::Renderer2D &renderer,
 
 	//render grass decals
 	auto decals = assetManager.tileSets[TileSets::grassDecals];
+	auto carpetDecals = assetManager.tileSets[TileSets::carpetDecals];
 
 	for (int y = 0; y < size.y; y++)
 	{
@@ -562,6 +564,247 @@ void MapLayer::renderMap(gl2d::Renderer2D &renderer,
 
 		}
 
+
+	}
+
+	//render carpet decals
+	for (int y = 0; y < size.y; y++)
+	{
+		for (int x = 0; x < size.x; x++)
+		{
+
+			Block b = getBlockUnsafe(x, y);
+
+			if (canHaveCarpetDecals(b.type))
+			{
+
+				bool top = 0;
+				bool bottom = 0;
+				bool left = 0;
+				bool right = 0;
+
+				bool topLeft = 0;
+				bool topRight = 0;
+				bool bottomLeft = 0;
+				bool bottomRight = 0;
+
+				auto b = getBlockSafe(x, y - 1); top = b ? isCarpet(b->type) : 0;
+					b = getBlockSafe(x, y + 1); bottom = b ? isCarpet(b->type) : 0;
+					b = getBlockSafe(x - 1, y); left = b ? isCarpet(b->type) : 0;
+					b = getBlockSafe(x + 1, y); right = b ? isCarpet(b->type) : 0;
+					b = getBlockSafe(x + 1, y + 1); bottomRight = b ? isCarpet(b->type) : 0;
+					b = getBlockSafe(x - 1, y + 1); bottomLeft = b ? isCarpet(b->type) : 0;
+					b = getBlockSafe(x + 1, y - 1); topRight = b ? isCarpet(b->type) : 0;
+					b = getBlockSafe(x - 1, y - 1); topLeft = b ? isCarpet(b->type) : 0;
+
+
+				if (top && bottom && left && right)
+				{
+					renderer.renderRectangle({x,y,1,1},
+						carpetDecals.texture,
+						Colors_White,
+						{},
+						0,
+						carpetDecals.atlas.get(0, 3)
+					);
+				}
+				else if (top && left && right)
+				{
+					renderer.renderRectangle({x,y,1,1},
+						carpetDecals.texture,
+						Colors_White,
+						{},
+						0,
+						carpetDecals.atlas.get(0, 0)
+					);
+				}
+				else if (left && top && bottom)
+				{
+					renderer.renderRectangle({x,y,1,1},
+						carpetDecals.texture,
+						Colors_White,
+						{},
+						0,
+						carpetDecals.atlas.get(1, 3)
+					);
+				}
+				else if (right && top && bottom)
+				{
+					renderer.renderRectangle({x,y,1,1},
+						carpetDecals.texture,
+						Colors_White,
+						{},
+						0,
+						carpetDecals.atlas.get(3, 3)
+					);
+				}
+				else if (bottom && left && right)
+				{
+					renderer.renderRectangle({x,y,1,1},
+						carpetDecals.texture,
+						Colors_White,
+						{},
+						0,
+						carpetDecals.atlas.get(0, 2)
+					);
+				}
+				else if (top && bottom)
+				{
+					renderer.renderRectangle({x,y,1,1},
+						carpetDecals.texture,
+						Colors_White,
+						{},
+						0,
+						carpetDecals.atlas.get(2, 3)
+					);
+				}
+				else if (left && right)
+				{
+					renderer.renderRectangle({x,y,1,1},
+						carpetDecals.texture,
+						Colors_White,
+						{},
+						0,
+						carpetDecals.atlas.get(0, 1)
+					);
+				}
+
+				else			
+				{
+					//can have corner pieces
+					if (left && top)
+					{
+						renderer.renderRectangle({x,y,1,1},
+							carpetDecals.texture,
+							Colors_White,
+							{},
+							0,
+							carpetDecals.atlas.get(1, 0)
+						);
+					}
+					else if (right && top)
+					{
+						renderer.renderRectangle({x,y,1,1},
+							carpetDecals.texture,
+							Colors_White,
+							{},
+							0,
+							carpetDecals.atlas.get(3, 0)
+						);
+					}
+					else if (left && bottom)
+					{
+						renderer.renderRectangle({x,y,1,1},
+							carpetDecals.texture,
+							Colors_White,
+							{},
+							0,
+							carpetDecals.atlas.get(1, 2)
+						);
+					}
+					else if (right && bottom)
+					{
+						renderer.renderRectangle({x,y,1,1},
+							carpetDecals.texture,
+							Colors_White,
+							{},
+							0,
+							carpetDecals.atlas.get(3, 2)
+						);
+					}
+
+					else if (left)
+					{
+						renderer.renderRectangle({x,y,1,1},
+							carpetDecals.texture,
+							Colors_White,
+							{},
+							0,
+							carpetDecals.atlas.get(1, 1)
+						);
+					}
+					else if (right)
+					{
+						renderer.renderRectangle({x,y,1,1},
+							carpetDecals.texture,
+							Colors_White,
+							{},
+							0,
+							carpetDecals.atlas.get(3, 1)
+						);
+					}
+					else if (top)
+					{
+						renderer.renderRectangle({x,y,1,1},
+							carpetDecals.texture,
+							Colors_White,
+							{},
+							0,
+							carpetDecals.atlas.get(2, 0)
+						);
+					}
+					else if (bottom)
+					{
+						renderer.renderRectangle({x,y,1,1},
+							carpetDecals.texture,
+							Colors_White,
+							{},
+							0,
+							carpetDecals.atlas.get(2, 2)
+						);
+					}
+
+
+					if (!bottom && !left && bottomLeft)
+					{
+						renderer.renderRectangle({x,y,1,1},
+							carpetDecals.texture,
+							Colors_White,
+							{},
+							0,
+							carpetDecals.atlas.get(5, 0)
+						);
+					}
+
+					if (!bottom && !right && bottomRight)
+					{
+						renderer.renderRectangle({x,y,1,1},
+							carpetDecals.texture,
+							Colors_White,
+							{},
+							0,
+							carpetDecals.atlas.get(4, 0)
+						);
+					}
+
+					if (!top && !left && topLeft)
+					{
+						renderer.renderRectangle({x,y,1,1},
+							carpetDecals.texture,
+							Colors_White,
+							{},
+							0,
+							carpetDecals.atlas.get(5, 1)
+						);
+					}
+
+					if (!top && !right && topRight)
+					{
+						renderer.renderRectangle({x,y,1,1},
+							carpetDecals.texture,
+							Colors_White,
+							{},
+							0,
+							carpetDecals.atlas.get(4, 1)
+						);
+					}
+
+
+				}
+
+			}
+
+		};
 
 	}
 
@@ -862,9 +1105,11 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 						0,
 						wall.atlas.get(4, 1)
 					);
-				}
-
 			}
+
+		
+
+		}
 
 			else if (isChunkyTile(current.type))
 			{

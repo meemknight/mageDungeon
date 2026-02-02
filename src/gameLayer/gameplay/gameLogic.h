@@ -56,7 +56,7 @@ struct GameLogic
 	bool draggingStone = false;
 	int quickActionEditIndex = -1;
 	float wandHoverTimer = 0.0f;
-	DroppedItemSystem droppedItems; // dropped items like wands
+	DroppedItemSystem droppedItems; // dropped items like wands and chests
 	SpellbookPage spellbookPage;
 	int inventoryPage = 0;
 

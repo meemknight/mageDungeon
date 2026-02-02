@@ -117,7 +117,18 @@ namespace SpellTypes
 
 		HitStats hitStats;
 		//hitStats.pushBack = 0.3;
-		hitStats.damage = 15;
+		if (element == Elements::Water)
+		{
+			hitStats.damage = 10.0f;
+		}
+		else if (element == Elements::Earth)
+		{
+			hitStats.damage = 0.0f;
+		}
+		else
+		{
+			hitStats.damage = 5.0f;
+		}
 
 		ret.element = element;
 		ret.throwVelocity = 0;

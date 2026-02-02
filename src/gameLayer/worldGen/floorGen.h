@@ -69,6 +69,13 @@ struct FloorGenerator
 		int caveRoomWallClusterSizeMin = 2;
 		int caveRoomWallClusterSizeMax = 4;
 		int caveDoorClearRadius = 3;
+		// Bigger cave rooms with maze-like interiors.
+		float caveMazeRoomChance = 0.35f;
+		int caveMazeRoomRadiusMin = 9;
+		int caveMazeRoomRadiusMax = 14;
+		int caveMazeRoomExtentPadding = 4;
+		// Carpet roads linking entrances inside wooden rooms.
+		float woodRoomCarpetRoadChance = 0.35f;
 		float bigRoomChance = 0.12f;
 		int bigRoomMinSize = 22;
 		int bigRoomMaxSize = 30;
@@ -490,6 +497,7 @@ struct FloorGenerator
 			int w = 0;
 			int h = 0;
 			bool isCave = false;
+			bool isCaveMaze = false;
 			int caveRadius = 0;
 			bool isGrassRoom = false;
 			bool isWoodRoom = false;
@@ -592,11 +600,60 @@ struct FloorGenerator
 			}
 		};
 
+		auto paintCircleInRoom = [&](const Rect &room, glm::ivec2 center, int radius,
+			BlockType newType, BlockType requiredType)
+		{
+			int minX = std::max(room.x, std::max(2, center.x - radius - 2));
+			int maxX = std::min(room.x2() - 1, std::min(sizeX - 3, center.x + radius + 2));
+			int minY = std::max(room.y, std::max(2, center.y - radius - 2));
+			int maxY = std::min(room.y2() - 1, std::min(sizeY - 3, center.y + radius + 2));
+
+			if (minX > maxX || minY > maxY) { return; }
+
+			for (int y = minY; y <= maxY; y++)
+			{
+				for (int x = minX; x <= maxX; x++)
+				{
+					float dx = (x + 0.5f) - (float)center.x;
+					float dy = (y + 0.5f) - (float)center.y;
+					float dist = std::sqrt(dx * dx + dy * dy);
+					float jitter = getRandomFloat(rng, -0.65f, 0.65f);
+
+					if (dist <= radius + jitter)
+					{
+						auto &b = map.firstLayer.getBlockUnsafe(x, y);
+						if (b.type == requiredType)
+						{
+							b.type = newType;
+						}
+					}
+				}
+			}
+		};
+
+		auto paintCaveCircle = [&](const Rect &room, glm::ivec2 center, int radius,
+			BlockType newType, BlockType requiredType)
+		{
+			if (room.isCaveMaze)
+			{
+				paintCircleInRoom(room, center, radius, newType, requiredType);
+			}
+			else
+			{
+				paintCircle(center, radius, newType, requiredType);
+			}
+		};
+
 		auto carveCaveRoom = [&](const Rect &room)
 		{
 			glm::ivec2 center = room.center();
 			int baseRadius = std::max(4, room.caveRadius);
-			int lumps = getRandomInt(rng, 3, 5);
+			int lumps = room.isCaveMaze ? getRandomInt(rng, 5, 8) : getRandomInt(rng, 3, 5);
+			int scatter = std::max(2, baseRadius / 2);
+			if (room.isCaveMaze)
+			{
+				scatter = std::max(3, baseRadius / 2 + 1);
+			}
 			std::vector<glm::ivec2> centers;
 			centers.reserve(lumps);
 			centers.push_back(center);
@@ -604,8 +661,8 @@ struct FloorGenerator
 			for (int i = 1; i < lumps; i++)
 			{
 				glm::ivec2 offset = {
-					getRandomInt(rng, -baseRadius / 2, baseRadius / 2),
-					getRandomInt(rng, -baseRadius / 2, baseRadius / 2)
+					getRandomInt(rng, -scatter, scatter),
+					getRandomInt(rng, -scatter, scatter)
 				};
 				centers.push_back(center + offset);
 			}
@@ -613,14 +670,14 @@ struct FloorGenerator
 			for (auto c : centers)
 			{
 				int r = baseRadius + getRandomInt(rng, -2, 2);
-				paintCircle(c, r, Blocks::cobbleStoneWall, Blocks::dungeonWall);
+				paintCaveCircle(room, c, r, Blocks::cobbleStoneWall, Blocks::dungeonWall);
 			}
 
 			int innerRadius = std::max(3, baseRadius - 2);
 			for (auto c : centers)
 			{
 				int r = innerRadius + getRandomInt(rng, -1, 1);
-				paintCircle(c, r, Blocks::caveFloor, Blocks::cobbleStoneWall);
+				paintCaveCircle(room, c, r, Blocks::caveFloor, Blocks::cobbleStoneWall);
 			}
 		};
 
@@ -661,6 +718,266 @@ struct FloorGenerator
 					{
 						b.type = Blocks::woodenFloor;
 					}
+				}
+			}
+		};
+
+		// Places carpet decals inside wooden rooms.
+		auto placeCarpetsInRoom = [&](const Rect &room, const std::vector<glm::ivec2> &doors)
+		{
+			int cx = room.x + room.w / 2;
+			int cy = room.y + room.h / 2;
+			int innerMinX = room.x + 1;
+			int innerMaxX = room.x2() - 2;
+			int innerMinY = room.y + 1;
+			int innerMaxY = room.y2() - 2;
+
+			auto canPlaceCarpetTile = [&](int x, int y)
+			{
+				if (x < innerMinX || x > innerMaxX || y < innerMinY || y > innerMaxY)
+				{
+					return false;
+				}
+				auto &base = map.firstLayer.getBlockUnsafe(x, y);
+				if (base.type != Blocks::woodenFloor) { return false; }
+				return true;
+			};
+
+			auto placeCarpetTile = [&](int x, int y)
+			{
+				if (!canPlaceCarpetTile(x, y)) { return; }
+				auto &base = map.firstLayer.getBlockUnsafe(x, y);
+				base.type = Blocks::carpetFloor;
+				//auto &over = map.secondLayer.getBlockUnsafe(x, y);
+				//over.type = Blocks::carpetFloor;
+			};
+
+			auto clampCarpetPos = [&](glm::ivec2 pos)
+			{
+				pos.x = std::clamp(pos.x, innerMinX, innerMaxX);
+				pos.y = std::clamp(pos.y, innerMinY, innerMaxY);
+				return pos;
+			};
+
+			auto canPaintHorizontal = [&](int x0, int x1, int y, int side)
+			{
+				int start = std::min(x0, x1);
+				int end = std::max(x0, x1);
+				for (int x = start; x <= end; x++)
+				{
+					if (!canPlaceCarpetTile(x, y)) { return false; }
+					if (side != 0 && !canPlaceCarpetTile(x, y + side)) { return false; }
+				}
+				return true;
+			};
+
+			auto canPaintVertical = [&](int y0, int y1, int x, int side)
+			{
+				int start = std::min(y0, y1);
+				int end = std::max(y0, y1);
+				for (int y = start; y <= end; y++)
+				{
+					if (!canPlaceCarpetTile(x, y)) { return false; }
+					if (side != 0 && !canPlaceCarpetTile(x + side, y)) { return false; }
+				}
+				return true;
+			};
+
+			auto pickHorizontalSide = [&](int x0, int x1, int y) -> std::optional<int>
+			{
+				int primary = getRandomChance(rng, 0.5f) ? 1 : -1;
+				int secondary = -primary;
+				if (canPaintHorizontal(x0, x1, y, primary)) { return primary; }
+				if (canPaintHorizontal(x0, x1, y, secondary)) { return secondary; }
+				if (canPaintHorizontal(x0, x1, y, 0)) { return 0; }
+				return {};
+			};
+
+			auto pickVerticalSide = [&](int y0, int y1, int x) -> std::optional<int>
+			{
+				int primary = getRandomChance(rng, 0.5f) ? 1 : -1;
+				int secondary = -primary;
+				if (canPaintVertical(y0, y1, x, primary)) { return primary; }
+				if (canPaintVertical(y0, y1, x, secondary)) { return secondary; }
+				if (canPaintVertical(y0, y1, x, 0)) { return 0; }
+				return {};
+			};
+
+			auto paintHorizontal = [&](int x0, int x1, int y, int side)
+			{
+				int start = std::min(x0, x1);
+				int end = std::max(x0, x1);
+				for (int x = start; x <= end; x++)
+				{
+					placeCarpetTile(x, y);
+					if (side != 0)
+					{
+						placeCarpetTile(x, y + side);
+					}
+				}
+			};
+
+			auto paintVertical = [&](int y0, int y1, int x, int side)
+			{
+				int start = std::min(y0, y1);
+				int end = std::max(y0, y1);
+				for (int y = start; y <= end; y++)
+				{
+					placeCarpetTile(x, y);
+					if (side != 0)
+					{
+						placeCarpetTile(x + side, y);
+					}
+				}
+			};
+
+			// Optional straight carpet road between two entrances.
+			if (doors.size() >= 2 && getRandomChance(rng, cosmetics.woodRoomCarpetRoadChance))
+			{
+				int aIndex = getRandomInt(rng, 0, (int)doors.size() - 1);
+				int bIndex = getRandomInt(rng, 0, (int)doors.size() - 1);
+				if (bIndex == aIndex)
+				{
+					bIndex = (bIndex + 1) % (int)doors.size();
+				}
+
+				glm::ivec2 start = clampCarpetPos(doors[aIndex]);
+				glm::ivec2 end = clampCarpetPos(doors[bIndex]);
+				if (start != end)
+				{
+					auto tryPaintRoad = [&](bool horizontalFirst)
+					{
+						if (horizontalFirst)
+						{
+							glm::ivec2 mid = {end.x, start.y};
+							auto sideH = pickHorizontalSide(start.x, mid.x, start.y);
+							if (!sideH) { return false; }
+							auto sideV = pickVerticalSide(mid.y, end.y, mid.x);
+							if (!sideV) { return false; }
+							paintHorizontal(start.x, mid.x, start.y, *sideH);
+							paintVertical(mid.y, end.y, mid.x, *sideV);
+							return true;
+						}
+						else
+						{
+							glm::ivec2 mid = {start.x, end.y};
+							auto sideV = pickVerticalSide(start.y, mid.y, start.x);
+							if (!sideV) { return false; }
+							auto sideH = pickHorizontalSide(mid.x, end.x, mid.y);
+							if (!sideH) { return false; }
+							paintVertical(start.y, mid.y, start.x, *sideV);
+							paintHorizontal(mid.x, end.x, mid.y, *sideH);
+							return true;
+						}
+					};
+
+					bool horizontalFirst = getRandomChance(rng, 0.5f);
+					if (tryPaintRoad(horizontalFirst) || tryPaintRoad(!horizontalFirst))
+					{
+						return;
+					}
+				}
+			}
+
+			int pattern = getRandomInt(rng, 0, 5);
+			switch (pattern)
+			{
+				case 0:
+				{
+					// center rug
+					int rugW = std::max(3, room.w / 3);
+					int rugH = std::max(3, room.h / 3);
+					int startX = cx - rugW / 2;
+					int startY = cy - rugH / 2;
+					for (int y = startY; y < startY + rugH; y++)
+					{
+						for (int x = startX; x < startX + rugW; x++)
+						{
+							placeCarpetTile(x, y);
+						}
+					}
+					break;
+				}
+				case 1:
+				{
+					// entry path
+					for (int y = room.y + 1; y < room.y2() - 1; y++)
+					{
+						placeCarpetTile(cx, y);
+						placeCarpetTile(cx + 1, y);
+					}
+					break;
+				}
+				case 2:
+				{
+					// border strip
+					for (int x = room.x + 1; x < room.x2() - 1; x++)
+					{
+						placeCarpetTile(x, room.y + 1);
+						placeCarpetTile(x, room.y2() - 2);
+					}
+					for (int y = room.y + 2; y < room.y2() - 2; y++)
+					{
+						placeCarpetTile(room.x + 1, y);
+						placeCarpetTile(room.x2() - 2, y);
+					}
+					break;
+				}
+				case 3:
+				{
+					// margin lanes
+					for (int y = room.y + 2; y < room.y2() - 2; y++)
+					{
+						placeCarpetTile(room.x + 2, y);
+						placeCarpetTile(room.x2() - 3, y);
+					}
+					break;
+				}
+				case 4:
+				{
+					// centered rectangle
+					int rugW = std::max(4, room.w / 2);
+					int rugH = std::max(4, room.h / 2);
+					int startX = cx - rugW / 2;
+					int startY = cy - rugH / 2;
+					for (int y = startY; y < startY + rugH; y++)
+					{
+						for (int x = startX; x < startX + rugW; x++)
+						{
+							placeCarpetTile(x, y);
+						}
+					}
+					break;
+				}
+				case 5:
+				{
+					// centered square
+					int size = std::max(3, std::min(room.w, room.h) / 3);
+					int startX = cx - size / 2;
+					int startY = cy - size / 2;
+					for (int y = startY; y < startY + size; y++)
+					{
+						for (int x = startX; x < startX + size; x++)
+						{
+							placeCarpetTile(x, y);
+						}
+					}
+					break;
+				}
+				default:
+				{
+					int rugW = std::max(3, room.w / 3);
+					int rugH = std::max(3, room.h / 3);
+					int startX = cx - rugW / 2;
+					int startY = cy - rugH / 2;
+					for (int y = startY; y < startY + rugH; y++)
+					{
+						for (int x = startX; x < startX + rugW; x++)
+						{
+							placeCarpetTile(x, y);
+						}
+					}
+					break;
 				}
 			}
 		};
@@ -1087,6 +1404,7 @@ struct FloorGenerator
 		for (int i = 0; i < attempts; i++)
 		{
 			bool isCave = getRandomChance(rng, cosmetics.caveRoomChance);
+			bool isCaveMaze = false;
 			bool isGrassRoom = false;
 			bool isWoodRoom = false;
 			bool isBigRoom = false;
@@ -1102,16 +1420,30 @@ struct FloorGenerator
 					isGrassRoom = true;
 				}
 			}
+			else
+			{
+				isCaveMaze = getRandomChance(rng, cosmetics.caveMazeRoomChance);
+			}
 			int w = randRange(minRoomSize, maxRoomSize);
 			int h = randRange(minRoomSize, maxRoomSize);
 			int caveRadius = 0;
 
 			if (isCave)
 			{
-				caveRadius = randRange(cosmetics.caveRoomRadiusMin, cosmetics.caveRoomRadiusMax);
-				int caveExtent = caveRadius + cosmetics.caveRoomExtentPadding;
-				w = caveExtent * 2 + 1;
-				h = caveExtent * 2 + 1;
+				if (isCaveMaze)
+				{
+					caveRadius = randRange(cosmetics.caveMazeRoomRadiusMin, cosmetics.caveMazeRoomRadiusMax);
+					int caveExtent = caveRadius + cosmetics.caveMazeRoomExtentPadding;
+					w = caveExtent * 2 + 1;
+					h = caveExtent * 2 + 1;
+				}
+				else
+				{
+					caveRadius = randRange(cosmetics.caveRoomRadiusMin, cosmetics.caveRoomRadiusMax);
+					int caveExtent = caveRadius + cosmetics.caveRoomExtentPadding;
+					w = caveExtent * 2 + 1;
+					h = caveExtent * 2 + 1;
+				}
 			}
 			else
 			{
@@ -1156,6 +1488,7 @@ struct FloorGenerator
 			room.w = w;
 			room.h = h;
 			room.isCave = isCave;
+			room.isCaveMaze = isCaveMaze;
 			room.caveRadius = caveRadius;
 			room.isGrassRoom = isGrassRoom;
 			room.isWoodRoom = isWoodRoom;
@@ -1628,7 +1961,6 @@ struct FloorGenerator
 		{
 			const Rect &room = rooms[roomIndex];
 			if (!room.isCave) { return; }
-			if (!getRandomChance(rng, cosmetics.caveRoomSetpieceChance)) { return; }
 
 			auto clearCaveDoorArea = [&]()
 			{
@@ -1653,6 +1985,108 @@ struct FloorGenerator
 					}
 				}
 			};
+
+			if (room.isCaveMaze)
+			{
+				// Larger cave rooms get maze-like wall ribs for mini-chambers.
+				glm::ivec2 center = room.center();
+				int area = room.w * room.h;
+				int centerClear = std::max(3, room.caveRadius / 3);
+				int wallBudget = std::clamp(area / 7, 18, 160);
+				int ribs = std::clamp(area / 90, 5, 14);
+				int ribMin = std::max(4, room.caveRadius / 2);
+				int ribMax = std::max(ribMin + 2, room.caveRadius + 1);
+
+				auto isProtected = [&](int x, int y)
+				{
+					if (isDoorNearby(roomIndex, x, y, cosmetics.caveDoorClearRadius + 1)) { return true; }
+					int dist = std::abs(x - center.x) + std::abs(y - center.y);
+					return dist <= centerClear;
+				};
+
+				auto tryPlaceWall = [&](int x, int y)
+				{
+					if (x < room.x + 2 || x >= room.x2() - 2 || y < room.y + 2 || y >= room.y2() - 2)
+					{
+						return false;
+					}
+					if (isProtected(x, y)) { return false; }
+					auto &tile = map.firstLayer.getBlockUnsafe(x, y);
+					if (tile.type != Blocks::caveFloor) { return false; }
+					tile.type = Blocks::cobbleStoneWall;
+					return true;
+				};
+
+				auto randomCardinal = [&]() -> glm::ivec2
+				{
+					if (getRandomChance(rng, 0.5f))
+					{
+						return {getRandomChance(rng, 0.5f) ? 1 : -1, 0};
+					}
+					return {0, getRandomChance(rng, 0.5f) ? 1 : -1};
+				};
+
+				int placedWalls = 0;
+				for (int i = 0; i < ribs && placedWalls < wallBudget; i++)
+				{
+					glm::ivec2 pos = {
+						getRandomInt(rng, room.x + 2, room.x2() - 3),
+						getRandomInt(rng, room.y + 2, room.y2() - 3)
+					};
+					if (isProtected(pos.x, pos.y)) { continue; }
+					glm::ivec2 dir = randomCardinal();
+					int len = getRandomInt(rng, ribMin, ribMax);
+
+					for (int step = 0; step < len && placedWalls < wallBudget; step++)
+					{
+						if (getRandomChance(rng, 0.18f))
+						{
+							pos += dir;
+							continue;
+						}
+
+						if (tryPlaceWall(pos.x, pos.y))
+						{
+							placedWalls++;
+						}
+
+						if (getRandomChance(rng, 0.35f))
+						{
+							dir = (dir.x != 0)
+								? glm::ivec2{0, getRandomChance(rng, 0.5f) ? 1 : -1}
+								: glm::ivec2{getRandomChance(rng, 0.5f) ? 1 : -1, 0};
+						}
+
+						pos += dir;
+						if (pos.x < room.x + 2 || pos.x >= room.x2() - 2
+							|| pos.y < room.y + 2 || pos.y >= room.y2() - 2)
+						{
+							break;
+						}
+					}
+				}
+
+				int clusters = getRandomInt(rng, cosmetics.caveRoomWallClustersMin + 2,
+					cosmetics.caveRoomWallClustersMax + 6);
+				for (int i = 0; i < clusters; i++)
+				{
+					for (int attempt = 0; attempt < 8; attempt++)
+					{
+						int x = getRandomInt(rng, room.x + 2, room.x2() - 3);
+						int y = getRandomInt(rng, room.y + 2, room.y2() - 3);
+						if (isProtected(x, y)) { continue; }
+						int r = getRandomInt(rng, cosmetics.caveRoomWallClusterSizeMin,
+							cosmetics.caveRoomWallClusterSizeMax + 1);
+						paintCircleInRoom(room, {x, y}, r, Blocks::cobbleStoneWall, Blocks::caveFloor);
+						break;
+					}
+				}
+
+				clearCaveDoorArea();
+				return;
+			}
+
+			if (!getRandomChance(rng, cosmetics.caveRoomSetpieceChance)) { return; }
 
 			int clusters = getRandomInt(rng, cosmetics.caveRoomWallClustersMin,
 				cosmetics.caveRoomWallClustersMax);
@@ -2004,8 +2438,9 @@ struct FloorGenerator
 		}
 
 		bool hasGrassRooms = false;
-		for (const auto &room : rooms)
+		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
 		{
+			const auto &room = rooms[roomIndex];
 			if (room.isGrassRoom)
 			{
 				hasGrassRooms = true;
@@ -2015,6 +2450,7 @@ struct FloorGenerator
 			{
 				paintWoodRoom(room);
 				paintWoodRoomWalls(room);
+				placeCarpetsInRoom(room, outInfo.rooms[roomIndex].doorPositions);
 			}
 		}
 
@@ -2081,9 +2517,10 @@ struct FloorGenerator
 
 		auto pickSpawnPosition = [&](int roomIndex, const Rect &room) -> std::optional<glm::ivec2>
 		{
-			int margin = room.isBigRoom ? cosmetics.bigRoomSpawnMargin : 2;
-			int minDist = room.isBigRoom ? cosmetics.bigRoomDoorMinDist : cosmetics.doorSpawnMinDist;
-			int attempts = room.isBigRoom ? 12 : 6;
+			bool largeRoom = room.isBigRoom || room.isCaveMaze;
+			int margin = largeRoom ? cosmetics.bigRoomSpawnMargin : 2;
+			int minDist = largeRoom ? cosmetics.bigRoomDoorMinDist : cosmetics.doorSpawnMinDist;
+			int attempts = largeRoom ? 12 : 6;
 			glm::ivec2 center = room.center();
 
 			int minX = room.x + margin;
@@ -2099,7 +2536,7 @@ struct FloorGenerator
 					getRandomInt(rng, minY, maxY)
 				};
 
-				if (room.isBigRoom)
+				if (largeRoom)
 				{
 					if (std::abs(spawn.x - center.x) > room.w / 3
 						|| std::abs(spawn.y - center.y) > room.h / 3)
@@ -2180,7 +2617,8 @@ struct FloorGenerator
 				if (!placed)
 				{
 					glm::ivec2 fallback = room.center();
-					int minDist = room.isBigRoom ? cosmetics.bigRoomDoorMinDist : cosmetics.doorSpawnMinDist;
+					bool largeRoom = room.isBigRoom || room.isCaveMaze;
+					int minDist = largeRoom ? cosmetics.bigRoomDoorMinDist : cosmetics.doorSpawnMinDist;
 					if (isDoorTooClose(roomIndex, fallback, minDist))
 					{
 						glm::ivec2 away = fallback;

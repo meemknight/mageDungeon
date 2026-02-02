@@ -36,6 +36,7 @@ void AssetsManager::loadAllAssets()
 		16, //grassDecor,
 		16, //wooden floor,
 		16, //wooden wall 3D,
+		16, //carpet decals,
 	};
 
 	//if you see an error that means you added a sprite but forgot to add
@@ -63,6 +64,7 @@ void AssetsManager::loadAllAssets()
 		{4,4}, //grassDecor,
 		{4,1}, //wooden floor
 		{6,4}, //wooden wall 3D
+		{6,4}, //carpet decals
 
 	};
 
@@ -186,6 +188,10 @@ void AssetsManager::loadAllAssets()
 	s = wands.texture.GetSize();
 	wands.atlas = gl2d::TextureAtlasPadding(32, 1, s.x, s.y);
 
+	woodenChest.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "map/woodenChest.png", 16);
+	s = woodenChest.texture.GetSize();
+	woodenChest.atlas = gl2d::TextureAtlasPadding(4, 1, s.x, s.y);
+
 	PaletteEffect palette;
 	palette.loadPalette();
 	bool hasPalette = palette.hasPalette();
@@ -262,6 +268,89 @@ void AssetsManager::loadAllAssets()
 			{
 				loadPalettedTexture(wandIcons[i], path);
 			}
+		}
+	}
+
+	// load button prompts for UI (xbox series + light keyboard/mouse)
+	{
+		std::string buttonsRoot = std::string(RESOURCES_PATH) + "buttons/";
+		std::string controllerDir = buttonsRoot + "Xbox Series/";
+		std::string keyboardDir = buttonsRoot + "Keyboard & Mouse/Light/";
+
+		buttonSprites.controller.clear();
+		buttonSprites.keyboard.clear();
+		buttonSprites.mouse.clear();
+		buttonSprites.controller.reserve(32);
+		buttonSprites.keyboard.reserve(8);
+		buttonSprites.mouse.reserve(8);
+
+		auto loadButtonTexture = [&](std::unordered_map<std::string, gl2d::Texture> &out,
+			const std::string &key, const std::string &path)
+		{
+			auto &tex = out[key];
+			tex.loadFromFile(path.c_str());
+			if (!tex.isValid())
+			{
+				out.erase(key);
+				std::string err = "Error couldn't load texture: ";
+				err += path;
+				platform::log(err.c_str(), LogManager::logError);
+			}
+		};
+
+		auto loadButtonFolder = [&](const std::string &directory,
+			const std::string &prefix, std::unordered_map<std::string, gl2d::Texture> &out)
+		{
+			if (!std::filesystem::exists(directory))
+			{
+				std::string err = "Warning couldn't find button folder: ";
+				err += directory;
+				platform::log(err.c_str(), LogManager::logWarning);
+				return;
+			}
+
+			for (auto &entry : std::filesystem::directory_iterator(directory))
+			{
+				if (!entry.is_regular_file()) { continue; }
+				auto path = entry.path();
+				if (path.extension() != ".png") { continue; }
+
+				std::string key = path.stem().string();
+				if (!prefix.empty() && key.rfind(prefix, 0) == 0)
+				{
+					key.erase(0, prefix.size());
+					if (!key.empty() && key[0] == '_')
+					{
+						key.erase(0, 1);
+					}
+				}
+
+				loadButtonTexture(out, key, path.string());
+			}
+		};
+
+		loadButtonFolder(controllerDir, "XboxSeriesX", buttonSprites.controller);
+
+		if (std::filesystem::exists(keyboardDir))
+		{
+			loadButtonTexture(buttonSprites.keyboard, "W", keyboardDir + "W_Key_Light.png");
+			loadButtonTexture(buttonSprites.keyboard, "A", keyboardDir + "A_Key_Light.png");
+			loadButtonTexture(buttonSprites.keyboard, "S", keyboardDir + "S_Key_Light.png");
+			loadButtonTexture(buttonSprites.keyboard, "D", keyboardDir + "D_Key_Light.png");
+			loadButtonTexture(buttonSprites.keyboard, "Q", keyboardDir + "Q_Key_Light.png");
+			loadButtonTexture(buttonSprites.keyboard, "E", keyboardDir + "E_Key_Light.png");
+			loadButtonTexture(buttonSprites.keyboard, "Tab", keyboardDir + "Tab_Key_Light.png");
+
+			loadButtonTexture(buttonSprites.mouse, "Left", keyboardDir + "Mouse_Left_Key_Light.png");
+			loadButtonTexture(buttonSprites.mouse, "Right", keyboardDir + "Mouse_Right_Key_Light.png");
+			loadButtonTexture(buttonSprites.mouse, "Middle", keyboardDir + "Mouse_Middle_Key_Light.png");
+			loadButtonTexture(buttonSprites.mouse, "Simple", keyboardDir + "Mouse_Simple_Key_Light.png");
+		}
+		else
+		{
+			std::string err = "Warning couldn't find button folder: ";
+			err += keyboardDir;
+			platform::log(err.c_str(), LogManager::logWarning);
 		}
 	}
 

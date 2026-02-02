@@ -340,6 +340,12 @@ struct BasicMeleEnemy : public Entity
 	// Sprite render offset so taller sprites sit lower on the collider.
 	float renderOffsetY = PIXEL_SIZE * 10.0f;
 
+	// Hover render offset for flying enemies.
+	bool hoverEnabled = false;
+	float hoverTimer = 0.0f;
+	float hoverSpeed = 2.6f;
+	float hoverHeight = PIXEL_SIZE * 1.4f;
+
 	// Death animation state
 	static constexpr int deathAnimationY = 9; // death animation row
 	static constexpr int deathAnimationFrames = 6;

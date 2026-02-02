@@ -101,10 +101,10 @@ bool GameLogic::init()
 		}
 	}
 
-	// spawn a few wands in rooms
+	// spawn a few wands and chests in rooms
 	{
 		std::vector<glm::vec2> spawnPositions;
-		spawnPositions.reserve(32);
+		spawnPositions.reserve(48);
 
 		for (const auto &room : floorInfo.rooms)
 		{
@@ -127,18 +127,32 @@ bool GameLogic::init()
 			}
 		}
 
-		int maxSpawns = std::min(24, (int)spawnPositions.size());
-		int minSpawns = std::min(8, maxSpawns);
-		int spawnCount = maxSpawns > 0 ? getRandomInt(rng, minSpawns, maxSpawns) : 0;
-		for (int i = 0; i < spawnCount; i++)
+		auto popSpawn = [&](std::ranlux24_base &rng)
 		{
 			int index = getRandomInt(rng, 0, (int)spawnPositions.size() - 1);
 			glm::vec2 pos = spawnPositions[index];
 			spawnPositions[index] = spawnPositions.back();
 			spawnPositions.pop_back();
+			return pos;
+		};
 
+		int maxWandSpawns = std::min(24, (int)spawnPositions.size());
+		int minWandSpawns = std::min(8, maxWandSpawns);
+		int wandSpawnCount = maxWandSpawns > 0 ? getRandomInt(rng, minWandSpawns, maxWandSpawns) : 0;
+		for (int i = 0; i < wandSpawnCount; i++)
+		{
+			glm::vec2 pos = popSpawn(rng);
 			int tier = getRandomInt(rng, 1, 3);
 			droppedItems.spawnWand(pos, getRandomWand(tier, rng), rng);
+		}
+
+		int maxChestSpawns = std::min(40, (int)spawnPositions.size());
+		int minChestSpawns = std::min(16, maxChestSpawns);
+		int chestSpawnCount = maxChestSpawns > 0 ? getRandomInt(rng, minChestSpawns, maxChestSpawns) : 0;
+		for (int i = 0; i < chestSpawnCount; i++)
+		{
+			glm::vec2 pos = popSpawn(rng);
+			droppedItems.spawnChest(pos, rng);
 		}
 	}
 
@@ -316,31 +330,45 @@ bool GameLogic::update(float deltaTime,
 	}
 
 	int wandCountBefore = (hasWand[0] ? 1 : 0) + (hasWand[1] ? 1 : 0);
-	bool swapWandInput = !inventoryOpen && (input.buttons[platform::Button::E].pressed ||
+	bool pickupInput = !inventoryOpen && (input.buttons[platform::Button::E].pressed ||
 		input.controller.buttons[platform::Controller::A].pressed);
-	if (swapWandInput)
+	if (pickupInput)
 	{
-		int pickedSlot = -1;
-		bool swappedWand = false;
-		int pickedItemIndex = -1;
-		if (droppedItems.trySwapWithPlayer(player.physics.getPos(), wands, hasWand,
-			activeWandIndex, pickedSlot, swappedWand, pickedItemIndex, true))
+		const float pickupRadius = PIXEL_SIZE * 16.0f;
+		int interactIndex = droppedItems.findClosestInteractableIndex(player.physics.getPos(),
+			pickupRadius * pickupRadius);
+		if (interactIndex >= 0)
 		{
-			if (pickedSlot >= 0)
+			if (droppedItems.items[interactIndex].type == DroppedItemType::Chest)
 			{
-				if (swappedWand && pickedItemIndex >= 0 && pickedItemIndex < (int)droppedItems.items.size())
+				droppedItems.openChest(interactIndex);
+			}
+			else
+			{
+				int pickedSlot = -1;
+				bool swappedWand = false;
+				int pickedItemIndex = -1;
+				if (droppedItems.trySwapWithPlayerIndex(interactIndex, wands, hasWand,
+					activeWandIndex, pickedSlot, swappedWand, pickedItemIndex))
 				{
-					returnStonesFromWand(pickedSlot, droppedItems.items[pickedItemIndex].wand);
-				}
-				else
-				{
-					clearStoneSlots(pickedSlot);
-				}
-				spellSelectionLogic[pickedSlot].resetSelectionForWand(
-					wands[pickedSlot], spellRecepies[pickedSlot], true);
-				if (!swappedWand && wandCountBefore == 1)
-				{
-					switchActiveWand(pickedSlot, true);
+					if (pickedSlot >= 0)
+					{
+						if (swappedWand && pickedItemIndex >= 0
+							&& pickedItemIndex < (int)droppedItems.items.size())
+						{
+							returnStonesFromWand(pickedSlot, droppedItems.items[pickedItemIndex].wand);
+						}
+						else
+						{
+							clearStoneSlots(pickedSlot);
+						}
+						spellSelectionLogic[pickedSlot].resetSelectionForWand(
+							wands[pickedSlot], spellRecepies[pickedSlot], true);
+						if (!swappedWand && wandCountBefore == 1)
+						{
+							switchActiveWand(pickedSlot, true);
+						}
+					}
 				}
 			}
 		}
@@ -375,6 +403,25 @@ bool GameLogic::update(float deltaTime,
 		{
 			returnStonesFromWand(activeWandIndex, wands[activeWandIndex]);
 			wands[activeWandIndex] = getRandomWand(randomWandTier, rng);
+			spellSelectionLogic[activeWandIndex].resetSelectionForWand(
+				wands[activeWandIndex], spellRecepies[activeWandIndex], true);
+		}
+		if (ImGui::Button("Add Elder Wand"))
+		{
+			// Hardcoded max-tier elder wand for quick testing.
+			returnStonesFromWand(activeWandIndex, wands[activeWandIndex]);
+			Wand elderWand;
+			elderWand.up = {WandSlotType::Element, Elements::Fire, 4};
+			elderWand.down = {WandSlotType::Element, Elements::Water, 4};
+			elderWand.left = {WandSlotType::Element, Elements::Earth, 4};
+			elderWand.right = {WandSlotType::Element, Elements::Ice, 4};
+			elderWand.alwaysCast = {WandSlotType::Disabled};
+			elderWand.maxMana = 15;
+			elderWand.manaChargeSpeed = 1.3f;
+			elderWand.maxElementsPerCast = 7;
+			elderWand.wandSprite = Wand::elderWand;
+			elderWand.sanitize();
+			wands[activeWandIndex] = elderWand;
 			spellSelectionLogic[activeWandIndex].resetSelectionForWand(
 				wands[activeWandIndex], spellRecepies[activeWandIndex], true);
 		}
@@ -857,7 +904,7 @@ bool GameLogic::update(float deltaTime,
 	map.renderWallShadows(renderer, assetsManager);
 
 	spellsHolder.renderBeforeEntities(renderer, particlePostProcessRenderer);
-	droppedItems.render(renderer, assetsManager);
+	droppedItems.render(renderer, assetsManager, player.physics.getPos(), usesController);
 
 	entityHolder.update(simDelta, map, particleSystem, rng, player, summons, projectiles);
 	resolveEntityPush(entityHolder, player);

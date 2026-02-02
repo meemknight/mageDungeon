@@ -840,6 +840,22 @@ bool TrapProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParti
 	auto smallerTransform = physics.transform;
 	smallerTransform.size *= activateRadiousMultiplier;
 
+	auto applyTrapHit = [&](Entity &target)
+	{
+		glm::vec2 pushBack = {};
+		glm::vec2 hitDir = target.physics.getPos() - getPos();
+		target.life.computeHit(hitStats, element, target.element, hitDir, pushBack);
+		target.physics.velocity += pushBack;
+		addStatusEffectFromElement(target.statusEffects, target.statusImmunities, element, statusAmount);
+
+		if (hitStats.damage > 0.0f)
+		{
+			glm::vec2 damagePos = target.physics.getPos();
+			damagePos.y -= target.physics.transform.size.y * 0.6f;
+			getDamageViewerSystem().addDamage(hitStats.damage, damagePos);
+		}
+	};
+
 	if (!triggered)
 	for (auto &e : entityHolder.entities)
 	{
@@ -856,14 +872,84 @@ bool TrapProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParti
 		triggerTimer -= deltaTime;
 		if (triggerTimer <= 0)
 		{
+			if (element == Elements::Earth)
+			{
+				// Earth trap: spawn a thorn ring around the player.
+				auto &player = getPlayer();
+				glm::vec2 playerPos = player.physics.getPos();
+				glm::ivec2 playerTile = WorldToTile(playerPos);
+				auto &projectileHolder = getProjectileHolder();
+
+				auto isBlocked = [&](const glm::ivec2 &tile)
+				{
+					if (tile.x < 0 || tile.y < 0 || tile.x >= map.size.x || tile.y >= map.size.y)
+					{
+						return true;
+					}
+					return map.isCollidableAtPosSafe(tile.x, tile.y);
+				};
+
+				const float twoPi = 6.2831853f;
+				float angleStep = twoPi / (float)earthThornCount;
+				float baseAngle = getRandomFloat(rng, 0.0f, twoPi);
+
+				for (int i = 0; i < earthThornCount; i++)
+				{
+					float angle = baseAngle + angleStep * (float)i;
+					bool spawned = false;
+					for (int tries = 0; tries < earthRingAttempts && !spawned; tries++)
+					{
+						float jitterAngle = angle + getRandomFloat(rng, -earthRingAngleJitter, earthRingAngleJitter);
+						float radius = earthRingRadius + getRandomFloat(rng, -earthRingRadiusJitter, earthRingRadiusJitter);
+						glm::vec2 spawnPos = playerPos + glm::vec2(std::cos(jitterAngle), std::sin(jitterAngle)) * radius;
+						glm::ivec2 spawnTile = WorldToTile(spawnPos);
+						if (isBlocked(spawnTile))
+						{
+							continue;
+						}
+						if (!HasLineOfSightGrid(map, playerTile, spawnTile))
+						{
+							continue;
+						}
+						auto thorn = std::make_unique<ThornProjectile>();
+						thorn->element = Elements::Earth;
+						projectileHolder.addProjectileDeferredAsPtr(std::move(thorn), spawnPos);
+						spawned = true;
+					}
+				}
+
+				return false;
+			}
+
+			if (element == Elements::Water)
+			{
+				Entity *bestTarget = nullptr;
+				float bestDist2 = 999999.0f;
+				for (auto &e : entityHolder.entities)
+				{
+					if (e->dying) continue; // skip dying entities
+					if (!projectile.intersectTransform(e->physics.transform)) { continue; }
+					glm::vec2 diff = e->physics.getPos() - getPos();
+					float dist2 = glm::dot(diff, diff);
+					if (!bestTarget || dist2 < bestDist2)
+					{
+						bestTarget = e.get();
+						bestDist2 = dist2;
+					}
+				}
+				if (bestTarget)
+				{
+					applyTrapHit(*bestTarget);
+				}
+				return false;
+			}
+
 			for (auto &e : entityHolder.entities)
 			{
 				if (e->dying) continue; // skip dying entities
 				if (projectile.intersectTransform(e->physics.transform))
 				{
-					glm::vec2 pushBack = {};
-					e->life.computeHit(hitStats, element, e->element, {e->physics.getPos() - getPos()}, pushBack);
-					e->physics.velocity += pushBack;
+					applyTrapHit(*e);
 				}
 			}
 			return false;
@@ -1902,6 +1988,15 @@ void EnemyOrbProjectile::setDirection(glm::vec2 dir)
 	physics.velocity = moveDir * speed;
 }
 
+void EnemyOrbProjectile::enableOrbit(float radius, float angularSpeed, float startAngle)
+{
+	orbitEnabled = true;
+	orbitRadius = radius;
+	orbitAngularSpeed = angularSpeed;
+	orbitAngle = startAngle;
+	orbitInitialized = false;
+}
+
 void EnemyOrbProjectile::setupParticles()
 {
 	// Core particle - bright center, stays close
@@ -2029,9 +2124,32 @@ bool EnemyOrbProjectile::update(float deltaTime, Map &map, ParticleSystem &mainP
 	}
 
 	// Physics and wall collision
-	if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+	if (orbitEnabled)
 	{
-		return false;
+		// Orbit around a moving center (used by rotating cross shots)
+		if (!orbitInitialized)
+		{
+			orbitCenterPos = physics.getPos();
+			orbitInitialized = true;
+		}
+		orbitCenterPos += moveDir * speed * deltaTime;
+		orbitAngle += orbitAngularSpeed * deltaTime;
+		glm::vec2 offset = {std::cos(orbitAngle), std::sin(orbitAngle)};
+		physics.transform.pos = orbitCenterPos + offset * orbitRadius;
+		physics.velocity = moveDir * speed;
+		physics.resolveConstrains(map);
+		physics.updateMove();
+		if (physics.leftTouch || physics.rightTouch || physics.upTouch || physics.downTouch)
+		{
+			return false;
+		}
+	}
+	else
+	{
+		if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+		{
+			return false;
+		}
 	}
 
 	particleSystem.update(deltaTime);

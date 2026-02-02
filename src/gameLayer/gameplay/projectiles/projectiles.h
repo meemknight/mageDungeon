@@ -257,6 +257,13 @@ struct TrapProjectile: public CloneableProjectile<TrapProjectile>
 	// **configuration variables**
 	HitStats hitStats;
 	float trapRadious = 1.5f;
+	float statusAmount = 5.0f;
+	// Earth trap spawns a thorn ring around the player.
+	int earthThornCount = 15;
+	float earthRingRadius = 2.2f;
+	float earthRingRadiusJitter = 0.3f;
+	float earthRingAngleJitter = 0.12f;
+	int earthRingAttempts = 3;
 	constexpr static float activateRadiousMultiplier = 0.8f;
 
 	// **state variables**
@@ -599,11 +606,17 @@ struct EnemyOrbProjectile: public CloneableProjectile<EnemyOrbProjectile>
 	float speed = 3.0f;
 	float particleInterval = 0.02f;
 	bool showCollider = false;
+	bool orbitEnabled = false;            // rotate around a moving center
+	float orbitRadius = PIXEL_SIZE * 12.0f;
+	float orbitAngularSpeed = 3.6f;       // radians per second
 
 	// **state variables**
 	bool firstTime = true;
 	float particleTimer = 0.0f;
 	glm::vec2 moveDir = {1.0f, 0.0f};
+	float orbitAngle = 0.0f;
+	glm::vec2 orbitCenterPos = {};
+	bool orbitInitialized = false;
 	ParticleSettings coreParticle;
 	ParticleSettings glowParticle;
 
@@ -615,6 +628,7 @@ struct EnemyOrbProjectile: public CloneableProjectile<EnemyOrbProjectile>
 	void setDamage(float dmg);
 	void updateDamageColors();
 	void setDirection(glm::vec2 dir);
+	void enableOrbit(float radius, float angularSpeed, float startAngle);
 	void setupParticles();
 
 	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,

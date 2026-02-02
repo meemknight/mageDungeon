@@ -32,3 +32,6 @@ struct Player
 	void update(float deltaTime);
 
 };
+
+// Access the active player (preview or game).
+Player &getPlayer();

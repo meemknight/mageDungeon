@@ -4,6 +4,8 @@
 
 namespace EnemyTypes
 {
+	constexpr float enemyLifeScale = 2.0f;
+
 	// Configures the base enemy visuals and behavior defaults.
 	inline void setupEnemy(BasicMeleEnemy &enemy, TileSet &tileSet, int cellPixels)
 	{
@@ -16,7 +18,7 @@ namespace EnemyTypes
 	inline void setupRanged(BasicMeleEnemy &enemy, unsigned char pattern,
 		float life, float damage)
 	{
-		enemy.life.setLifeAndMaxLife(life);
+		enemy.life.setLifeAndMaxLife(life * enemyLifeScale);
 		enemy.behavior.shootPatterns = pattern;
 		enemy.behavior.meleeRange = 1.5f;
 		enemy.behavior.shootRange = 8.0f;
@@ -29,12 +31,19 @@ namespace EnemyTypes
 		enemy.behavior.burstInterval = 0.18f;
 	}
 
+	// Configures a melee-only enemy (life + no shooting).
+	inline void setupMele(BasicMeleEnemy &enemy, float life)
+	{
+		enemy.life.setLifeAndMaxLife(life * enemyLifeScale);
+		enemy.behavior.shootPatterns = ShootPattern_None;
+	}
+
 	struct SkeletonEnemy : public BasicMeleEnemy
 	{
 		SkeletonEnemy()
 		{
 			setupEnemy(*this, getAssetManager().skeleton, 48);
-			setupRanged(*this, ShootPattern_Spread5, 18.0f, 1.0f);
+			setupMele(*this, 18.0f);
 		}
 	};
 
@@ -43,7 +52,9 @@ namespace EnemyTypes
 		TemplarOriginalEnemy()
 		{
 			setupEnemy(*this, getAssetManager().templarOriginal, 48);
-			setupRanged(*this, ShootPattern_BurstForward, 22.0f, 2.0f);
+			setupMele(*this, 22.0f);
+			behavior.specialShootPatterns = ShootPattern_RotatingCross;
+			behavior.specialShootChance = 0.18f;
 			renderOffsetY = PIXEL_SIZE * 4.0f;
 		}
 	};
@@ -53,7 +64,9 @@ namespace EnemyTypes
 		EarthTemplarEnemy()
 		{
 			setupEnemy(*this, getAssetManager().earthTemplar, 48);
-			setupRanged(*this, ShootPattern_BurstForward, 22.0f, 2.0f);
+			setupMele(*this, 22.0f);
+			behavior.specialShootPatterns = ShootPattern_RotatingCross;
+			behavior.specialShootChance = 0.18f;
 			element = Elements::Earth;
 			renderOffsetY = PIXEL_SIZE * 4.0f;
 		}
@@ -64,7 +77,9 @@ namespace EnemyTypes
 		FireTemplarEnemy()
 		{
 			setupEnemy(*this, getAssetManager().fireTemplar, 48);
-			setupRanged(*this, ShootPattern_BurstForward, 22.0f, 2.0f);
+			setupMele(*this, 22.0f);
+			behavior.specialShootPatterns = ShootPattern_RotatingCross;
+			behavior.specialShootChance = 0.18f;
 			element = Elements::Fire;
 			renderOffsetY = PIXEL_SIZE * 4.0f;
 		}
@@ -75,7 +90,9 @@ namespace EnemyTypes
 		IceTemplarEnemy()
 		{
 			setupEnemy(*this, getAssetManager().iceTemplar, 48);
-			setupRanged(*this, ShootPattern_BurstForward, 22.0f, 2.0f);
+			setupMele(*this, 22.0f);
+			behavior.specialShootPatterns = ShootPattern_RotatingCross;
+			behavior.specialShootChance = 0.18f;
 			element = Elements::Ice;
 			renderOffsetY = PIXEL_SIZE * 4.0f;
 		}
@@ -86,7 +103,9 @@ namespace EnemyTypes
 		WaterTemplarEnemy()
 		{
 			setupEnemy(*this, getAssetManager().waterTemplar, 48);
-			setupRanged(*this, ShootPattern_BurstForward, 22.0f, 2.0f);
+			setupMele(*this, 22.0f);
+			behavior.specialShootPatterns = ShootPattern_RotatingCross;
+			behavior.specialShootChance = 0.18f;
 			element = Elements::Water;
 			renderOffsetY = PIXEL_SIZE * 4.0f;
 		}
@@ -98,6 +117,7 @@ namespace EnemyTypes
 		{
 			setupEnemy(*this, getAssetManager().goblinArcher, 48);
 			setupRanged(*this, ShootPattern_TripleSpread, 9.0f, 1.0f);
+			behavior.stopChaseRange = 5.0f;
 		}
 	};
 
@@ -107,6 +127,8 @@ namespace EnemyTypes
 		{
 			setupEnemy(*this, getAssetManager().goblinSpearman, 48);
 			setupRanged(*this, ShootPattern_BurstForward, 9.0f, 1.0f);
+			behavior.orbitEnabled = true;
+			behavior.orbitRange = 5.0f;
 		}
 	};
 
@@ -117,6 +139,8 @@ namespace EnemyTypes
 			setupEnemy(*this, getAssetManager().goblinHeavy, 32);
 			setupRanged(*this, ShootPattern_HeavyVolley, 16.0f, 2.0f);
 			behavior.sideProjectileDamage = 1.0f;
+			behavior.orbitEnabled = true;
+			behavior.orbitRange = 5.0f;
 		}
 	};
 
@@ -126,6 +150,8 @@ namespace EnemyTypes
 		{
 			setupEnemy(*this, getAssetManager().goblinThief, 32);
 			setupRanged(*this, ShootPattern_Single, 7.0f, 1.0f);
+			behavior.orbitEnabled = true;
+			behavior.orbitRange = 5.0f;
 		}
 	};
 
@@ -135,6 +161,7 @@ namespace EnemyTypes
 		{
 			setupEnemy(*this, getAssetManager().orcArcher, 48);
 			setupRanged(*this, ShootPattern_TripleSpread, 15.0f, 2.0f);
+			behavior.stopChaseRange = 5.0f;
 		}
 	};
 
@@ -143,8 +170,23 @@ namespace EnemyTypes
 		DarkAngelEnemy()
 		{
 			setupEnemy(*this, getAssetManager().darkAngel, 64);
-			life.setLifeAndMaxLife(40.0f);
-			renderOffsetY = PIXEL_SIZE * 12.0f;
+			setupRanged(*this, ShootPattern_Single, 40.0f, 2.0f);
+			behavior.shootRange = 10.0f;
+			behavior.shootCooldown = 1.7f;
+			behavior.projectileSpeed = 4.6f;
+			behavior.stopChaseRange = 5.0f;
+			behavior.hoverMeleeEnabled = true;
+			behavior.hoverMeleeRange = 6.0f;
+			behavior.hoverMeleeChance = 0.75f;
+			behavior.hoverMeleeCooldown = 1.6f;
+			behavior.hoverMeleeArcStrength = 0.85f;
+			behavior.hoverMeleeSpeedMultiplier = 2.5f;
+			behavior.specialShootPatterns = ShootPattern_RotatingCross;
+			behavior.specialShootChance = 0.45f;
+			hoverEnabled = true;
+			hoverHeight = PIXEL_SIZE * 2.0f;
+			hoverSpeed = 2.3f;
+			renderOffsetY = PIXEL_SIZE * 18.0f;
 		}
 	};
 

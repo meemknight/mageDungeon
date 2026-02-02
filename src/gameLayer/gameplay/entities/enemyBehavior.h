@@ -20,6 +20,7 @@ enum ShootPattern : unsigned char
 	ShootPattern_BurstForward = 1 << 2,  // 3 projectiles in sequence forward
 	ShootPattern_Spread5 = 1 << 3,       // 5 projectiles spread
 	ShootPattern_HeavyVolley = 1 << 4,   // 1 forward + 4 side shots
+	ShootPattern_RotatingCross = 1 << 5, // 5 projectiles: cross with rotating outer bullets
 	// Add more patterns here as needed
 };
 
@@ -35,6 +36,7 @@ struct EnemyBehavior
 	float repathInterval = 0.25f;         // how often to rebuild A* path
 	bool seeThroughWalls = false;         // ignore LOS checks
 	bool wanderWhenIdle = false;          // wander randomly when not chasing
+	float stopChaseRange = 0.0f;          // stop moving when in LOS and within this distance
 
 	// Shooting configuration
 	unsigned char shootPatterns = ShootPattern_None;  // which patterns this enemy uses
@@ -47,6 +49,30 @@ struct EnemyBehavior
 	float sideProjectileDamage = 1.0f;    // used by heavy volley
 	int burstCount = 3;                   // shots per burst
 	float burstInterval = 0.18f;          // time between burst shots
+	unsigned char specialShootPatterns = ShootPattern_None; // alternative patterns
+	float specialShootChance = 0.0f;      // chance to use special pattern per shot
+	float crossShotDamage = 1.0f;         // damage per rotating cross projectile
+	float crossShotOrbitRadius = PIXEL_SIZE * 12.0f; // distance from center
+	float crossShotOrbitSpeed = 3.6f;     // radians per second
+
+	// Hover melee (flying swoop) configuration
+	bool hoverMeleeEnabled = false;       // enable curved melee swoop
+	float hoverMeleeRange = 5.0f;         // trigger range for swoop
+	float hoverMeleeChance = 0.30f;       // chance per second while in range
+	float hoverMeleeCooldown = 2.4f;      // seconds between swoops
+	float hoverMeleeArcStrength = 0.7f;   // sideways curve strength
+	float hoverMeleeMinDuration = 0.45f;  // minimum swoop time
+	float hoverMeleeSpeedMultiplier = 1.35f; // movement speed boost during swoop
+
+	// Orbit movement (close-range circling) configuration
+	bool orbitEnabled = false;            // circle target when in range
+	float orbitRange = 5.0f;              // start orbiting within this distance
+	float orbitDirectionChangeMin = 0.8f; // min seconds before direction change
+	float orbitDirectionChangeMax = 1.6f; // max seconds before direction change
+	float orbitRadialChangeMin = 0.35f;   // min seconds before radial tweak
+	float orbitRadialChangeMax = 0.9f;    // max seconds before radial tweak
+	float orbitRadialStrength = 0.45f;    // radial push/pull amount
+	float orbitRadialZeroChance = 0.45f;  // chance to keep pure circle on tweak
 
 	// Movement state
 	std::vector<glm::ivec2> pathTiles;
@@ -68,6 +94,21 @@ struct EnemyBehavior
 	bool firingBurstShot = false;
 	glm::vec2 burstDir = glm::vec2(1.0f, 0.0f);
 	float burstDamage = 1.0f;
+	bool useSpecialShot = false;
+
+	// Hover melee state
+	bool hoverMeleeActive = false;
+	float hoverMeleeTimer = 0.0f;
+	float hoverMeleeActiveDuration = 0.0f;
+	float hoverMeleeCooldownTimer = 0.0f;
+	float hoverMeleeArcSign = 1.0f;
+
+	// Orbit state
+	bool orbitActive = false;
+	float orbitDirectionTimer = 0.0f;
+	float orbitRadialTimer = 0.0f;
+	float orbitRadialOffset = 0.0f;
+	float orbitSign = 1.0f;
 
 	// Output from last update
 	glm::vec2 moveDir = glm::vec2(0.0f);
@@ -107,6 +148,17 @@ struct EnemyBehavior
 		firingBurstShot = false;
 		burstDir = glm::vec2(1.0f, 0.0f);
 		burstDamage = 1.0f;
+		useSpecialShot = false;
+		hoverMeleeActive = false;
+		hoverMeleeTimer = 0.0f;
+		hoverMeleeActiveDuration = 0.0f;
+		hoverMeleeCooldownTimer = 0.0f;
+		hoverMeleeArcSign = 1.0f;
+		orbitActive = false;
+		orbitDirectionTimer = 0.0f;
+		orbitRadialTimer = 0.0f;
+		orbitRadialOffset = 0.0f;
+		orbitSign = 1.0f;
 	}
 
 	// Called when enemy hits a wall, forces repath

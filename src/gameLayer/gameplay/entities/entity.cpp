@@ -2,6 +2,7 @@
 #include "gameplay/entities/entity.h"
 #include "gameplay/summons.h"
 #include "gameplay/projectiles/projectiles.h"
+#include <cmath>
 
 // Start death animation - called when life <= 0
 bool BasicMeleEnemy::startDying()
@@ -44,6 +45,12 @@ bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParti
 		}
 	}
 
+	// Update hover timer for flying enemies
+	if (hoverEnabled)
+	{
+		hoverTimer += deltaTime;
+	}
+
 	animator.update(deltaTime, 0.12, 6);
 
 	// Update movement behavior and get move direction
@@ -59,7 +66,12 @@ bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParti
 	// Apply movement
 	if (glm::dot(moveDir, moveDir) > 0.0f)
 	{
-		float finalSpeed = behavior.speed * statusSpeedMultiplier;
+		float speedMultiplier = 1.0f;
+		if (behavior.hoverMeleeActive)
+		{
+			speedMultiplier = behavior.hoverMeleeSpeedMultiplier;
+		}
+		float finalSpeed = behavior.speed * speedMultiplier * statusSpeedMultiplier;
 		physics.getPos() += moveDir * finalSpeed * deltaTime;
 	}
 
@@ -140,6 +152,11 @@ void BasicMeleEnemy::render(gl2d::Renderer2D &renderer, ParticlePostProcessRende
 	renderPos.x -= (renderPos.z - physics.transform.size.x) / 2;
 
 	renderPos.y += renderOffsetY;
+	if (hoverEnabled)
+	{
+		float hover = std::sin(hoverTimer * hoverSpeed) * hoverHeight;
+		renderPos.y -= hover;
+	}
 
 	glm::vec4 tint = getStatusTint(statusEffects);
 	renderer.renderRectangle(renderPos, tileSet.texture,
