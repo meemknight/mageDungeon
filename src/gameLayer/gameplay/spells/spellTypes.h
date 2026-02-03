@@ -120,27 +120,29 @@ namespace SpellTypes
 			{
 				spark = getFrostShardParticle(startColor, endColor);
 				spark.animationType = ParticleSettings::ANIMATION_TYPES::animationFigure8;
+				spark.onCreateCount = 2;
+				spark.particleLifeTime = {0.12f, 0.25f};
+				spark.velocityX *= 0.35f;
+				spark.velocityY *= 0.35f;
+				spark.dragX *= 0.6f;
+				spark.dragY *= 0.6f;
+				spark.createApearence.size *= 0.75f;
+				spark.endApearence.size *= 0.75f;
+				spark.animationSpeed = {-10.0f, 10.0f};
+				spark.animationAcceleration = {-2.0f, 2.0f};
+				spark.animationScaleX = {PIXEL_SIZE * 2.0f, PIXEL_SIZE * 4.0f};
+				spark.animationScaleY = {PIXEL_SIZE * 2.0f, PIXEL_SIZE * 4.0f};
+				spark.animationRotation = {-20.0f, 20.0f};
+				spark.animationPhase = {0.0f, 6.2831853f};
 			}
 			else
 			{
-				spark = getSparkBurstParticle(startColor, endColor);
-				spark.animationType = ParticleSettings::ANIMATION_TYPES::animationSpiral;
+				spark = getBasicMagicMissleParticle(startColor, endColor);
+				spark.animationType = ParticleSettings::ANIMATION_TYPES::animationNone;
+				spark.onCreateCount = 2;
+				spark.createApearence.size *= 1.2f;
+				spark.endApearence.size *= 1.2f;
 			}
-
-			spark.onCreateCount = 1;
-			spark.particleLifeTime = {0.12f, 0.25f};
-			spark.velocityX *= 0.35f;
-			spark.velocityY *= 0.35f;
-			spark.dragX *= 0.6f;
-			spark.dragY *= 0.6f;
-			spark.createApearence.size *= 0.55f;
-			spark.endApearence.size *= 0.55f;
-			spark.animationSpeed = {-10.0f, 10.0f};
-			spark.animationAcceleration = {-2.0f, 2.0f};
-			spark.animationScaleX = {PIXEL_SIZE * 2.0f, PIXEL_SIZE * 4.0f};
-			spark.animationScaleY = {PIXEL_SIZE * 2.0f, PIXEL_SIZE * 4.0f};
-			spark.animationRotation = {-20.0f, 20.0f};
-			spark.animationPhase = {0.0f, 6.2831853f};
 			spark.folowParent = true;
 
 			emission.sustain = spark;
@@ -148,18 +150,21 @@ namespace SpellTypes
 			emission.release = spark;
 			emission.release.particleLifeTime *= 1.6f;
 			emission.release.folowParent = false;
-			emission.emitTimer = 0.02f;
+		emission.emitTimer = 0.02f;
 
 			return emission;
 		};
 
-		ret.projectile = std::make_unique<BasicMagicMissle>(hitStats, 1.0f);
+		ret.projectile = std::make_unique<BasicMagicMissle>(hitStats, 1.2f);
 		ret.projectile->timeAlieve = 0.25;
 		ret.driftAngleDegrees = 35.f;
-		if (auto missle = dynamic_cast<BasicMagicMissle *>(ret.projectile.get()))
+		if (element == Elements::Ice || element == Elements::Fire)
 		{
-			missle->hasCustomEmission = true;
-			missle->customEmission = buildDragonBreathEmission(element);
+			if (auto missle = dynamic_cast<BasicMagicMissle *>(ret.projectile.get()))
+			{
+				missle->hasCustomEmission = true;
+				missle->customEmission = buildDragonBreathEmission(element);
+			}
 		}
 
 		return ret;
@@ -231,6 +236,58 @@ namespace SpellTypes
 		ret.projectile = std::make_unique<BoulderProjectile>();
 		ret.projectile->element = Elements::NoneElement;
 		ret.throwVelocity = 9.0f;
+		return ret;
+	}
+
+	inline BasicMagicMissleSpell getMeteoriteSpell()
+	{
+		BasicMagicMissleSpell ret;
+		ret.element = Elements::Fire;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<MeteoriteProjectile>();
+		ret.projectile->element = Elements::Fire;
+		ret.throwVelocity = 9.0f;
+		return ret;
+	}
+
+	inline MeteoriteShowerSpell getMeteoriteShowerSpell()
+	{
+		MeteoriteShowerSpell ret;
+		ret.element = Elements::Fire;
+		ret.maxFireCount = 10;
+		ret.triggerDelay = 0.22f;
+		ret.impactDelay = 0.35f;
+		ret.explosionRadius = 2.0f;
+		ret.explosionDamage = 7.0f;
+		ret.explosionBurn = 2.0f;
+		ret.spawnAttempts = 16;
+		return ret;
+	}
+
+	inline InfernoSpell getInfernoSpell()
+	{
+		InfernoSpell ret;
+		ret.element = Elements::Fire;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.maxDuration = 1.8f;
+		ret.spawnInterval = 0.004f;
+		ret.fireDebuff = 10.0f;
+		return ret;
+	}
+
+	inline HomingMeteoriteVolleySpell getHomingMeteoritesSpell()
+	{
+		HomingMeteoriteVolleySpell ret;
+		ret.element = Elements::Fire;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<HomingMeteoriteProjectile>();
+		ret.projectile->element = Elements::Fire;
+		ret.shotCount = 5;
+		ret.throwVelocity = 9.0f;
+		ret.spreadDegrees = 28.0f;
 		return ret;
 	}
 
@@ -366,6 +423,42 @@ namespace SpellTypes
 		ret.standbyEmission.emitTimer = 0.01f;
 		ret.standbyEmission.sustain.folowParent = true;
 		ret.standbyEmission.release.folowParent = true;
+		ret.standbyEmission.create = ret.standbyEmission.sustain;
+		ret.standbyEmission.create.folowParent = true;
+		return ret;
+	}
+
+	inline StandbyProjectilesSpell getMeteoritesStandbySpell()
+	{
+		StandbyProjectilesSpell ret;
+		ret.element = Elements::Fire;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<MeteoriteProjectile>();
+		ret.projectile->element = Elements::Fire;
+		ret.standbyCount = 3;
+		ret.throwVelocity = 9.0f;
+		ret.standbyLifetime = 14.0f;
+
+		glm::vec4 startColor = elementToSecondaryColor(Elements::Fire); startColor.a = 0.75f;
+		glm::vec4 endColor = elementToColor(Elements::Fire); endColor.a = 0.55f;
+		ret.hasStandbyEmission = true;
+		ret.standbyEmission.sustain = getSmallSquareParticle(startColor, endColor);
+		ret.standbyEmission.release = getSmallSquareParticle(startColor, endColor);
+		ret.standbyEmission.release.particleLifeTime *= 1.5f;
+		ret.standbyEmission.emitTimer = 0.025f;
+		ret.standbyEmission.sustain.onCreateCount = 1;
+		ret.standbyEmission.sustain.createApearence.size = {0.7f, 0.9f};
+		ret.standbyEmission.sustain.endApearence.size = {0.7f, 0.9f};
+		ret.standbyEmission.sustain.texture = getAssetManager().particleCircle;
+		ret.standbyEmission.sustain.animationType = ParticleSettings::ANIMATION_TYPES::animationAtom;
+		ret.standbyEmission.sustain.animationSpeed = {10.0f, 16.0f};
+		ret.standbyEmission.sustain.animationScaleX = {PIXEL_SIZE * 2.0f, PIXEL_SIZE * 3.6f};
+		ret.standbyEmission.sustain.animationScaleY = {PIXEL_SIZE * 2.0f, PIXEL_SIZE * 3.6f};
+		ret.standbyEmission.sustain.animationPhase = {0.0f, 6.2831853f};
+		ret.standbyEmission.sustain.folowParent = true;
+		ret.standbyEmission.release.texture = getAssetManager().particleCircle;
+		ret.standbyEmission.release.folowParent = false;
 		ret.standbyEmission.create = ret.standbyEmission.sustain;
 		ret.standbyEmission.create.folowParent = true;
 		return ret;
@@ -528,11 +621,11 @@ namespace SpellTypes
 		ret.element = Elements::Earth;
 		ret.maxFireCount = 1;
 		ret.triggerDelay = 0.1f;
-		ret.maxThorns = 60;
-		ret.wormCount = 12;
-		ret.maxDistance = 10.0f;
-		ret.maxDuration = 2.0f;
-		ret.spawnInterval = 0.02f;
+		ret.maxThorns = 40;
+		ret.wormCount = 40;
+		ret.maxDistance = 28.0f;
+		ret.maxDuration = 3.0f;
+		ret.spawnInterval = 0.005f;
 		return ret;
 	}
 
@@ -643,6 +736,32 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline WaterSiphonSpell getSwordSpell(int element)
+	{
+		WaterSiphonSpell ret;
+		ret.element = element;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.15f;
+		ret.range = 2.0f;
+		ret.beamWidth = 0.22f;
+		ret.minDamage = 0.2f;
+		ret.maxDamage = 1.6f;
+		ret.statusAmount = 5.0f;
+		ret.particleStartOffset = 0.35f;
+		ret.continuousUpdateTimer = 7.0f;
+		return ret;
+	}
+
+	inline WaterSiphonSpell getIceSwordSpell()
+	{
+		return getSwordSpell(Elements::Ice);
+	}
+
+	inline WaterSiphonSpell getFireSwordSpell()
+	{
+		return getSwordSpell(Elements::Fire);
+	}
+
 		enum Spells
 		{
 		none,
@@ -657,6 +776,7 @@ namespace SpellTypes
 		iceStandbySimple,
 		waterHomingStandby,
 		iceStandby,
+		meteoritesStandby,
 		summonWaterSlime,
 		summonFireSlime,
 		summonIceSlime,
@@ -682,13 +802,19 @@ namespace SpellTypes
 		iceWall,
 		boulder,
 		waterSiphon,
+		iceSword,
+		fireSword,
 		earthRicochet,
 		earthRicochetIce,
 			earthRicochetWater,
 			bigIceBlock,
 			iceDragonsBreath,
+		meteorite,
+		meteoriteShower,
+		inferno,
+		homingMeteorites,
 
-			SPELLS_COUNT
+		SPELLS_COUNT
 		};
 
 	std::unique_ptr<Spell> getSpellFromRecepie(SpellRecepie recepie);

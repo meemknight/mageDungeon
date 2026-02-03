@@ -15,12 +15,13 @@ namespace SpellTypes
 			{Elements::Water},	//waterBolt,
 			{Elements::Water,Elements::Water},	//waterHomingMissle,
 			{Elements::Earth},	//earthBolt,
-			{Elements::Earth,Elements::Earth},	//earthThorn,
+			{Elements::Earth,Elements::Earth},	//earthThorn,z
 			{Elements::Earth,Elements::Fire},	//fireStandby,
 			{Elements::Earth,Elements::Water},	//waterStandby,
 			{Elements::Earth,Elements::Ice},	//iceStandbySimple,
 			{Elements::Earth,Elements::Water,Elements::Water},	//waterHomingStandby,
 			{Elements::Earth,Elements::Ice,Elements::Ice},	//iceStandby,
+			{Elements::Earth,Elements::Fire,Elements::Water,Elements::Fire},	//meteoritesStandby,
 			{Elements::Earth,Elements::Earth,Elements::Water},	//summonWaterSlime,
 			{Elements::Earth,Elements::Earth,Elements::Fire},	//summonFireSlime,
 			{Elements::Earth,Elements::Earth,Elements::Ice},	//summonIceSlime,
@@ -46,11 +47,17 @@ namespace SpellTypes
 			{Elements::Fire,Elements::Ice},	//iceWall,
 			{Elements::Fire,Elements::Water},	//boulder,
 			{Elements::Water,Elements::Water,Elements::Water},	//waterSiphon,
+			{Elements::Ice,Elements::Earth,Elements::Ice},	//iceSword,
+			{Elements::Ice,Elements::Earth,Elements::Fire},	//fireSword,
 			{Elements::Earth,Elements::Earth,Elements::Earth},	//earthRicochet,
 			{Elements::Earth,Elements::Earth,Elements::Earth,Elements::Ice},	//earthRicochetIce,
 			{Elements::Earth,Elements::Earth,Elements::Earth,Elements::Water},	//earthRicochetWater,
 			{Elements::Ice,Elements::Ice,Elements::Ice},	//bigIceBlock,
 			{Elements::Fire,Elements::Fire,Elements::Ice},	//iceDragonsBreath,
+			{Elements::Fire,Elements::Water,Elements::Fire},	//meteorite,
+			{Elements::Fire,Elements::Water,Elements::Fire,Elements::Water},	//meteoriteShower,
+			{Elements::Fire,Elements::Fire,Elements::Fire,Elements::Fire},	//inferno,
+			{Elements::Water,Elements::Fire,Elements::Water,Elements::Fire},	//homingMeteorites,
 		};
 
 		static_assert(sizeof(allRecepies) / sizeof(allRecepies[0]) == SPELLS_COUNT);
@@ -124,6 +131,7 @@ namespace SpellTypes
 			"Ice Standby",
 			"Water Homing Standby",
 			"Ice Standby Volley",
+			"Meteorites Standby",
 			"Summon Water Slime",
 			"Summon Fire Slime",
 			"Summon Ice Slime",
@@ -149,11 +157,17 @@ namespace SpellTypes
 			"Ice Wall",
 			"Boulder",
 			"Water Siphon",
+			"Ice Sword",
+			"Fire Sword",
 			"Earth Ricochet",
 			"Earth Ricochet Ice",
 			"Earth Ricochet Water",
 			"Big Ice Block",
 			"Ice Dragon Breath",
+			"Meteorite",
+			"Meteorite Shower",
+			"Inferno",
+			"Homing Meteorites",
 		};
 
 		static_assert(sizeof(names) / sizeof(names[0]) == SPELLS_COUNT);
@@ -241,6 +255,10 @@ namespace SpellTypes
 		return std::make_unique<DualStandbyProjectilesSpell>(getIceStandbySpell());
 		break;
 
+		case meteoritesStandby:
+		return std::make_unique<StandbyProjectilesSpell>(getMeteoritesStandbySpell());
+		break;
+
 		case summonWaterSlime:
 		return std::make_unique<SummonSpell>(getSummonWaterSlimeSpell());
 		break;
@@ -309,6 +327,14 @@ namespace SpellTypes
 		return std::make_unique<WaterSiphonSpell>(getWaterSiphonSpell());
 		break;
 
+		case iceSword:
+		return std::make_unique<WaterSiphonSpell>(getIceSwordSpell());
+		break;
+
+		case fireSword:
+		return std::make_unique<WaterSiphonSpell>(getFireSwordSpell());
+		break;
+
 		case earthRicochet:
 		return std::make_unique<TripleEarthRicochetSpell>(getEarthRicochetSpell());
 		break;
@@ -327,6 +353,22 @@ namespace SpellTypes
 
 		case iceDragonsBreath:
 		return std::make_unique<BasicMagicMissleSpell>(getBasicBurstSpell(Elements::Ice));
+		break;
+
+		case meteorite:
+		return std::make_unique<BasicMagicMissleSpell>(getMeteoriteSpell());
+		break;
+
+		case meteoriteShower:
+		return std::make_unique<MeteoriteShowerSpell>(getMeteoriteShowerSpell());
+		break;
+
+		case inferno:
+		return std::make_unique<InfernoSpell>(getInfernoSpell());
+		break;
+
+		case homingMeteorites:
+		return std::make_unique<HomingMeteoriteVolleySpell>(getHomingMeteoritesSpell());
 		break;
 
 		case none:

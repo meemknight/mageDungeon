@@ -35,6 +35,7 @@ struct FloorRoom
 	std::vector<glm::ivec2> doorPositions; // tile positions for future door placement
 	bool isSpawnRoom = false;
 	bool isBigRoom = false;
+	bool isEmptyRoom = false;
 
 	glm::ivec2 center() const { return {pos.x + size.x / 2, pos.y + size.y / 2}; }
 };
@@ -76,6 +77,8 @@ struct FloorGenerator
 		int caveMazeRoomExtentPadding = 4;
 		// Carpet roads linking entrances inside wooden rooms.
 		float woodRoomCarpetRoadChance = 0.35f;
+		// If true, rooms can stay empty (flagged for future use).
+		bool allowEmptyRooms = true;
 		float bigRoomChance = 0.12f;
 		int bigRoomMinSize = 22;
 		int bigRoomMaxSize = 30;
@@ -516,10 +519,10 @@ struct FloorGenerator
 
 		std::vector<Rect> rooms;
 		int attempts = std::max(28, (sizeX * sizeY) / 140);
-		int minRoomSize = 12;
+		int minRoomSize = 14;
 		int maxRoomSize = 20;
 		int padding = 4;
-		int maxRoomConnections = 2;
+		int maxRoomConnections = 3;
 
 		auto overlaps = [&](const Rect &a, const Rect &b)
 		{
@@ -1300,6 +1303,13 @@ struct FloorGenerator
 			Corridor_Wood = 2
 		};
 
+		struct CorridorLink
+		{
+			glm::ivec2 from = {};
+			glm::ivec2 to = {};
+			int style = Corridor_Dungeon;
+		};
+
 		auto paintCorridorTile = [&](int x, int y, int style)
 		{
 			if (x < 0 || y < 0 || x >= sizeX || y >= sizeY) { return; }
@@ -1578,6 +1588,7 @@ struct FloorGenerator
 			outRoom.pos = {room.x, room.y};
 			outRoom.size = {room.w, room.h};
 			outRoom.isBigRoom = room.isBigRoom;
+			outRoom.isEmptyRoom = false;
 			outInfo.rooms.push_back(std::move(outRoom));
 		}
 
@@ -1604,6 +1615,8 @@ struct FloorGenerator
 		std::vector<int> roomConnections(rooms.size(), 0);
 		std::vector<std::vector<char>> roomLinks(rooms.size(),
 			std::vector<char>(rooms.size(), 0));
+		std::vector<CorridorLink> corridorLinks;
+		corridorLinks.reserve(rooms.size() * 2);
 
 		auto registerDoor = [&](int roomIndex, glm::ivec2 pos)
 		{
@@ -1722,6 +1735,7 @@ struct FloorGenerator
 			{
 				carveCorridorWithStyle(doorA, doorB, style);
 			}
+			corridorLinks.push_back({doorA, doorB, style});
 
 			roomConnections[a]++;
 			roomConnections[b]++;
@@ -1787,7 +1801,7 @@ struct FloorGenerator
 			};
 
 			glm::ivec2 center = room.center();
-			int pattern = getRandomInt(rng, 0, 4);
+			int pattern = getRandomInt(rng, 0, 6);
 			switch (pattern)
 			{
 				case 0:
@@ -1882,6 +1896,115 @@ struct FloorGenerator
 					placeWallRect(px2 - 1, py2 - 1, 2, 2);
 					break;
 				}
+				case 4:
+				{
+					// Inner ring with small openings for cover lanes.
+					int ringInsetX = std::max(2, (right - left) / 4);
+					int ringInsetY = std::max(2, (bottom - top) / 4);
+					int ringLeft = std::clamp(left + ringInsetX, left, right);
+					int ringRight = std::clamp(right - ringInsetX, left, right);
+					int ringTop = std::clamp(top + ringInsetY, top, bottom);
+					int ringBottom = std::clamp(bottom - ringInsetY, top, bottom);
+					if (ringLeft + 2 <= ringRight && ringTop + 2 <= ringBottom)
+					{
+						for (int x = ringLeft; x <= ringRight; x++)
+						{
+							if (std::abs(x - center.x) <= 1) { continue; }
+							placeWall(x, ringTop);
+							placeWall(x, ringBottom);
+						}
+						for (int y = ringTop; y <= ringBottom; y++)
+						{
+							if (std::abs(y - center.y) <= 1) { continue; }
+							placeWall(ringLeft, y);
+							placeWall(ringRight, y);
+						}
+					}
+					else
+					{
+						int size = std::min(3, std::min(right - left + 1, bottom - top + 1));
+						placeWallRect(center.x - size / 2, center.y - size / 2, size, size);
+					}
+					break;
+				}
+				case 5:
+				{
+					// U-shaped bunker for hard cover.
+					int inset = std::max(1, std::min((right - left) / 4, (bottom - top) / 4));
+					int uLeft = std::clamp(left + inset, left, right);
+					int uRight = std::clamp(right - inset, left, right);
+					int uTop = std::clamp(top + inset, top, bottom);
+					int uBottom = std::clamp(bottom - inset, top, bottom);
+					if (uLeft + 2 <= uRight && uTop + 2 <= uBottom)
+					{
+						int orientation = getRandomInt(rng, 0, 3);
+						if (orientation == 0)
+						{
+							for (int y = uTop; y <= uBottom; y++)
+							{
+								placeWall(uLeft, y);
+								placeWall(uRight, y);
+							}
+							for (int x = uLeft; x <= uRight; x++)
+							{
+								placeWall(x, uBottom);
+							}
+						}
+						else if (orientation == 1)
+						{
+							for (int y = uTop; y <= uBottom; y++)
+							{
+								placeWall(uLeft, y);
+								placeWall(uRight, y);
+							}
+							for (int x = uLeft; x <= uRight; x++)
+							{
+								placeWall(x, uTop);
+							}
+						}
+						else if (orientation == 2)
+						{
+							for (int x = uLeft; x <= uRight; x++)
+							{
+								placeWall(x, uTop);
+								placeWall(x, uBottom);
+							}
+							for (int y = uTop; y <= uBottom; y++)
+							{
+								placeWall(uRight, y);
+							}
+						}
+						else
+						{
+							for (int x = uLeft; x <= uRight; x++)
+							{
+								placeWall(x, uTop);
+								placeWall(x, uBottom);
+							}
+							for (int y = uTop; y <= uBottom; y++)
+							{
+								placeWall(uLeft, y);
+							}
+						}
+					}
+					break;
+				}
+				case 6:
+				{
+					// Four offset cover islands.
+					int blockSize = std::min(3, std::min(right - left + 1, bottom - top + 1));
+					int offsetX = std::max(2, (right - left) / 4);
+					int offsetY = std::max(2, (bottom - top) / 4);
+					placeWallRect(center.x - offsetX - blockSize / 2, center.y - offsetY - blockSize / 2,
+						blockSize, blockSize);
+					placeWallRect(center.x + offsetX - blockSize / 2, center.y - offsetY - blockSize / 2,
+						blockSize, blockSize);
+					placeWallRect(center.x - offsetX - blockSize / 2, center.y + offsetY - blockSize / 2,
+						blockSize, blockSize);
+					placeWallRect(center.x + offsetX - blockSize / 2, center.y + offsetY - blockSize / 2,
+						blockSize, blockSize);
+					break;
+				}
 				default:
 				{
 					int size = std::min(3, std::min(right - left + 1, bottom - top + 1));
@@ -1934,7 +2057,7 @@ struct FloorGenerator
 			};
 
 			glm::ivec2 center = room.center();
-			int pattern = getRandomInt(rng, 0, 3);
+			int pattern = getRandomInt(rng, 0, 4);
 			switch (pattern)
 			{
 				case 0:
@@ -1988,6 +2111,49 @@ struct FloorGenerator
 					placeWallRect(px2, py1, pillar, pillar);
 					placeWallRect(px1, py2, pillar, pillar);
 					placeWallRect(px2, py2, pillar, pillar);
+					break;
+				}
+				case 3:
+				{
+					// Large inner ring with wide openings.
+					int ringInset = std::max(3, std::min((right - left) / 4, (bottom - top) / 4));
+					int ringLeft = std::clamp(left + ringInset, left, right);
+					int ringRight = std::clamp(right - ringInset, left, right);
+					int ringTop = std::clamp(top + ringInset, top, bottom);
+					int ringBottom = std::clamp(bottom - ringInset, top, bottom);
+					if (ringLeft + 3 <= ringRight && ringTop + 3 <= ringBottom)
+					{
+						for (int x = ringLeft; x <= ringRight; x++)
+						{
+							if (std::abs(x - center.x) <= 2) { continue; }
+							placeWall(x, ringTop);
+							placeWall(x, ringBottom);
+						}
+						for (int y = ringTop; y <= ringBottom; y++)
+						{
+							if (std::abs(y - center.y) <= 2) { continue; }
+							placeWall(ringLeft, y);
+							placeWall(ringRight, y);
+						}
+					}
+					break;
+				}
+				case 4:
+				{
+					// Staggered cover columns.
+					int block = 3;
+					int colOffset = std::max(3, (right - left) / 4);
+					int colX1 = std::clamp(center.x - colOffset, left, right);
+					int colX2 = std::clamp(center.x + colOffset, left, right);
+					int startY = top + 1;
+					int endY = bottom - block;
+					if (endY < startY) { break; }
+					int step = block + 2;
+					for (int y = startY; y <= endY; y += step)
+					{
+						placeWallRect(colX1, y, block, block);
+						placeWallRect(colX2, y + 1, block, block);
+					}
 					break;
 				}
 				default:
@@ -2148,8 +2314,35 @@ struct FloorGenerator
 					if (isDoorNearby(roomIndex, x, y, 3)) { continue; }
 					int r = getRandomInt(rng, cosmetics.caveRoomWallClusterSizeMin,
 						cosmetics.caveRoomWallClusterSizeMax);
-					paintCircle({x, y}, r, Blocks::cobbleStoneWall, Blocks::caveFloor);
+					paintCircleInRoom(room, {x, y}, r, Blocks::cobbleStoneWall, Blocks::caveFloor);
 					break;
+				}
+			}
+
+			// Occasional extra wall blobs to make cave rooms less empty.
+			if (getRandomChance(rng, 0.6f))
+			{
+				int area = room.w * room.h;
+				int extraBlobs = std::clamp(area / 180, 2, 3);
+				int margin = std::clamp(std::min(room.w, room.h) / 4, 2, 5);
+				int minX = room.x + margin;
+				int maxX = room.x2() - 1 - margin;
+				int minY = room.y + margin;
+				int maxY = room.y2() - 1 - margin;
+				if (minX <= maxX && minY <= maxY)
+				{
+					for (int i = 0; i < extraBlobs; i++)
+					{
+						for (int attempt = 0; attempt < 8; attempt++)
+						{
+							int x = getRandomInt(rng, minX, maxX);
+							int y = getRandomInt(rng, minY, maxY);
+							if (isDoorNearby(roomIndex, x, y, 3)) { continue; }
+							int r = getRandomInt(rng, 1, 2);
+							paintCircleInRoom(room, {x, y}, r, Blocks::cobbleStoneWall, Blocks::caveFloor);
+							break;
+						}
+					}
 				}
 			}
 
@@ -2372,8 +2565,10 @@ struct FloorGenerator
 
 		if (rooms.size() > 2)
 		{
-			int extraLinks = std::max(1, (int)rooms.size() / 6);
-			for (int i = 0; i < extraLinks; i++)
+			int extraLinksTarget = std::max(2, (int)rooms.size() / 3);
+			int extraAdded = 0;
+			int extraAttempts = extraLinksTarget * 3;
+			for (int i = 0; i < extraAttempts && extraAdded < extraLinksTarget; i++)
 			{
 				int a = getRandomInt(rng, 0, (int)rooms.size() - 1);
 				int b = getRandomInt(rng, 0, (int)rooms.size() - 1);
@@ -2385,6 +2580,7 @@ struct FloorGenerator
 				}
 
 				linkRooms(a, b, false);
+				extraAdded++;
 			}
 		}
 
@@ -2463,6 +2659,7 @@ struct FloorGenerator
 			}
 
 			carveCorridorWithStyle(start, end, style);
+			corridorLinks.push_back({start, end, style});
 
 			if (nearestIndex >= 0)
 			{
@@ -2474,6 +2671,7 @@ struct FloorGenerator
 					roomConnections[nearestIndex]++;
 				}
 				carveCorridorWithStyle(end, door, style);
+				corridorLinks.push_back({end, door, style});
 			}
 		}
 
@@ -2525,6 +2723,390 @@ struct FloorGenerator
 			}
 		}
 
+		// Ensures rooms are not fully empty by placing a small cover block.
+		auto ensureRoomHasCover = [&](int roomIndex)
+		{
+			if (roomIndex < 0 || roomIndex >= (int)rooms.size()) { return; }
+			const Rect &room = rooms[roomIndex];
+			if (room.isCave) { return; }
+
+			int innerMinX = room.x + 1;
+			int innerMaxX = room.x2() - 2;
+			int innerMinY = room.y + 1;
+			int innerMaxY = room.y2() - 2;
+			if (innerMinX > innerMaxX || innerMinY > innerMaxY) { return; }
+
+			auto hasCover = [&]()
+			{
+				for (int y = innerMinY; y <= innerMaxY; y++)
+				{
+					for (int x = innerMinX; x <= innerMaxX; x++)
+					{
+						auto &base = map.firstLayer.getBlockUnsafe(x, y);
+						auto &over = map.secondLayer.getBlockUnsafe(x, y);
+						if (isWall(base.type) || (over.type != Blocks::none && isBlockColidable(over.type)))
+						{
+							return true;
+						}
+					}
+				}
+				return false;
+			};
+
+			if (hasCover()) { return; }
+
+			BlockType wallType = Blocks::dungeonWall;
+			if (room.isWoodRoom)
+			{
+				wallType = Blocks::woodenWall;
+			}
+			else if (room.isGrassRoom)
+			{
+				wallType = Blocks::cobbleStoneWall;
+			}
+
+			int placeMinX = room.x + 1;
+			int placeMaxX = room.x2() - 3;
+			int placeMinY = room.y + 1;
+			int placeMaxY = room.y2() - 3;
+			if (placeMinX > placeMaxX || placeMinY > placeMaxY) { return; }
+
+			auto canPlaceTile = [&](int x, int y)
+			{
+				if (x < innerMinX || x > innerMaxX || y < innerMinY || y > innerMaxY) { return false; }
+				if (isDoorNearby(roomIndex, x, y, 2)) { return false; }
+				auto &base = map.firstLayer.getBlockUnsafe(x, y);
+				if (isWall(base.type) || base.type == Blocks::none) { return false; }
+				if (room.isWoodRoom)
+				{
+					return base.type == Blocks::woodenFloor || base.type == Blocks::carpetFloor;
+				}
+				if (room.isGrassRoom)
+				{
+					return base.type == Blocks::grass || base.type == Blocks::grassDecoration
+						|| base.type == Blocks::grassDecorationStones
+						|| base.type == Blocks::grassDecorationFlowers
+						|| base.type == Blocks::grassDecorationMushrooms
+						|| base.type == Blocks::dirt || base.type == Blocks::dirtDecoration;
+				}
+				return isDungeonFloorTile(base.type);
+			};
+
+			auto placeWallTile = [&](int x, int y)
+			{
+				auto &base = map.firstLayer.getBlockUnsafe(x, y);
+				auto &over = map.secondLayer.getBlockUnsafe(x, y);
+				base.type = wallType;
+				if (over.type != Blocks::none && isBlockColidable(over.type))
+				{
+					over.type = Blocks::none;
+				}
+			};
+
+			auto tryPlaceBlock = [&](int x, int y)
+			{
+				if (!canPlaceTile(x, y) || !canPlaceTile(x + 1, y)
+					|| !canPlaceTile(x, y + 1) || !canPlaceTile(x + 1, y + 1))
+				{
+					return false;
+				}
+				placeWallTile(x, y);
+				placeWallTile(x + 1, y);
+				placeWallTile(x, y + 1);
+				placeWallTile(x + 1, y + 1);
+				return true;
+			};
+
+			for (int attempt = 0; attempt < 10; attempt++)
+			{
+				int x = getRandomInt(rng, placeMinX, placeMaxX);
+				int y = getRandomInt(rng, placeMinY, placeMaxY);
+				if (tryPlaceBlock(x, y)) { return; }
+			}
+
+			glm::ivec2 center = room.center();
+			int cx = std::clamp(center.x, placeMinX, placeMaxX);
+			int cy = std::clamp(center.y, placeMinY, placeMaxY);
+			tryPlaceBlock(cx, cy);
+		};
+
+		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
+		{
+			ensureRoomHasCover(roomIndex);
+		}
+
+		// Adds extra corner cover for big rooms.
+		auto ensureBigRoomCover = [&](int roomIndex)
+		{
+			if (cosmetics.allowEmptyRooms) { return; }
+			if (roomIndex < 0 || roomIndex >= (int)rooms.size()) { return; }
+			const Rect &room = rooms[roomIndex];
+			if (!room.isBigRoom || room.isCave || room.isGrassRoom || room.isWoodRoom) { return; }
+
+			int innerMinX = room.x + 1;
+			int innerMaxX = room.x2() - 2;
+			int innerMinY = room.y + 1;
+			int innerMaxY = room.y2() - 2;
+			if (innerMinX > innerMaxX || innerMinY > innerMaxY) { return; }
+
+			auto canPlaceTile = [&](int x, int y)
+			{
+				if (x < innerMinX || x > innerMaxX || y < innerMinY || y > innerMaxY) { return false; }
+				if (isDoorNearby(roomIndex, x, y, 3)) { return false; }
+				auto &base = map.firstLayer.getBlockUnsafe(x, y);
+				if (isWall(base.type) || base.type == Blocks::none) { return false; }
+				return isDungeonFloorTile(base.type);
+			};
+
+			auto placeWallTile = [&](int x, int y)
+			{
+				auto &base = map.firstLayer.getBlockUnsafe(x, y);
+				auto &over = map.secondLayer.getBlockUnsafe(x, y);
+				base.type = Blocks::dungeonWall;
+				if (over.type != Blocks::none && isBlockColidable(over.type))
+				{
+					over.type = Blocks::none;
+				}
+			};
+
+			auto tryPlaceBlock = [&](int x, int y)
+			{
+				if (!canPlaceTile(x, y) || !canPlaceTile(x + 1, y)
+					|| !canPlaceTile(x, y + 1) || !canPlaceTile(x + 1, y + 1))
+				{
+					return false;
+				}
+				placeWallTile(x, y);
+				placeWallTile(x + 1, y);
+				placeWallTile(x, y + 1);
+				placeWallTile(x + 1, y + 1);
+				return true;
+			};
+
+			int left = room.x + 2;
+			int right = room.x2() - 4;
+			int top = room.y + 2;
+			int bottom = room.y2() - 4;
+			if (left > right || top > bottom) { return; }
+
+			glm::ivec2 corners[4] = {
+				{left, top},
+				{right, top},
+				{left, bottom},
+				{right, bottom}
+			};
+
+			int placed = 0;
+			for (auto pos : corners)
+			{
+				if (tryPlaceBlock(pos.x, pos.y)) { placed++; }
+			}
+
+			for (int attempt = 0; attempt < 8 && placed < 2; attempt++)
+			{
+				int x = getRandomInt(rng, left, right);
+				int y = getRandomInt(rng, top, bottom);
+				if (tryPlaceBlock(x, y)) { placed++; }
+			}
+		};
+
+		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
+		{
+			ensureBigRoomCover(roomIndex);
+		}
+
+		// Repairs cave corridor blockages by reopening the stored corridor links.
+		auto isPassableTile = [&](int x, int y)
+		{
+			if (x < 0 || y < 0 || x >= sizeX || y >= sizeY) { return false; }
+			auto &base = map.firstLayer.getBlockUnsafe(x, y);
+			if (isWall(base.type) || base.type == Blocks::none) { return false; }
+			auto &over = map.secondLayer.getBlockUnsafe(x, y);
+			if (over.type != Blocks::none && isBlockColidable(over.type)) { return false; }
+			return true;
+		};
+
+		auto isCorridorLinkBlocked = [&](const CorridorLink &link)
+		{
+			if (link.from == link.to) { return false; }
+			if (!isPassableTile(link.from.x, link.from.y)) { return true; }
+			if (!isPassableTile(link.to.x, link.to.y)) { return true; }
+
+			int margin = 6;
+			int minX = std::clamp(std::min(link.from.x, link.to.x) - margin, 0, sizeX - 1);
+			int maxX = std::clamp(std::max(link.from.x, link.to.x) + margin, 0, sizeX - 1);
+			int minY = std::clamp(std::min(link.from.y, link.to.y) - margin, 0, sizeY - 1);
+			int maxY = std::clamp(std::max(link.from.y, link.to.y) + margin, 0, sizeY - 1);
+			int width = maxX - minX + 1;
+			int height = maxY - minY + 1;
+			if (width <= 0 || height <= 0) { return true; }
+
+			auto indexOf = [&](int x, int y)
+			{
+				return (x - minX) + (y - minY) * width;
+			};
+
+			std::vector<char> visited(width * height, 0);
+			std::vector<glm::ivec2> queue;
+			queue.reserve(width * height / 2);
+
+			int startIndex = indexOf(link.from.x, link.from.y);
+			visited[startIndex] = 1;
+			queue.push_back(link.from);
+
+			const int dirs[4][2] = {{1,0}, {-1,0}, {0,1}, {0,-1}};
+			for (size_t i = 0; i < queue.size(); i++)
+			{
+				auto pos = queue[i];
+				if (pos == link.to) { return false; }
+				for (auto &dir : dirs)
+				{
+					int nx = pos.x + dir[0];
+					int ny = pos.y + dir[1];
+					if (nx < minX || nx > maxX || ny < minY || ny > maxY) { continue; }
+					int idx = indexOf(nx, ny);
+					if (visited[idx]) { continue; }
+					if (!isPassableTile(nx, ny)) { continue; }
+					visited[idx] = 1;
+					queue.push_back({nx, ny});
+				}
+			}
+
+			return true;
+		};
+
+		auto repairCorridorTile = [&](int x, int y, int style)
+		{
+			if (x < 0 || y < 0 || x >= sizeX || y >= sizeY) { return; }
+			auto &base = map.firstLayer.getBlockUnsafe(x, y);
+			if (isWall(base.type) || base.type == Blocks::none)
+			{
+				paintCorridorTile(x, y, style);
+			}
+			auto &over = map.secondLayer.getBlockUnsafe(x, y);
+			if (over.type != Blocks::none && isBlockColidable(over.type))
+			{
+				over.type = Blocks::none;
+			}
+		};
+
+		auto repairCorridorWithStyle = [&](const CorridorLink &link)
+		{
+			int width = 2;
+			auto countBlockedLine = [&](glm::ivec2 start, glm::ivec2 end)
+			{
+				int blocked = 0;
+				if (start.x == end.x)
+				{
+					int y0 = std::min(start.y, end.y);
+					int y1 = std::max(start.y, end.y);
+					for (int y = y0; y <= y1; y++)
+					{
+						for (int x = start.x; x < start.x + width; x++)
+						{
+							if (!isPassableTile(x, y)) { blocked++; }
+						}
+					}
+				}
+				else
+				{
+					int x0 = std::min(start.x, end.x);
+					int x1 = std::max(start.x, end.x);
+					for (int x = x0; x <= x1; x++)
+					{
+						for (int y = start.y; y < start.y + width; y++)
+						{
+							if (!isPassableTile(x, y)) { blocked++; }
+						}
+					}
+				}
+				return blocked;
+			};
+
+			auto repairLine = [&](glm::ivec2 start, glm::ivec2 end)
+			{
+				if (start.x == end.x)
+				{
+					int y0 = std::min(start.y, end.y);
+					int y1 = std::max(start.y, end.y);
+					for (int y = y0; y <= y1; y++)
+					{
+						for (int x = start.x; x < start.x + width; x++)
+						{
+							repairCorridorTile(x, y, link.style);
+						}
+					}
+				}
+				else
+				{
+					int x0 = std::min(start.x, end.x);
+					int x1 = std::max(start.x, end.x);
+					for (int x = x0; x <= x1; x++)
+					{
+						for (int y = start.y; y < start.y + width; y++)
+						{
+							repairCorridorTile(x, y, link.style);
+						}
+					}
+				}
+			};
+
+			glm::ivec2 midH = {link.to.x, link.from.y};
+			glm::ivec2 midV = {link.from.x, link.to.y};
+			int blockedH = countBlockedLine(link.from, midH) + countBlockedLine(midH, link.to);
+			int blockedV = countBlockedLine(link.from, midV) + countBlockedLine(midV, link.to);
+			bool horizontalFirst = blockedH <= blockedV;
+			if (horizontalFirst)
+			{
+				repairLine(link.from, midH);
+				repairLine(midH, link.to);
+			}
+			else
+			{
+				repairLine(link.from, midV);
+				repairLine(midV, link.to);
+			}
+		};
+
+		for (const auto &link : corridorLinks)
+		{
+			if (link.style != Corridor_Cave) { continue; }
+			if (isCorridorLinkBlocked(link))
+			{
+				repairCorridorWithStyle(link);
+			}
+		}
+
+		// Flags rooms that end up without cover so they can stay empty.
+		auto roomHasCover = [&](int roomIndex)
+		{
+			if (roomIndex < 0 || roomIndex >= (int)rooms.size()) { return true; }
+			const Rect &room = rooms[roomIndex];
+			for (int y = room.y + 1; y < room.y2() - 1; y++)
+			{
+				for (int x = room.x + 1; x < room.x2() - 1; x++)
+				{
+					auto &base = map.firstLayer.getBlockUnsafe(x, y);
+					auto &over = map.secondLayer.getBlockUnsafe(x, y);
+					if (isWall(base.type) || (over.type != Blocks::none && isBlockColidable(over.type)))
+					{
+						return true;
+					}
+				}
+			}
+			return false;
+		};
+
+		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
+		{
+			bool empty = !roomHasCover(roomIndex);
+			if (!cosmetics.allowEmptyRooms)
+			{
+				empty = false;
+			}
+			outInfo.rooms[roomIndex].isEmptyRoom = empty;
+		}
+
 		auto canSpawnOnTile = [&](const Rect &room, BlockType type)
 		{
 			if (room.isGrassRoom)
@@ -2573,6 +3155,10 @@ struct FloorGenerator
 
 		auto pickSpawnPosition = [&](int roomIndex, const Rect &room) -> std::optional<glm::ivec2>
 		{
+			if (roomIndex >= 0 && roomIndex < (int)outInfo.rooms.size())
+			{
+				if (outInfo.rooms[roomIndex].isEmptyRoom) { return {}; }
+			}
 			bool largeRoom = room.isBigRoom || room.isCaveMaze;
 			int margin = largeRoom ? cosmetics.bigRoomSpawnMargin : 2;
 			int minDist = largeRoom ? cosmetics.bigRoomDoorMinDist : cosmetics.doorSpawnMinDist;
@@ -2604,6 +3190,9 @@ struct FloorGenerator
 				if (isDoorTooClose(roomIndex, spawn, minDist)) { continue; }
 				auto &tile = map.firstLayer.getBlockUnsafe(spawn.x, spawn.y);
 				if (!canSpawnOnTile(room, tile.type)) { continue; }
+				if (isWall(tile.type) || tile.type == Blocks::none) { continue; }
+				auto &over = map.secondLayer.getBlockUnsafe(spawn.x, spawn.y);
+				if (over.type != Blocks::none && isBlockColidable(over.type)) { continue; }
 				return spawn;
 			}
 
@@ -2643,6 +3232,248 @@ struct FloorGenerator
 			}
 		};
 
+		// Flood fill cave floors and connect any isolated pockets.
+		auto ensureCaveRoomConnectivity = [&](int roomIndex)
+		{
+			if (roomIndex < 0 || roomIndex >= (int)rooms.size()) { return; }
+			const Rect &room = rooms[roomIndex];
+			if (!room.isCave) { return; }
+
+			auto isInsideRoom = [&](int x, int y)
+			{
+				return x >= room.x && x < room.x2() && y >= room.y && y < room.y2();
+			};
+
+			auto isCaveFloorTile = [&](BlockType type)
+			{
+				return type == Blocks::caveFloor || type == Blocks::floor2;
+			};
+
+			int roomW = room.w;
+			int roomH = room.h;
+			if (roomW <= 0 || roomH <= 0) { return; }
+
+			auto indexOf = [&](int x, int y)
+			{
+				return (x - room.x) + (y - room.y) * roomW;
+			};
+
+			auto carveCaveTile = [&](int x, int y)
+			{
+				if (!isInsideRoom(x, y)) { return; }
+				auto &tile = map.firstLayer.getBlockUnsafe(x, y);
+				tile.type = Blocks::caveFloor;
+			};
+
+			for (int pass = 0; pass < 2; pass++)
+			{
+				std::vector<char> visited(roomW * roomH, 0);
+				std::vector<glm::ivec2> queue;
+				queue.reserve(roomW * roomH);
+				std::vector<glm::ivec2> reachable;
+				reachable.reserve(roomW * roomH);
+
+				std::vector<glm::ivec2> seeds;
+				for (auto d : outInfo.rooms[roomIndex].doorPositions)
+				{
+					for (int dy = 0; dy <= 1; dy++)
+					{
+						for (int dx = 0; dx <= 1; dx++)
+						{
+							int x = d.x + dx;
+							int y = d.y + dy;
+							if (!isInsideRoom(x, y)) { continue; }
+							map.firstLayer.getBlockUnsafe(x, y).type = Blocks::caveFloor;
+							seeds.push_back({x, y});
+						}
+					}
+				}
+
+				if (seeds.empty())
+				{
+					glm::ivec2 center = room.center();
+					if (isInsideRoom(center.x, center.y))
+					{
+						carveCaveTile(center.x, center.y);
+						seeds.push_back(center);
+					}
+					else
+					{
+						for (int y = room.y; y < room.y2(); y++)
+						{
+							for (int x = room.x; x < room.x2(); x++)
+							{
+								auto &tile = map.firstLayer.getBlockUnsafe(x, y);
+								if (isCaveFloorTile(tile.type))
+								{
+									seeds.push_back({x, y});
+									break;
+								}
+							}
+							if (!seeds.empty()) { break; }
+						}
+					}
+				}
+
+				if (seeds.empty()) { return; }
+
+				for (auto s : seeds)
+				{
+					int idx = indexOf(s.x, s.y);
+					if (!visited[idx])
+					{
+						visited[idx] = 1;
+						queue.push_back(s);
+						reachable.push_back(s);
+					}
+				}
+
+				const int dirs[4][2] = {{1,0}, {-1,0}, {0,1}, {0,-1}};
+				for (size_t qi = 0; qi < queue.size(); qi++)
+				{
+					auto pos = queue[qi];
+					for (auto &dir : dirs)
+					{
+						int nx = pos.x + dir[0];
+						int ny = pos.y + dir[1];
+						if (!isInsideRoom(nx, ny)) { continue; }
+						int nIdx = indexOf(nx, ny);
+						if (visited[nIdx]) { continue; }
+						auto &tile = map.firstLayer.getBlockUnsafe(nx, ny);
+						if (!isCaveFloorTile(tile.type)) { continue; }
+						visited[nIdx] = 1;
+						queue.push_back({nx, ny});
+						reachable.push_back({nx, ny});
+					}
+				}
+
+				std::vector<glm::ivec2> unreachable;
+				for (int y = room.y; y < room.y2(); y++)
+				{
+					for (int x = room.x; x < room.x2(); x++)
+					{
+						auto &tile = map.firstLayer.getBlockUnsafe(x, y);
+						if (!isCaveFloorTile(tile.type)) { continue; }
+						if (!visited[indexOf(x, y)])
+						{
+							unreachable.push_back({x, y});
+						}
+					}
+				}
+
+				if (unreachable.empty()) { return; }
+
+				for (auto target : unreachable)
+				{
+					int bestDist = INT_MAX;
+					glm::ivec2 best = target;
+					for (auto src : reachable)
+					{
+						int dist = std::abs(target.x - src.x) + std::abs(target.y - src.y);
+						if (dist < bestDist)
+						{
+							bestDist = dist;
+							best = src;
+						}
+					}
+					if (bestDist == INT_MAX) { continue; }
+
+					bool horizontalFirst = getRandomChance(rng, 0.5f);
+					if (horizontalFirst)
+					{
+						int stepX = (best.x >= target.x) ? 1 : -1;
+						for (int x = target.x; x != best.x; x += stepX)
+						{
+							carveCaveTile(x, target.y);
+						}
+						int stepY = (best.y >= target.y) ? 1 : -1;
+						for (int y = target.y; y != best.y; y += stepY)
+						{
+							carveCaveTile(best.x, y);
+						}
+					}
+					else
+					{
+						int stepY = (best.y >= target.y) ? 1 : -1;
+						for (int y = target.y; y != best.y; y += stepY)
+						{
+							carveCaveTile(target.x, y);
+						}
+						int stepX = (best.x >= target.x) ? 1 : -1;
+						for (int x = target.x; x != best.x; x += stepX)
+						{
+							carveCaveTile(x, best.y);
+						}
+					}
+					carveCaveTile(best.x, best.y);
+					reachable.push_back(target);
+				}
+			}
+		};
+
+		// Restores 2x2 cave doorway edges after carving.
+		auto restoreCaveDoorEdges = [&](int roomIndex)
+		{
+			if (roomIndex < 0 || roomIndex >= (int)rooms.size()) { return; }
+			const Rect &room = rooms[roomIndex];
+			if (!room.isCave) { return; }
+
+			auto isInsideRoom = [&](int x, int y)
+			{
+				return x >= room.x && x < room.x2() && y >= room.y && y < room.y2();
+			};
+
+			auto setWallIfFloor = [&](int x, int y)
+			{
+				if (!isInsideRoom(x, y)) { return; }
+				auto &tile = map.firstLayer.getBlockUnsafe(x, y);
+				if (tile.type == Blocks::caveFloor || tile.type == Blocks::floor2)
+				{
+					tile.type = Blocks::cobbleStoneWall;
+				}
+			};
+
+			for (auto d : outInfo.rooms[roomIndex].doorPositions)
+			{
+				for (int dy = 0; dy <= 1; dy++)
+				{
+					for (int dx = 0; dx <= 1; dx++)
+					{
+						int x = d.x + dx;
+						int y = d.y + dy;
+						if (!isInsideRoom(x, y)) { continue; }
+						map.firstLayer.getBlockUnsafe(x, y).type = Blocks::caveFloor;
+					}
+				}
+
+				glm::ivec2 center = room.center();
+				int dx = (d.x + 1) - center.x;
+				int dy = (d.y + 1) - center.y;
+				bool horizontal = std::abs(dx) >= std::abs(dy);
+
+				if (horizontal)
+				{
+					int yTop = d.y - 1;
+					int yBottom = d.y + 2;
+					for (int x = d.x; x <= d.x + 1; x++)
+					{
+						setWallIfFloor(x, yTop);
+						setWallIfFloor(x, yBottom);
+					}
+				}
+				else
+				{
+					int xLeft = d.x - 1;
+					int xRight = d.x + 2;
+					for (int y = d.y; y <= d.y + 1; y++)
+					{
+						setWallIfFloor(xLeft, y);
+						setWallIfFloor(xRight, y);
+					}
+				}
+			}
+		};
+
 		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
 		{
 			clearDoorTilesForRoom(roomIndex);
@@ -2650,7 +3481,20 @@ struct FloorGenerator
 
 		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
 		{
+			if (rooms[roomIndex].isCave)
+			{
+				ensureCaveRoomConnectivity(roomIndex);
+				restoreCaveDoorEdges(roomIndex);
+			}
+		}
+
+		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
+		{
 			if (createASpawnRoom && outInfo.spawnRoomIndex && *outInfo.spawnRoomIndex == roomIndex)
+			{
+				continue;
+			}
+			if (roomIndex < (int)outInfo.rooms.size() && outInfo.rooms[roomIndex].isEmptyRoom)
 			{
 				continue;
 			}
@@ -2708,6 +3552,22 @@ struct FloorGenerator
 						away.x = std::clamp(away.x, room.x + 1, room.x2() - 2);
 						away.y = std::clamp(away.y, room.y + 1, room.y2() - 2);
 						fallback = away;
+					}
+					for (int attempt = 0; attempt < 8; attempt++)
+					{
+						int ox = getRandomInt(rng, -2, 2);
+						int oy = getRandomInt(rng, -2, 2);
+						glm::ivec2 candidate = {
+							std::clamp(fallback.x + ox, room.x + 1, room.x2() - 2),
+							std::clamp(fallback.y + oy, room.y + 1, room.y2() - 2)
+						};
+						auto &tile = map.firstLayer.getBlockUnsafe(candidate.x, candidate.y);
+						if (!canSpawnOnTile(room, tile.type)) { continue; }
+						if (isWall(tile.type) || tile.type == Blocks::none) { continue; }
+						auto &over = map.secondLayer.getBlockUnsafe(candidate.x, candidate.y);
+						if (over.type != Blocks::none && isBlockColidable(over.type)) { continue; }
+						fallback = candidate;
+						break;
 					}
 					glm::vec2 spawnPos = {fallback.x + 0.5f, fallback.y + 0.5f};
 					outRoom.enemySpawnPositions.push_back(spawnPos);

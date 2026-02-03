@@ -48,7 +48,7 @@ static void initPreviewContext(SpellPreviewContext &ctx, std::ranlux24_base &rng
 	}
 	ctx.player.physics.teleport({ctx.map.size.x * 0.5f, ctx.map.size.y * 0.45f});
 	ctx.player.animator.setAnimationBasedOnMovement({0.0f, 1.0f});
-	ctx.player.life = ctx.player.maxLife;
+	ctx.player.resetHealth();
 	ctx.previewWand = makeStarterWand(rng);
 }
 
@@ -68,7 +68,7 @@ static void resetPreviewContext(SpellPreviewContext &ctx, int spellType, std::ra
 	ctx.standbyFireTimer = 0.0f;
 	ctx.player.physics.teleport({ctx.map.size.x * 0.5f, ctx.map.size.y * 0.45f});
 	ctx.player.animator.setAnimationBasedOnMovement({0.0f, 1.0f});
-	ctx.player.life = ctx.player.maxLife;
+	ctx.player.resetHealth();
 }
 
 static void updatePreviewContext(SpellPreviewContext &ctx, float deltaTime, std::ranlux24_base &rng,

@@ -19,6 +19,7 @@
 #include <gameplay/statusEffects.h>
 
 #include <gameplay/elements.h>
+#include <gameplay/spellRecepieWindow.h>
 
 #include <worldGen/floorGen.h>
 
@@ -95,7 +96,7 @@ bool GameLogic::init()
 	{
 		player.physics.getPos() = {35, 35};
 	}
-	player.life = player.maxLife;
+	player.resetHealth();
 	playerDamageCooldown = 0.0f;
 
 	for (int i = 0; i < (int)floorInfo.rooms.size(); i++)
@@ -372,7 +373,7 @@ bool GameLogic::update(float deltaTime,
 			{
 				if (droppedItems.takeHearth(interactIndex, particleSystem, rng))
 				{
-					player.life = std::min(player.maxLife, player.life + 2.0f);
+					player.healLife(2.0f);
 				}
 			}
 			else if (droppedItems.items[interactIndex].type == DroppedItemType::Coin)
@@ -715,6 +716,7 @@ bool GameLogic::update(float deltaTime,
 	}
 
 		ImGui::End();
+		renderSpellRecepieWindow(spellsHolder, player, fireDirection);
 	}
 #pragma endregion
 
@@ -774,7 +776,7 @@ bool GameLogic::update(float deltaTime,
 		player.statusSpeedMultiplier = statusTick.speedMultiplier;
 		if (statusTick.damage > 0.0f)
 		{
-			player.life -= statusTick.damage;
+			player.applyDamage(statusTick.damage);
 			glm::vec2 damagePos = player.physics.getPos();
 			damagePos.y -= player.physics.transform.size.y * 0.6f;
 			getDamageViewerSystem().addDamage(statusTick.damage, damagePos);
@@ -959,7 +961,7 @@ bool GameLogic::update(float deltaTime,
 			{
 				float damage = entity->getContactDamage();
 				if (damage <= 0.0f) { continue; }
-				player.life -= damage;
+				player.applyDamage(damage);
 				playerDamageCooldown = 0.5f;
 				glm::vec2 damagePos = player.physics.getPos();
 				damagePos.y -= player.physics.transform.size.y * 0.6f;
@@ -1137,7 +1139,7 @@ bool GameLogic::update(float deltaTime,
 
 #pragma endregion
 
-	// player life
+	// player life + spell healing + shield
 	{
 		const float uiBaseZoom = 100.0f;
 		renderer.pushCamera();
@@ -1151,10 +1153,34 @@ bool GameLogic::update(float deltaTime,
 		glm::vec4 barRect = {x, y, barWidth, barHeight};
 		renderer.renderRectangle(barRect, {0.15f, 0.05f, 0.05f, 0.85f});
 		float lifeDisplay = std::max(0.0f, player.life);
-		float lifeRatio = player.maxLife > 0.0f ? (lifeDisplay / player.maxLife) : 0.0f;
-		lifeRatio = glm::clamp(lifeRatio, 0.0f, 1.0f);
-		glm::vec4 fillRect = {x, y, barWidth * lifeRatio, barHeight};
-		renderer.renderRectangle(fillRect, {0.9f, 0.1f, 0.1f, 0.9f});
+		float spellDisplay = std::max(0.0f, player.spellHealing);
+		float shieldDisplay = std::max(0.0f, player.shield);
+		float unitWidth = player.maxLife > 0.0f ? (barWidth / player.maxLife) : 0.0f;
+		float lifeWidth = lifeDisplay * unitWidth;
+		float spellWidth = spellDisplay * unitWidth;
+		float shieldWidth = shieldDisplay * unitWidth;
+		float totalWidth = lifeWidth + spellWidth + shieldWidth;
+		float barRight = x + barWidth;
+		float fillStart = barRight - totalWidth;
+		float cursor = fillStart;
+		// Shield -> spell healing -> life (rightmost) so damage peels from the left.
+		if (shieldWidth > 0.0f)
+		{
+			renderer.renderRectangle({cursor, y, shieldWidth, barHeight},
+				{0.65f, 0.65f, 0.7f, 0.9f});
+			cursor += shieldWidth;
+		}
+		if (spellWidth > 0.0f)
+		{
+			renderer.renderRectangle({cursor, y, spellWidth, barHeight},
+				{0.7f, 0.08f, 0.08f, 0.9f});
+			cursor += spellWidth;
+		}
+		if (lifeWidth > 0.0f)
+		{
+			renderer.renderRectangle({cursor, y, lifeWidth, barHeight},
+				{0.9f, 0.1f, 0.1f, 0.9f});
+		}
 		renderer.renderRectangleOutline(barRect, {0.4f, 0.1f, 0.1f, 0.9f}, PIXEL_SIZE * cameraZoom);
 
 		//char lifeText[32] = {};

@@ -431,6 +431,53 @@ static void applyWildColors(ParticleSettings &p, glm::vec4 startColor, glm::vec4
 	p.endApearence.color2 = endColor;
 }
 
+// Applies radial damage with optional line-of-sight checks.
+static void applyExplosionDamage(Map &map, EntityHolder &entityHolder,
+	glm::vec2 center, float radius, HitStats hitStats, int element,
+	float statusAmount, bool useLineOfSight)
+{
+	if (radius <= 0.0f)
+	{
+		return;
+	}
+
+	float radius2 = radius * radius;
+	glm::ivec2 originTile = WorldToTile(center);
+	for (auto &e : entityHolder.entities)
+	{
+		if (e->dying) continue; // skip dying entities
+		glm::vec2 diff = e->physics.getPos() - center;
+		if (glm::dot(diff, diff) > radius2)
+		{
+			continue;
+		}
+		if (useLineOfSight && !HasLineOfSightGrid(map, originTile, WorldToTile(e->physics.getPos())))
+		{
+			continue;
+		}
+
+		glm::vec2 pushBack = {};
+		e->life.computeHit(hitStats, element, e->element, diff, pushBack);
+		if (hitStats.damage > 0.0f)
+		{
+			e->onDamaged(hitStats.damage);
+		}
+		e->physics.velocity += pushBack;
+
+		if (statusAmount > 0.0f)
+		{
+			addStatusEffectFromElement(e->statusEffects, e->statusImmunities, element, statusAmount);
+		}
+
+		if (hitStats.damage > 0.0f)
+		{
+			glm::vec2 damagePos = e->physics.getPos();
+			damagePos.y -= e->physics.transform.size.y * 0.6f;
+			getDamageViewerSystem().addDamage(hitStats.damage, damagePos);
+		}
+	}
+}
+
 // trap visuals: layered ring + inner orbit, tuned per element.
 static ParticleSettings buildTrapRingParticle(int element)
 {
@@ -1705,6 +1752,552 @@ void BoulderProjectile::onDestroy(std::ranlux24_base &rng)
 	particleSystem.emitParticles(burstParticle, physics.getPos(), rng, physics.getPos());
 }
 
+MeteoriteProjectile::MeteoriteProjectile()
+{
+	hitStats.damage = 10.0f;
+	hitStats.pushBack = 6.0f;
+	element = Elements::Fire;
+	timeAlieve = 6.0f;
+	physics.transform.size = {PIXEL_SIZE * 12.0f, PIXEL_SIZE * 12.0f};
+	physics.transform.isCircleCollider = true;
+	particleSystem.maxCount = 140;
+}
+
+void MeteoriteProjectile::setupParticles()
+{
+	auto &assets = getAssetManager();
+	glm::vec4 startColor = elementToSecondaryColor(element); startColor.a = 0.9f;
+	glm::vec4 endColor = elementToColor(element); endColor.a = 0.9f;
+
+	coreParticle = getSmallSquareParticle(startColor, endColor);
+	coreParticle.onCreateCount = 1;
+	coreParticle.folowParent = true;
+	coreParticle.particleLifeTime = {timeAlieve + 0.2f, timeAlieve + 0.2f};
+	coreParticle.createApearence.size = {0.7f, 0.9f};
+	coreParticle.endApearence.size = {0.7f, 0.9f};
+	coreParticle.velocityX = {0.0f, 0.0f};
+	coreParticle.velocityY = {0.0f, 0.0f};
+	coreParticle.dragX = {0.0f, 0.0f};
+	coreParticle.dragY = {0.0f, 0.0f};
+	coreParticle.rotationSpeed = {0.0f, 0.0f};
+	coreParticle.texture = assets.particleCircle;
+
+	trailParticle = getSmallSquareParticle(startColor, endColor);
+	trailParticle.onCreateCount = 1;
+	trailParticle.folowParent = false;
+	trailParticle.particleLifeTime = {0.18f, 0.3f};
+	trailParticle.createApearence.size = {0.14f, 0.24f};
+	trailParticle.endApearence.size = {0.06f, 0.14f};
+	trailParticle.velocityX = {0.0f, 0.0f};
+	trailParticle.velocityY = {0.0f, 0.0f};
+	trailParticle.texture = assets.particleCircle;
+
+	glm::vec4 trailStart = {1.0f, 0.65f, 0.25f, 0.8f};
+	glm::vec4 trailEnd = {1.0f, 0.95f, 0.7f, 0.55f};
+	fastTrailParticle = getSparkBurstParticle(trailStart, trailEnd);
+	fastTrailParticle.onCreateCount = 2;
+	fastTrailParticle.folowParent = false;
+	fastTrailParticle.particleLifeTime = {0.12f, 0.22f};
+	fastTrailParticle.velocityX = {0.0f, 0.0f};
+	fastTrailParticle.velocityY = {0.0f, 0.0f};
+	fastTrailParticle.createApearence.size *= 0.5f;
+	fastTrailParticle.endApearence.size *= 0.5f;
+	fastTrailParticle.animationType = ParticleSettings::ANIMATION_TYPES::animationAtom;
+	fastTrailParticle.animationSpeed = {12.0f, 18.0f};
+	fastTrailParticle.animationScaleX = {PIXEL_SIZE * 1.8f, PIXEL_SIZE * 3.0f};
+	fastTrailParticle.animationScaleY = {PIXEL_SIZE * 1.8f, PIXEL_SIZE * 3.0f};
+	fastTrailParticle.animationPhase = {0.0f, 6.2831853f};
+	fastTrailParticle.texture = assets.particleCircle;
+
+	burstParticle = getSparkBurstParticle(startColor, endColor);
+	burstParticle.onCreateCount = 12;
+	burstParticle.folowParent = false;
+	burstParticle.particleLifeTime = {0.25f, 0.45f};
+	burstParticle.velocityX = {-0.9f, 0.9f};
+	burstParticle.velocityY = {-0.9f, 0.9f};
+	burstParticle.texture = assets.particleCircle;
+}
+
+void MeteoriteProjectile::explodeDamage(Map &map, EntityHolder &entityHolder)
+{
+	HitStats explosionStats;
+	explosionStats.damage = explosionDamage;
+	explosionStats.pushBack = explosionPush;
+	applyExplosionDamage(map, entityHolder, physics.getPos(),
+		explosionRadius, explosionStats, element, explosionBurn, false);
+}
+
+bool MeteoriteProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+	std::ranlux24_base &rng, EntityHolder &entityHolder)
+{
+	if (firstTime)
+	{
+		firstTime = false;
+		setupParticles();
+		particleSystem.emitParticles(coreParticle, physics.getPos(), rng, physics.getPos());
+	}
+
+	trailTimer -= deltaTime;
+	if (trailTimer <= 0.0f)
+	{
+		trailTimer += trailInterval;
+		particleSystem.emitParticles(trailParticle, physics.getPos(), rng, physics.getPos());
+		particleSystem.emitParticles(fastTrailParticle, physics.getPos(), rng, physics.getPos());
+	}
+
+	if (explodeTimer >= 0.0f)
+	{
+		explodeTimer -= deltaTime;
+		if (explodeTimer <= 0.0f)
+		{
+			explodeDamage(map, entityHolder);
+			shouldExplode = true;
+			return false;
+		}
+	}
+
+	if (!disableDirectDamage)
+	{
+		auto projectile = physics.transform;
+		for (auto &e : entityHolder.entities)
+		{
+			if (e->dying) continue; // skip dying entities
+			if (projectile.intersectTransform(e->physics.transform))
+			{
+				glm::vec2 pushBack = {};
+				e->life.computeHit(hitStats, element, e->element, physics.velocity, pushBack);
+				if (hitStats.damage > 0.0f)
+				{
+					e->onDamaged(hitStats.damage);
+				}
+				e->physics.velocity += pushBack;
+
+				glm::vec2 damagePos = e->physics.getPos();
+				damagePos.y -= e->physics.transform.size.y * 0.6f;
+				getDamageViewerSystem().addDamage(hitStats.damage, damagePos);
+
+				explodeDamage(map, entityHolder);
+				shouldExplode = true;
+				return false;
+			}
+		}
+	}
+
+	if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+	{
+		explodeDamage(map, entityHolder);
+		shouldExplode = true;
+		return false;
+	}
+
+	particleSystem.update(deltaTime);
+	return true;
+}
+
+void MeteoriteProjectile::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+	ParticlePostProcessRenderer &particlePostProcessRenderer)
+{
+	glm::vec4 aabb = physics.getAABB();
+	renderer.renderRectangle(aabb, elementToColor(element));
+	particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+}
+
+void MeteoriteProjectile::onDestroy(std::ranlux24_base &rng)
+{
+	if (shouldExplode)
+	{
+		particleSystem.particles.clear();
+
+		auto &assets = getAssetManager();
+		glm::vec4 startColor = elementToSecondaryColor(element); startColor.a = 0.9f;
+		glm::vec4 endColor = elementToColor(element); endColor.a = 0.85f;
+
+		auto shock = getTeleportPuffParticle(startColor, endColor);
+		shock.onCreateCount = 16;
+		shock.folowParent = false;
+		shock.particleLifeTime = {0.28f, 0.5f};
+		shock.velocityX = {-1.7f, 1.7f};
+		shock.velocityY = {-1.7f, 1.7f};
+		shock.createApearence.size *= 1.1f;
+		shock.endApearence.size *= 1.1f;
+		shock.texture = assets.particleCircle;
+
+		auto sparks = getSparkBurstParticle(startColor, endColor);
+		sparks.onCreateCount = 24;
+		sparks.folowParent = false;
+		sparks.particleLifeTime = {0.2f, 0.45f};
+		sparks.velocityX = {-2.0f, 2.0f};
+		sparks.velocityY = {-2.0f, 2.0f};
+		sparks.createApearence.size *= 0.6f;
+		sparks.endApearence.size *= 0.6f;
+		sparks.texture = assets.particleCircle;
+
+		glm::vec4 smokeStart = changeColorBrightness(startColor, -0.25f); smokeStart.a = 0.5f;
+		glm::vec4 smokeEnd = changeColorBrightness(endColor, -0.4f); smokeEnd.a = 0.35f;
+		auto smoke = getPoisonMistParticle(smokeStart, smokeEnd);
+		smoke.onCreateCount = 8;
+		smoke.folowParent = false;
+		smoke.particleLifeTime = {0.35f, 0.7f};
+		smoke.velocityX = {-0.9f, 0.9f};
+		smoke.velocityY = {-0.9f, 0.9f};
+		smoke.createApearence.size *= 1.1f;
+		smoke.endApearence.size *= 1.2f;
+		smoke.texture = assets.particleCircle;
+
+		particleSystem.emitParticles(shock, physics.getPos(), rng, physics.getPos());
+		particleSystem.emitParticles(sparks, physics.getPos(), rng, physics.getPos());
+		particleSystem.emitParticles(smoke, physics.getPos(), rng, physics.getPos());
+	}
+}
+
+HomingMeteoriteProjectile::HomingMeteoriteProjectile()
+{
+	hitStats.damage = 10.0f;
+	hitStats.pushBack = 6.0f;
+	element = Elements::Fire;
+	timeAlieve = 6.0f;
+	physics.transform.size = {PIXEL_SIZE * 12.0f, PIXEL_SIZE * 12.0f};
+	physics.transform.isCircleCollider = true;
+	particleSystem.maxCount = 150;
+}
+
+void HomingMeteoriteProjectile::setupParticles()
+{
+	auto &assets = getAssetManager();
+	glm::vec4 startColor = elementToSecondaryColor(element); startColor.a = 0.9f;
+	glm::vec4 endColor = elementToColor(element); endColor.a = 0.9f;
+	glm::vec4 accent = {0.8f, 0.3f, 0.95f, 1.0f};
+	const float tint = 0.35f;
+	startColor = startColor * (1.0f - tint) + accent * tint;
+	endColor = endColor * (1.0f - tint) + accent * tint;
+	startColor.a = 0.9f;
+	endColor.a = 0.9f;
+
+	coreParticle = getSmallSquareParticle(startColor, endColor);
+	coreParticle.onCreateCount = 1;
+	coreParticle.folowParent = true;
+	coreParticle.particleLifeTime = {timeAlieve + 0.2f, timeAlieve + 0.2f};
+	coreParticle.createApearence.size = {0.7f, 0.9f};
+	coreParticle.endApearence.size = {0.7f, 0.9f};
+	coreParticle.velocityX = {0.0f, 0.0f};
+	coreParticle.velocityY = {0.0f, 0.0f};
+	coreParticle.dragX = {0.0f, 0.0f};
+	coreParticle.dragY = {0.0f, 0.0f};
+	coreParticle.rotationSpeed = {0.0f, 0.0f};
+	coreParticle.texture = assets.particleCircle;
+
+	trailParticle = getSmallSquareParticle(startColor, endColor);
+	trailParticle.onCreateCount = 1;
+	trailParticle.folowParent = false;
+	trailParticle.particleLifeTime = {0.18f, 0.3f};
+	trailParticle.createApearence.size = {0.14f, 0.24f};
+	trailParticle.endApearence.size = {0.06f, 0.14f};
+	trailParticle.velocityX = {0.0f, 0.0f};
+	trailParticle.velocityY = {0.0f, 0.0f};
+	trailParticle.texture = assets.particleCircle;
+
+	glm::vec4 trailStart = {1.0f, 0.65f, 0.25f, 0.8f};
+	glm::vec4 trailEnd = {1.0f, 0.9f, 0.85f, 0.55f};
+	trailStart = trailStart * (1.0f - tint) + accent * tint;
+	trailEnd = trailEnd * (1.0f - tint) + accent * tint;
+	fastTrailParticle = getSparkBurstParticle(trailStart, trailEnd);
+	fastTrailParticle.onCreateCount = 2;
+	fastTrailParticle.folowParent = false;
+	fastTrailParticle.particleLifeTime = {0.12f, 0.22f};
+	fastTrailParticle.velocityX = {0.0f, 0.0f};
+	fastTrailParticle.velocityY = {0.0f, 0.0f};
+	fastTrailParticle.createApearence.size *= 0.5f;
+	fastTrailParticle.endApearence.size *= 0.5f;
+	fastTrailParticle.animationType = ParticleSettings::ANIMATION_TYPES::animationAtom;
+	fastTrailParticle.animationSpeed = {12.0f, 18.0f};
+	fastTrailParticle.animationScaleX = {PIXEL_SIZE * 1.8f, PIXEL_SIZE * 3.0f};
+	fastTrailParticle.animationScaleY = {PIXEL_SIZE * 1.8f, PIXEL_SIZE * 3.0f};
+	fastTrailParticle.animationPhase = {0.0f, 6.2831853f};
+	fastTrailParticle.texture = assets.particleCircle;
+
+	burstParticle = getSparkBurstParticle(startColor, endColor);
+	burstParticle.onCreateCount = 12;
+	burstParticle.folowParent = false;
+	burstParticle.particleLifeTime = {0.25f, 0.45f};
+	burstParticle.velocityX = {-0.9f, 0.9f};
+	burstParticle.velocityY = {-0.9f, 0.9f};
+	burstParticle.texture = assets.particleCircle;
+}
+
+void HomingMeteoriteProjectile::explodeDamage(Map &map, EntityHolder &entityHolder)
+{
+	HitStats explosionStats;
+	explosionStats.damage = explosionDamage;
+	explosionStats.pushBack = explosionPush;
+	applyExplosionDamage(map, entityHolder, physics.getPos(),
+		explosionRadius, explosionStats, element, explosionBurn, false);
+}
+
+bool HomingMeteoriteProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+	std::ranlux24_base &rng, EntityHolder &entityHolder)
+{
+	(void)mainParticleSystem;
+	auto safeNormalize = [](glm::vec2 v)
+	{
+		float len = glm::length(v);
+		if (len <= 0.00001f) { return glm::vec2(0.0f); }
+		return v / len;
+	};
+
+	if (firstTime)
+	{
+		firstTime = false;
+		travelSpeed = glm::length(physics.velocity);
+		if (travelSpeed <= 0.00001f) { travelSpeed = 6.0f; }
+		setupParticles();
+		particleSystem.emitParticles(coreParticle, physics.getPos(), rng, physics.getPos());
+	}
+
+	glm::vec2 toTarget = {};
+	float bestDist2 = homingRange * homingRange;
+	bool hasTarget = false;
+	for (auto &e : entityHolder.entities)
+	{
+		if (e->dying) continue; // skip dying entities
+		glm::vec2 diff = e->physics.getPos() - physics.getPos();
+		float dist2 = glm::dot(diff, diff);
+		if (dist2 < bestDist2)
+		{
+			bestDist2 = dist2;
+			toTarget = diff;
+			hasTarget = true;
+		}
+	}
+
+	if (hasTarget)
+	{
+		glm::vec2 desiredDir = safeNormalize(toTarget);
+		float currentSpeed = glm::length(physics.velocity);
+		float speed = currentSpeed > 0.00001f ? currentSpeed : travelSpeed;
+		glm::vec2 currentDir = currentSpeed > 0.00001f ? (physics.velocity / currentSpeed) : desiredDir;
+		float turn = glm::clamp(homingTurnRate * deltaTime, 0.0f, 1.0f);
+		glm::vec2 newDir = safeNormalize(glm::mix(currentDir, desiredDir, turn));
+		if (glm::length(newDir) > 0.00001f)
+		{
+			physics.velocity = newDir * speed;
+		}
+	}
+
+	trailTimer -= deltaTime;
+	if (trailTimer <= 0.0f)
+	{
+		trailTimer += trailInterval;
+		particleSystem.emitParticles(trailParticle, physics.getPos(), rng, physics.getPos());
+		particleSystem.emitParticles(fastTrailParticle, physics.getPos(), rng, physics.getPos());
+	}
+
+	auto projectile = physics.transform;
+	for (auto &e : entityHolder.entities)
+	{
+		if (e->dying) continue; // skip dying entities
+		if (projectile.intersectTransform(e->physics.transform))
+		{
+			glm::vec2 pushBack = {};
+			e->life.computeHit(hitStats, element, e->element, physics.velocity, pushBack);
+			if (hitStats.damage > 0.0f)
+			{
+				e->onDamaged(hitStats.damage);
+			}
+			e->physics.velocity += pushBack;
+
+			glm::vec2 damagePos = e->physics.getPos();
+			damagePos.y -= e->physics.transform.size.y * 0.6f;
+			getDamageViewerSystem().addDamage(hitStats.damage, damagePos);
+
+			explodeDamage(map, entityHolder);
+			shouldExplode = true;
+			return false;
+		}
+	}
+
+	if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+	{
+		explodeDamage(map, entityHolder);
+		shouldExplode = true;
+		return false;
+	}
+
+	particleSystem.update(deltaTime);
+	return true;
+}
+
+void HomingMeteoriteProjectile::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+	ParticlePostProcessRenderer &particlePostProcessRenderer)
+{
+	glm::vec4 aabb = physics.getAABB();
+	glm::vec4 tint = elementToColor(element);
+	tint = tint * 0.6f + glm::vec4(0.75f, 0.35f, 0.95f, 1.0f) * 0.4f;
+	renderer.renderRectangle(aabb, tint);
+	particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+}
+
+void HomingMeteoriteProjectile::onDestroy(std::ranlux24_base &rng)
+{
+	if (!shouldExplode)
+	{
+		return;
+	}
+
+	particleSystem.particles.clear();
+	auto &assets = getAssetManager();
+	glm::vec4 startColor = elementToSecondaryColor(element); startColor.a = 0.9f;
+	glm::vec4 endColor = elementToColor(element); endColor.a = 0.85f;
+	glm::vec4 accent = {0.8f, 0.3f, 0.95f, 1.0f};
+	const float tint = 0.35f;
+	startColor = startColor * (1.0f - tint) + accent * tint;
+	endColor = endColor * (1.0f - tint) + accent * tint;
+	startColor.a = 0.9f;
+	endColor.a = 0.85f;
+
+	auto shock = getTeleportPuffParticle(startColor, endColor);
+	shock.onCreateCount = 16;
+	shock.folowParent = false;
+	shock.particleLifeTime = {0.28f, 0.5f};
+	shock.velocityX = {-1.7f, 1.7f};
+	shock.velocityY = {-1.7f, 1.7f};
+	shock.createApearence.size *= 1.1f;
+	shock.endApearence.size *= 1.1f;
+	shock.texture = assets.particleCircle;
+
+	auto sparks = getSparkBurstParticle(startColor, endColor);
+	sparks.onCreateCount = 24;
+	sparks.folowParent = false;
+	sparks.particleLifeTime = {0.2f, 0.45f};
+	sparks.velocityX = {-2.0f, 2.0f};
+	sparks.velocityY = {-2.0f, 2.0f};
+	sparks.createApearence.size *= 0.6f;
+	sparks.endApearence.size *= 0.6f;
+	sparks.texture = assets.particleCircle;
+
+	glm::vec4 smokeStart = changeColorBrightness(startColor, -0.25f); smokeStart.a = 0.5f;
+	glm::vec4 smokeEnd = changeColorBrightness(endColor, -0.4f); smokeEnd.a = 0.35f;
+	auto smoke = getPoisonMistParticle(smokeStart, smokeEnd);
+	smoke.onCreateCount = 8;
+	smoke.folowParent = false;
+	smoke.particleLifeTime = {0.35f, 0.7f};
+	smoke.velocityX = {-0.9f, 0.9f};
+	smoke.velocityY = {-0.9f, 0.9f};
+	smoke.createApearence.size *= 1.1f;
+	smoke.endApearence.size *= 1.2f;
+	smoke.texture = assets.particleCircle;
+
+	particleSystem.emitParticles(shock, physics.getPos(), rng, physics.getPos());
+	particleSystem.emitParticles(sparks, physics.getPos(), rng, physics.getPos());
+	particleSystem.emitParticles(smoke, physics.getPos(), rng, physics.getPos());
+}
+
+MeteoriteImpactProjectile::MeteoriteImpactProjectile()
+{
+	element = Elements::Fire;
+	physics.transform.size = {PIXEL_SIZE * 6.0f, PIXEL_SIZE * 6.0f};
+	physics.transform.isCircleCollider = true;
+	particleSystem.maxCount = 120;
+}
+
+void MeteoriteImpactProjectile::setupParticles()
+{
+	auto &assets = getAssetManager();
+	glm::vec4 startColor = elementToSecondaryColor(element); startColor.a = 0.8f;
+	glm::vec4 endColor = elementToColor(element); endColor.a = 0.6f;
+
+	telegraphParticle = getSpiralParticle(startColor, endColor);
+	telegraphParticle.onCreateCount = 1;
+	telegraphParticle.folowParent = false;
+	telegraphParticle.particleLifeTime = {0.25f, 0.4f};
+	telegraphParticle.velocityX = {0.0f, 0.0f};
+	telegraphParticle.velocityY = {0.0f, 0.0f};
+	telegraphParticle.animationSpeed = {-8.0f, 8.0f};
+	telegraphParticle.animationScaleX = {PIXEL_SIZE * 3.0f, PIXEL_SIZE * 6.0f};
+	telegraphParticle.animationScaleY = {PIXEL_SIZE * 3.0f, PIXEL_SIZE * 6.0f};
+	telegraphParticle.animationRotation = {-25.0f, 25.0f};
+	telegraphParticle.animationPhase = {0.0f, 6.2831853f};
+	telegraphParticle.createApearence.size *= 0.7f;
+	telegraphParticle.endApearence.size *= 0.6f;
+	telegraphParticle.texture = assets.particleCircle;
+
+	burstParticle = getSparkBurstParticle(startColor, endColor);
+	burstParticle.onCreateCount = 10;
+	burstParticle.folowParent = false;
+	burstParticle.particleLifeTime = {0.25f, 0.4f};
+	burstParticle.velocityX = {-0.8f, 0.8f};
+	burstParticle.velocityY = {-0.8f, 0.8f};
+	burstParticle.texture = assets.particleCircle;
+}
+
+void MeteoriteImpactProjectile::explodeDamage(Map &map, EntityHolder &entityHolder)
+{
+	HitStats explosionStats;
+	explosionStats.damage = explosionDamage;
+	explosionStats.pushBack = explosionPush;
+	applyExplosionDamage(map, entityHolder, physics.getPos(),
+		explosionRadius, explosionStats, element, explosionBurn, false);
+}
+
+bool MeteoriteImpactProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+	std::ranlux24_base &rng, EntityHolder &entityHolder)
+{
+	if (firstTime)
+	{
+		firstTime = false;
+		setupParticles();
+		impactTimer = impactDelay;
+		telegraphTimer = 0.0f;
+		timeAlieve = impactDelay + 0.6f;
+	}
+
+	telegraphTimer -= deltaTime;
+	while (telegraphTimer <= 0.0f)
+	{
+		telegraphTimer += telegraphInterval;
+		particleSystem.emitParticles(telegraphParticle, physics.getPos(), rng, physics.getPos());
+	}
+
+	impactTimer -= deltaTime;
+	if (impactTimer <= 0.0f)
+	{
+		auto meteor = std::make_unique<MeteoriteProjectile>();
+		meteor->element = element;
+		meteor->hitStats.damage = 0.0f;
+		meteor->hitStats.pushBack = 0.0f;
+		meteor->explosionDamage = explosionDamage;
+		meteor->explosionBurn = explosionBurn;
+		meteor->explosionRadius = explosionRadius;
+		meteor->explosionPush = explosionPush;
+		meteor->disableDirectDamage = true;
+		meteor->explodeTimer = 0.1f;
+		meteor->timeAlieve = meteor->explodeTimer + 0.3f;
+		meteor->physics.velocity = {0.0f, 0.0f};
+		getProjectileHolder().addProjectileDeferredAsPtr(std::move(meteor), physics.getPos());
+		return false;
+	}
+
+	particleSystem.update(deltaTime);
+	return true;
+}
+
+void MeteoriteImpactProjectile::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+	ParticlePostProcessRenderer &particlePostProcessRenderer)
+{
+	particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+}
+
+void MeteoriteImpactProjectile::onDestroy(std::ranlux24_base &rng)
+{
+	for (auto &p : particleSystem.particles)
+	{
+		if (p.durationRemaining > 0.25f)
+		{
+			p.durationRemaining = 0.2f;
+			p.durationTotal = 0.2f;
+		}
+	}
+}
+
 BigIceBlockProjectile::BigIceBlockProjectile()
 {
 	hitStats.damage = 16.0f;
@@ -2255,7 +2848,7 @@ bool EnemyOrbProjectile::update(float deltaTime, Map &map, ParticleSystem &mainP
 	{
 		if (physics.transform.intersectTransform(targetPlayer->physics.transform))
 		{
-			targetPlayer->life -= damage;
+			targetPlayer->applyDamage(damage);
 			glm::vec2 damagePos = targetPlayer->physics.getPos();
 			damagePos.y -= targetPlayer->physics.transform.size.y * 0.6f;
 			getDamageViewerSystem().addDamage(damage, damagePos);

@@ -9,6 +9,7 @@
 #include <gameplay/elements.h>
 #include <gameplay/entities/entity.h>
 #include <particles/particleCreator.h>
+#include <gameLayer.h>
 #include <cmath>
 
 struct Spell
@@ -113,6 +114,66 @@ struct BasicMagicMissleSpell: public Spell
 
 		return true;
 	};
+};
+
+// Fires a short volley with one shot centered on aim.
+struct HomingMeteoriteVolleySpell: public Spell
+{
+	// **configuration variables**
+	std::unique_ptr<Projectile> projectile;
+	int shotCount = 5;
+	float throwVelocity = 10.0f;
+	float spreadDegrees = 28.0f;
+
+	// **state variables**
+	// (none)
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		(void)deltaTime;
+		(void)map;
+		(void)mainParticleSystem;
+		(void)entityHolder;
+
+		glm::vec2 aim = currentAimDir;
+		float len = glm::length(aim);
+		if (len <= 0.0001f)
+		{
+			len = glm::length(createAimDir);
+			if (len <= 0.0001f)
+			{
+				aim = {1.0f, 0.0f};
+				len = 1.0f;
+			}
+			else
+			{
+				aim = createAimDir;
+			}
+		}
+		aim /= len;
+
+		auto spawnProjectile = [&](glm::vec2 dir)
+		{
+			auto pptr = projectile->clone();
+			pptr->element = element;
+			pptr->physics.velocity = dir * throwVelocity;
+			projectileHolder.addProjectileAsPtr(std::move(pptr), player.physics.getPos());
+		};
+
+		spawnProjectile(aim);
+		for (int i = 1; i < shotCount; i++)
+		{
+			float driftRad = glm::radians(getRandomFloat(rng, -spreadDegrees, spreadDegrees));
+			float c = std::cos(driftRad);
+			float s = std::sin(driftRad);
+			glm::vec2 dir = {aim.x * c - aim.y * s, aim.x * s + aim.y * c};
+			spawnProjectile(dir);
+		}
+
+		return true;
+	}
 };
 
 // Spawns projectiles into the standby ring around the player.
@@ -564,7 +625,7 @@ struct WildGrowthSpell: public Spell
 	int wormCount = 14;
 	float maxDistance = 10.0f;
 	float maxDuration = 2.0f;
-	float spawnInterval = 0.008f;
+	float spawnInterval = 0.004f;
 	float offsetJitter = 0.25f;
 
 	// **state variables**
@@ -648,6 +709,93 @@ struct WildGrowthSpell: public Spell
 		return false;
 	};
 
+	const glm::ivec2 directions[] = {
+		{1, 0}, {-1, 0}, {0, 1}, {0, -1},
+		{1, 1}, {-1, 1}, {1, -1}, {-1, -1}
+	};
+
+	// If a worm is boxed in, search deeper through existing thorns to reach open tiles.
+	auto findStepTowardOpenTile = [&](const glm::ivec2 &start, glm::ivec2 &outStep)
+	{
+		int range = (int)std::ceil(maxDistance);
+		int minX = std::max(0, originTile.x - range);
+		int minY = std::max(0, originTile.y - range);
+		int maxX = std::min(map.size.x - 1, originTile.x + range);
+		int maxY = std::min(map.size.y - 1, originTile.y + range);
+		int width = maxX - minX + 1;
+		int height = maxY - minY + 1;
+		if (width <= 0 || height <= 0)
+		{
+			return false;
+		}
+
+		auto toIndex = [&](const glm::ivec2 &tile)
+		{
+			return (tile.x - minX) + (tile.y - minY) * width;
+		};
+		auto toTile = [&](int index)
+		{
+			return glm::ivec2{index % width + minX, index / width + minY};
+		};
+
+		std::vector<int> parent(width * height, -1);
+		std::vector<glm::ivec2> queue;
+		queue.reserve(width * height);
+		int startIndex = toIndex(start);
+		parent[startIndex] = startIndex;
+		queue.push_back(start);
+
+		glm::ivec2 target = start;
+		bool found = false;
+		int head = 0;
+		while (head < (int)queue.size())
+		{
+			glm::ivec2 current = queue[head++];
+			if (current != start && tileWithinRange(current) && !isBlocked(current))
+			{
+				if (!hasLocalThorn(current) && !hasWorldThorn(current))
+				{
+					target = current;
+					found = true;
+					break;
+				}
+			}
+
+			for (int i = 0; i < 8; i++)
+			{
+				glm::ivec2 next = current + directions[i];
+				if (next.x < minX || next.y < minY || next.x > maxX || next.y > maxY)
+				{
+					continue;
+				}
+				int nextIndex = toIndex(next);
+				if (parent[nextIndex] != -1) { continue; }
+				if (!tileWithinRange(next)) { continue; }
+				if (isBlocked(next)) { continue; }
+				parent[nextIndex] = toIndex(current);
+				queue.push_back(next);
+			}
+		}
+
+		if (!found)
+		{
+			return false;
+		}
+
+		int targetIndex = toIndex(target);
+		int currentIndex = targetIndex;
+		while (parent[currentIndex] != startIndex && currentIndex != startIndex)
+		{
+			currentIndex = parent[currentIndex];
+		}
+		if (currentIndex == startIndex)
+		{
+			return false;
+		}
+		outStep = toTile(currentIndex);
+		return true;
+	};
+
 	auto spawnThorn = [&](const glm::ivec2 &tile)
 	{
 		if (placedCount >= maxThorns) { return; }
@@ -655,7 +803,7 @@ struct WildGrowthSpell: public Spell
 
 		auto thorn = std::make_unique<ThornProjectile>();
 		thorn->element = Elements::Earth;
-		thorn->hitStats.damage = 2.0f;
+		thorn->hitStats.damage = 3.0f;
 		glm::vec2 spawnPos = glm::vec2(tile) + glm::vec2(0.5f);
 		spawnPos.x += getRandomFloat(rng, -offsetJitter, offsetJitter);
 		spawnPos.y += getRandomFloat(rng, -offsetJitter, offsetJitter);
@@ -689,11 +837,6 @@ struct WildGrowthSpell: public Spell
 		wormIndex++;
 		glm::ivec2 current = worms[index];
 
-		const glm::ivec2 directions[] = {
-			{1, 0}, {-1, 0}, {0, 1}, {0, -1},
-			{1, 1}, {-1, 1}, {1, -1}, {-1, -1}
-		};
-
 		bool moved = false;
 		glm::ivec2 bestNext = current;
 		int bestScore = -999;
@@ -722,15 +865,24 @@ struct WildGrowthSpell: public Spell
 
 		if (!moved)
 		{
-			for (int tries = 0; tries < 8; tries++)
+			glm::ivec2 step = current;
+			if (findStepTowardOpenTile(current, step))
 			{
-				int pick = getRandomInt(rng, 0, 7);
-				glm::ivec2 next = current + directions[pick];
-				if (!tileWithinRange(next)) { continue; }
-				if (isBlocked(next)) { continue; }
-				current = next;
+				current = step;
 				moved = true;
-				break;
+			}
+			else
+			{
+				for (int tries = 0; tries < 8; tries++)
+				{
+					int pick = getRandomInt(rng, 0, 7);
+					glm::ivec2 next = current + directions[pick];
+					if (!tileWithinRange(next)) { continue; }
+					if (isBlocked(next)) { continue; }
+					current = next;
+					moved = true;
+					break;
+				}
 			}
 		}
 		else
@@ -768,7 +920,6 @@ struct EarthTrapSpell: public Spell
 		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
 	{
 		(void)deltaTime;
-		(void)entityHolder;
 		(void)currentAimDir;
 
 		glm::vec2 origin = player.physics.getPos();
@@ -840,18 +991,328 @@ struct EarthTrapSpell: public Spell
 	}
 };
 
+// Calls down a sequence of delayed meteor strikes on screen.
+struct MeteoriteShowerSpell: public Spell
+{
+	// **configuration variables**
+	float impactDelay = 0.35f;
+	float explosionRadius = 1.0f;
+	float explosionDamage = 7.0f;
+	float explosionBurn = 2.0f;
+	int spawnAttempts = 16;
+	float fallbackRadiusMin = 0.6f;
+	float fallbackRadiusMax = 1.4f;
+
+	// **state variables**
+	// (none)
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		(void)deltaTime;
+		(void)mainParticleSystem;
+		(void)entityHolder;
+		(void)currentAimDir;
+
+		auto &renderer = getRenderer();
+		glm::vec4 viewRect = renderer.getViewRect();
+		glm::vec2 playerPos = player.physics.getPos();
+		glm::ivec2 playerTile = WorldToTile(playerPos);
+
+		auto isBlocked = [&](const glm::ivec2 &tile)
+		{
+			if (tile.x < 0 || tile.y < 0 || tile.x >= map.size.x || tile.y >= map.size.y)
+			{
+				return true;
+			}
+			return map.isCollidableAtPosSafe(tile.x, tile.y);
+		};
+
+		auto isVisibleFromPlayer = [&](const glm::ivec2 &tile)
+		{
+			return HasLineOfSightGrid(map, playerTile, tile);
+		};
+
+		glm::vec2 spawnPos = playerPos;
+		bool found = false;
+		if (getRandomChance(rng, 0.4f))
+		{
+			std::vector<glm::vec2> candidates;
+			candidates.reserve(entityHolder.entities.size());
+			for (auto &e : entityHolder.entities)
+			{
+				if (e->dying) { continue; }
+				glm::vec2 pos = e->physics.getPos();
+				if (pos.x < viewRect.x || pos.y < viewRect.y
+					|| pos.x > viewRect.x + viewRect.z || pos.y > viewRect.y + viewRect.w)
+				{
+					continue;
+				}
+				glm::ivec2 tile = WorldToTile(pos);
+				if (isBlocked(tile)) { continue; }
+				if (!isVisibleFromPlayer(tile)) { continue; }
+				candidates.push_back(pos);
+			}
+			if (!candidates.empty())
+			{
+				int pick = getRandomInt(rng, 0, (int)candidates.size() - 1);
+				spawnPos = candidates[pick];
+				found = true;
+			}
+		}
+		if (!found)
+		{
+			for (int tries = 0; tries < spawnAttempts; tries++)
+			{
+				glm::vec2 candidate = {
+					getRandomFloat(rng, viewRect.x, viewRect.x + viewRect.z),
+					getRandomFloat(rng, viewRect.y, viewRect.y + viewRect.w)
+				};
+				glm::ivec2 candidateTile = WorldToTile(candidate);
+				if (isBlocked(candidateTile)) { continue; }
+				if (!isVisibleFromPlayer(candidateTile)) { continue; }
+				spawnPos = candidate;
+				found = true;
+				break;
+			}
+		}
+
+		if (!found)
+		{
+			const float twoPi = 6.2831853f;
+			for (int tries = 0; tries < spawnAttempts; tries++)
+			{
+				float angle = getRandomFloat(rng, 0.0f, twoPi);
+				float radius = getRandomFloat(rng, fallbackRadiusMin, fallbackRadiusMax);
+				glm::vec2 candidate = playerPos + glm::vec2(std::cos(angle), std::sin(angle)) * radius;
+				glm::ivec2 candidateTile = WorldToTile(candidate);
+				if (isBlocked(candidateTile)) { continue; }
+				if (!isVisibleFromPlayer(candidateTile)) { continue; }
+				spawnPos = candidate;
+				found = true;
+				break;
+			}
+		}
+
+		if (!found)
+		{
+			return true;
+		}
+
+		auto meteor = std::make_unique<MeteoriteImpactProjectile>();
+		meteor->element = Elements::Fire;
+		meteor->impactDelay = impactDelay;
+		meteor->explosionDamage = explosionDamage;
+		meteor->explosionBurn = explosionBurn;
+		meteor->explosionRadius = explosionRadius;
+		projectileHolder.addProjectileDeferredAsPtr(std::move(meteor), spawnPos);
+		return true;
+	}
+};
+
+// Flood-fills the visible area with fire and applies burn once per enemy.
+struct InfernoSpell: public Spell
+{
+	// **configuration variables**
+	float maxDuration = 1.8f;
+	float spawnInterval = 0.004f;
+	float particleJitter = 0.2f;
+	float fireDebuff = 10.0f;
+	bool useDiagonal = true;
+
+	// **state variables**
+	bool initialized = false;
+	float spawnTimer = 0.0f;
+	glm::ivec2 originTile = {0, 0};
+	glm::ivec2 minTile = {0, 0};
+	glm::ivec2 maxTile = {0, 0};
+	std::vector<glm::ivec2> queue;
+	int queueIndex = 0;
+	std::vector<unsigned char> visited;
+	std::vector<Entity*> affectedEntities;
+	ParticleSettings fireParticle;
+	ParticleSettings hitParticle;
+	ParticleSystem particleSystem;
+	glm::vec2 renderOrigin = {};
+
+	InfernoSpell()
+	{
+		continuousUpdate = true;
+		continuousUpdateTimer = maxDuration;
+	}
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		(void)projectileHolder;
+		(void)currentAimDir;
+
+		if (!initialized)
+		{
+			initialized = true;
+			continuousUpdateTimer = maxDuration;
+			auto &renderer = getRenderer();
+			glm::vec4 viewRect = renderer.getViewRect();
+			minTile.x = std::max(0, (int)std::floor(viewRect.x));
+			minTile.y = std::max(0, (int)std::floor(viewRect.y));
+			maxTile.x = std::min(map.size.x - 1, (int)std::ceil(viewRect.x + viewRect.z));
+			maxTile.y = std::min(map.size.y - 1, (int)std::ceil(viewRect.y + viewRect.w));
+
+			originTile = WorldToTile(player.physics.getPos());
+			renderOrigin = player.physics.getPos();
+			queue.clear();
+			queueIndex = 0;
+			visited.assign(map.size.x * map.size.y, 0);
+			affectedEntities.clear();
+			spawnTimer = 0.0f;
+			particleSystem.maxCount = 900;
+
+			glm::vec4 startColor = elementToSecondaryColor(Elements::Fire);
+			glm::vec4 endColor = elementToColor(Elements::Fire);
+			startColor.a = 0.85f;
+			endColor.a = 0.55f;
+			fireParticle = getStatusFireParticle(startColor, endColor);
+			fireParticle.onCreateCount = 1;
+			fireParticle.onCreateCount = 3;
+			fireParticle.particleLifeTime = {0.28f, 0.5f};
+			fireParticle.velocityX = glm::vec2{-8.0f, 8.0f} * PIXEL_SIZE;
+			fireParticle.velocityY = glm::vec2{-14.0f, -6.0f} * PIXEL_SIZE;
+			fireParticle.createApearence.size = glm::vec2{3.0f, 4.2f} * PIXEL_SIZE;
+			fireParticle.endApearence.size = glm::vec2{1.6f, 2.8f} * PIXEL_SIZE;
+			fireParticle.animationType = ParticleSettings::ANIMATION_TYPES::animationBob;
+			fireParticle.animationSpeed = {6.0f, 10.0f};
+			fireParticle.animationScaleY = {PIXEL_SIZE * 2.6f, PIXEL_SIZE * 4.0f};
+			fireParticle.animationPhase = {0.0f, 6.2831853f};
+			fireParticle.folowParent = false;
+
+			hitParticle = getSparkBurstParticle(startColor, endColor);
+			hitParticle.onCreateCount = 6;
+			hitParticle.particleLifeTime = {0.2f, 0.35f};
+			hitParticle.velocityX = glm::vec2{-9.0f, 9.0f} * PIXEL_SIZE;
+			hitParticle.velocityY = glm::vec2{-16.0f, -6.0f} * PIXEL_SIZE;
+			hitParticle.createApearence.size = glm::vec2{2.0f, 3.2f} * PIXEL_SIZE;
+			hitParticle.endApearence.size = glm::vec2{1.0f, 2.2f} * PIXEL_SIZE;
+			hitParticle.texture = getAssetManager().particleCircle;
+			hitParticle.folowParent = false;
+
+			auto tileIndex = [&](const glm::ivec2 &tile)
+			{
+				return tile.x + tile.y * map.size.x;
+			};
+
+			if (originTile.x >= 0 && originTile.y >= 0 && originTile.x < map.size.x && originTile.y < map.size.y)
+			{
+				visited[tileIndex(originTile)] = 1;
+				queue.push_back(originTile);
+			}
+		}
+
+		auto tileIndex = [&](const glm::ivec2 &tile)
+		{
+			return tile.x + tile.y * map.size.x;
+		};
+
+		auto isBlocked = [&](const glm::ivec2 &tile)
+		{
+			if (tile.x < 0 || tile.y < 0 || tile.x >= map.size.x || tile.y >= map.size.y)
+			{
+				return true;
+			}
+			return map.isCollidableAtPosSafe(tile.x, tile.y);
+		};
+
+		const glm::ivec2 directions4[] = { {1, 0}, {-1, 0}, {0, 1}, {0, -1} };
+		const glm::ivec2 directions8[] = {
+			{1, 0}, {-1, 0}, {0, 1}, {0, -1},
+			{1, 1}, {-1, 1}, {1, -1}, {-1, -1}
+		};
+		const glm::ivec2 *dirs = useDiagonal ? directions8 : directions4;
+		int dirCount = useDiagonal ? 8 : 4;
+
+		spawnTimer -= deltaTime;
+		while (spawnTimer <= 0.0f)
+		{
+			spawnTimer += spawnInterval;
+			if (queueIndex >= (int)queue.size())
+			{
+				break;
+			}
+
+			glm::ivec2 tile = queue[queueIndex++];
+			glm::vec2 spawnPos = glm::vec2(tile) + glm::vec2(0.5f);
+			spawnPos.x += getRandomFloat(rng, -particleJitter, particleJitter);
+			spawnPos.y += getRandomFloat(rng, -particleJitter, particleJitter);
+			particleSystem.emitParticles(fireParticle, spawnPos, rng, spawnPos);
+
+			for (int i = 0; i < dirCount; i++)
+			{
+				glm::ivec2 next = tile + dirs[i];
+				if (next.x < minTile.x || next.y < minTile.y || next.x > maxTile.x || next.y > maxTile.y)
+				{
+					continue;
+				}
+				if (isBlocked(next)) { continue; }
+				int index = tileIndex(next);
+				if (visited[index]) { continue; }
+				visited[index] = 1;
+				queue.push_back(next);
+			}
+		}
+
+		for (auto &e : entityHolder.entities)
+		{
+			if (e->dying) { continue; }
+			bool alreadyHit = false;
+			for (auto *hit : affectedEntities)
+			{
+				if (hit == e.get())
+				{
+					alreadyHit = true;
+					break;
+				}
+			}
+			if (alreadyHit) { continue; }
+
+			glm::ivec2 tile = WorldToTile(e->physics.getPos());
+			if (tile.x < minTile.x || tile.y < minTile.y || tile.x > maxTile.x || tile.y > maxTile.y)
+			{
+				continue;
+			}
+			int index = tileIndex(tile);
+			if (index >= 0 && index < (int)visited.size() && visited[index])
+			{
+				addStatusEffectFromElement(e->statusEffects, e->statusImmunities, Elements::Fire, fireDebuff);
+				mainParticleSystem.emitParticles(hitParticle, e->physics.getPos(), rng, e->physics.getPos());
+				affectedEntities.push_back(e.get());
+			}
+		}
+
+		particleSystem.update(deltaTime);
+		return queueIndex < (int)queue.size() || !particleSystem.particles.empty();
+	}
+
+	void renderBeforeEntities(gl2d::Renderer2D &renderer) override
+	{
+		particleSystem.render(renderer, getParticlePostProcessRenderer(), renderOrigin);
+	}
+};
+
 struct WaterSiphonSpell: public Spell
 {
 	// **configuration variables**
 	HitStats hitStats;
 	float range = 13.0f;
 	float beamWidth = 0.6f;
-	float particleInterval = 0.03f;
+	float particleInterval = 0.025f;
 	float tickInterval = 0.12f;
 	float particleSpeed = 10.0f;
 	float minDamage = 0.1f;
-	float maxDamage = 1.f;
+	float maxDamage = 0.8f;
 	float rampDuration = 0.5f;
+	float particleStartOffset = 0.0f;
+	float statusAmount = 0.0f;
 
 	// **state variables**
 	ParticleSystem particleSystem;
@@ -971,7 +1432,8 @@ struct WaterSiphonSpell: public Spell
 			int spawnCount = 10;
 			for (int i = 0; i < spawnCount; i++)
 			{
-				float along = getRandomFloat(rng, 0.0f, currentRange);
+			float alongStart = std::min(currentRange, particleStartOffset);
+			float along = getRandomFloat(rng, alongStart, currentRange);
 				float across = getRandomFloat(rng, -beamWidth * 0.5f, beamWidth * 0.5f);
 				glm::vec2 spawnPos = origin + aimDir * along + perp * across;
 				particleSystem.emitParticles(particle, spawnPos, rng, spawnPos);
@@ -1042,6 +1504,10 @@ struct WaterSiphonSpell: public Spell
 					target->onDamaged(rampStats.damage);
 				}
 				target->physics.velocity += pushBack;
+				if (statusAmount > 0.0f)
+				{
+					addStatusEffectFromElement(target->statusEffects, target->statusImmunities, element, statusAmount);
+				}
 				glm::vec2 damagePos = target->physics.getPos();
 				damagePos.y -= target->physics.transform.size.y * 0.6f;
 				getDamageViewerSystem().addDamage(rampDamage, damagePos);

@@ -516,6 +516,100 @@ struct BoulderProjectile: public CloneableProjectile<BoulderProjectile>
 	void onDestroy(std::ranlux24_base &rng) override;
 };
 
+// Fiery boulder that detonates on impact.
+struct MeteoriteProjectile: public CloneableProjectile<MeteoriteProjectile>
+{
+	// **configuration variables**
+	HitStats hitStats;
+	float trailInterval = 0.04f;
+	float explosionRadius = 2.0f;
+	float explosionDamage = 5.0f;
+	float explosionBurn = 2.0f;
+	float explosionPush = 2.5f;
+	float explodeTimer = -1.0f;
+	bool disableDirectDamage = false;
+
+	// **state variables**
+	bool firstTime = true;
+	bool shouldExplode = false;
+	float trailTimer = 0.0f;
+	ParticleSettings coreParticle;
+	ParticleSettings trailParticle;
+	ParticleSettings fastTrailParticle;
+	ParticleSettings burstParticle;
+
+	MeteoriteProjectile();
+	void setupParticles();
+	void explodeDamage(Map &map, EntityHolder &entityHolder);
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng, EntityHolder &entityHolder) override;
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+		ParticlePostProcessRenderer &particlePostProcessRenderer) override;
+	void onDestroy(std::ranlux24_base &rng) override;
+};
+
+// Homing meteorite with purple-tinted fire particles.
+struct HomingMeteoriteProjectile: public CloneableProjectile<HomingMeteoriteProjectile>
+{
+	// **configuration variables**
+	HitStats hitStats;
+	float trailInterval = 0.04f;
+	float explosionRadius = 2.0f;
+	float explosionDamage = 5.0f;
+	float explosionBurn = 2.0f;
+	float explosionPush = 2.5f;
+	float homingRange = 8.0f;
+	float homingTurnRate = 5.0f;
+
+	// **state variables**
+	bool firstTime = true;
+	bool shouldExplode = false;
+	float trailTimer = 0.0f;
+	float travelSpeed = 0.0f;
+	ParticleSettings coreParticle;
+	ParticleSettings trailParticle;
+	ParticleSettings fastTrailParticle;
+	ParticleSettings burstParticle;
+
+	HomingMeteoriteProjectile();
+	void setupParticles();
+	void explodeDamage(Map &map, EntityHolder &entityHolder);
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng, EntityHolder &entityHolder) override;
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+		ParticlePostProcessRenderer &particlePostProcessRenderer) override;
+	void onDestroy(std::ranlux24_base &rng) override;
+};
+
+// Delayed meteor impact used by the shower spell.
+struct MeteoriteImpactProjectile: public CloneableProjectile<MeteoriteImpactProjectile>
+{
+	// **configuration variables**
+	float impactDelay = 0.35f;
+	float explosionRadius = 2.0f;
+	float explosionDamage = 7.0f;
+	float explosionBurn = 2.0f;
+	float explosionPush = 2.0f;
+	float telegraphInterval = 0.06f;
+
+	// **state variables**
+	bool firstTime = true;
+	bool shouldExplode = false;
+	float impactTimer = 0.0f;
+	float telegraphTimer = 0.0f;
+	ParticleSettings telegraphParticle;
+	ParticleSettings burstParticle;
+
+	MeteoriteImpactProjectile();
+	void setupParticles();
+	void explodeDamage(Map &map, EntityHolder &entityHolder);
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng, EntityHolder &entityHolder) override;
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+		ParticlePostProcessRenderer &particlePostProcessRenderer) override;
+	void onDestroy(std::ranlux24_base &rng) override;
+};
+
 // Heavy ice block projectile that bursts into icy shards on impact.
 struct BigIceBlockProjectile: public CloneableProjectile<BigIceBlockProjectile>
 {
