@@ -23,6 +23,18 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		hoverMeleeCooldownTimer -= deltaTime;
 	}
 
+	if (dashCooldownTimer > 0.0f)
+	{
+		dashCooldownTimer -= deltaTime;
+		if (dashCooldownTimer < 0.0f) { dashCooldownTimer = 0.0f; }
+	}
+
+	if (dashHitCooldownTimer > 0.0f)
+	{
+		dashHitCooldownTimer -= deltaTime;
+		if (dashHitCooldownTimer < 0.0f) { dashHitCooldownTimer = 0.0f; }
+	}
+
 	if (targetSwitchTimer > 0.0f)
 	{
 		targetSwitchTimer -= deltaTime;
@@ -230,8 +242,26 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		patrolDirTimer = 0.0f;
 	}
 
+	// Trigger a dash strike when close and in LOS
+	if (!dashActive && !hoverMeleeActive && dashEnabled && chasing && canSeeTarget &&
+		distanceToTarget <= dashRange && dashCooldownTimer <= 0.0f)
+	{
+		float chance = dashChance * deltaTime;
+		if (chance > 1.0f) { chance = 1.0f; }
+		if (getRandomChance(rng, chance))
+		{
+			dashActive = true;
+			dashTimer = 0.0f;
+			dashDir = directionToTarget;
+			float effectiveSpeed = speed * dashSpeedMultiplier;
+			if (effectiveSpeed < 0.1f) { effectiveSpeed = 0.1f; }
+			dashDuration = std::max(dashMinDuration, distanceToTarget / effectiveSpeed);
+			hoverMeleeActive = false;
+		}
+	}
+
 	// Trigger a hover melee swoop when close and in LOS
-	if (!hoverMeleeActive && hoverMeleeEnabled && chasing && canSeeTarget &&
+	if (!hoverMeleeActive && !dashActive && hoverMeleeEnabled && chasing && canSeeTarget &&
 		distanceToTarget <= hoverMeleeRange && hoverMeleeCooldownTimer <= 0.0f)
 	{
 		float chance = hoverMeleeChance * deltaTime;
@@ -250,7 +280,7 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 
 	moveDir = glm::vec2(0.0f);
 
-	if (chasing && !hoverMeleeActive)
+	if (chasing && !hoverMeleeActive && !dashActive)
 	{
 		// Chase last seen position if we can't currently see the target
 		const bool useLastSeen = (!canSeeTarget && hasLastSeen);
@@ -373,7 +403,7 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 
 	// Orbit movement when close to the target
 	bool orbiting = false;
-	if (!hoverMeleeActive && orbitEnabled && chasing && canSeeTarget &&
+	if (!hoverMeleeActive && !dashActive && orbitEnabled && chasing && canSeeTarget &&
 		distanceToTarget <= orbitRange)
 	{
 		orbiting = true;
@@ -422,14 +452,14 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 	}
 
 	// Stop near target for ranged enemies
-	if (!hoverMeleeActive && !orbiting && stopChaseRange > 0.0f && chasing && canSeeTarget &&
+	if (!hoverMeleeActive && !dashActive && !orbiting && stopChaseRange > 0.0f && chasing && canSeeTarget &&
 		distanceToTarget <= stopChaseRange)
 	{
 		moveDir = glm::vec2(0.0f);
 	}
 
 	// If we're close enough to nearly melee, push in for contact
-	if (chasing && canSeeTarget && !hoverMeleeActive &&
+	if (chasing && canSeeTarget && !hoverMeleeActive && !dashActive &&
 		distanceToTarget <= (meleeRange + 1.0f))
 	{
 		orbitActive = false;
@@ -461,8 +491,25 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		}
 	}
 
+	// Dash strike movement
+	if (dashActive)
+	{
+		dashTimer += deltaTime;
+		if (dashTimer >= dashDuration)
+		{
+			dashActive = false;
+			dashCooldownTimer = dashCooldown;
+		}
+		else
+		{
+			orbitActive = false;
+			orbitRadialOffset = 0.0f;
+			moveDir = dashDir;
+		}
+	}
+
 	// Determine if we should melee or shoot
-	if (!firingBurstShot && chasing && canSeeTarget && !hoverMeleeActive)
+	if (!firingBurstShot && chasing && canSeeTarget && !hoverMeleeActive && !dashActive)
 	{
 		if (distanceToTarget <= meleeRange)
 		{
@@ -505,7 +552,7 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		}
 	}
 
-	if (hoverMeleeActive)
+	if (hoverMeleeActive || dashActive)
 	{
 		wantsToShoot = false;
 	}

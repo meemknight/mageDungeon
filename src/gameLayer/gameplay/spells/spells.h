@@ -202,6 +202,11 @@ struct SummonSpell: public Spell
 	// **configuration variables**
 	std::unique_ptr<SummonEntity> summon;
 	int summonCount = 1;
+	float spawnOffsetMin = 0.6f;
+	float spawnOffsetMax = 1.2f;
+	float spawnSideAngleJitter = 0.65f;
+	float spawnForwardJitter = 0.25f;
+	int spawnAttempts = 10;
 
 	// **state variables**
 	// (none)
@@ -211,23 +216,84 @@ struct SummonSpell: public Spell
 		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
 	{
 		(void)deltaTime;
-		(void)map;
 		(void)mainParticleSystem;
 		(void)projectileHolder;
-		(void)rng;
 		(void)entityHolder;
-		(void)currentAimDir;
 
 		if (!summon)
 		{
 			return true;
 		}
 
+		glm::vec2 aim = currentAimDir;
+		float len = glm::length(aim);
+		if (len <= 0.0001f)
+		{
+			len = glm::length(createAimDir);
+			if (len <= 0.0001f)
+			{
+				aim = {1.0f, 0.0f};
+				len = 1.0f;
+			}
+			else
+			{
+				aim = createAimDir;
+			}
+		}
+		aim /= len;
+		glm::vec2 sideDir = {-aim.y, aim.x};
+
+		glm::vec2 playerPos = player.physics.getPos();
+		glm::ivec2 playerTile = WorldToTile(playerPos);
+
+		auto isBlocked = [&](const glm::ivec2 &tile)
+		{
+			if (tile.x < 0 || tile.y < 0 || tile.x >= map.size.x || tile.y >= map.size.y)
+			{
+				return true;
+			}
+			return map.isCollidableAtPosSafe(tile.x, tile.y);
+		};
+
+		// Spawn to the side with LOS, avoiding walls.
+		auto findSpawnPos = [&](int sideSign, glm::vec2 &outPos)
+		{
+			glm::vec2 side = sideDir * (float)sideSign;
+			float baseAngle = std::atan2(side.y, side.x);
+			for (int tries = 0; tries < spawnAttempts; tries++)
+			{
+				float angle = baseAngle + getRandomFloat(rng, -spawnSideAngleJitter, spawnSideAngleJitter);
+				float radius = getRandomFloat(rng, spawnOffsetMin, spawnOffsetMax);
+				glm::vec2 offset = glm::vec2(std::cos(angle), std::sin(angle)) * radius;
+				offset += aim * getRandomFloat(rng, -spawnForwardJitter, spawnForwardJitter);
+				glm::vec2 spawnPos = playerPos + offset;
+
+				glm::ivec2 spawnTile = WorldToTile(spawnPos);
+				if (isBlocked(spawnTile)) { continue; }
+				if (!HasLineOfSightGrid(map, playerTile, spawnTile)) { continue; }
+
+				outPos = spawnPos;
+				return true;
+			}
+			return false;
+		};
+
 		auto &summonHolder = getSummonHolder();
 		for (int i = 0; i < summonCount; i++)
 		{
+			glm::vec2 spawnPos = playerPos;
+			int sideSign = (summonCount > 1) ? ((i % 2 == 0) ? 1 : -1)
+				: (getRandomChance(rng, 0.5f) ? 1 : -1);
+			if (!findSpawnPos(sideSign, spawnPos))
+			{
+				if (!findSpawnPos(-sideSign, spawnPos))
+				{
+					continue;
+				}
+			}
+
 			auto sptr = summon->clone();
-			summonHolder.addSummonAsPtr(std::move(sptr), player.physics.getPos());
+			summonHolder.addSummonAsPtr(std::move(sptr), spawnPos);
 		}
 
 		return true;
@@ -803,7 +869,7 @@ struct WaterSiphonSpell: public Spell
 	{
 		continuousUpdate = true;
 		continuousUpdateTimer = 6.0f;
-		particleSystem.maxCount = 900;
+		particleSystem.maxCount = 800;
 		hitStats.damage = maxDamage;
 		hitStats.pushBack = 0.6f;
 	}

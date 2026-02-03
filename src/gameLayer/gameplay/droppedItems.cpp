@@ -17,6 +17,7 @@ namespace
 	constexpr float chestTotalTime = chestFrameCount * chestFrameTime + chestHoldTime + chestFadeTime;
 	constexpr int coinFrameCount = 6;
 	constexpr float coinFrameTime = 0.08f;
+	constexpr float itemParticleInterval = 0.6f;
 
 	int findClosestWandIndex(const std::vector<DroppedItem> &items,
 		glm::vec2 playerPos, float maxDist2)
@@ -70,25 +71,57 @@ namespace
 		return frame;
 	}
 
-	ParticleSettings buildDropParticle(glm::vec4 startColor, glm::vec4 endColor)
+	ParticleSettings buildDropParticle(glm::vec4 startColor, glm::vec4 endColor,
+		int count, float sizeScale, float speedScale, float lifeScale)
 	{
 		ParticleSettings p = getSmallSquareParticle(startColor, endColor);
-		p.onCreateCount = 5;
-		p.particleLifeTime = {0.2f, 0.4f};
-		p.velocityX = glm::vec2{-6, 6} * PIXEL_SIZE;
-		p.velocityY = glm::vec2{-12, -18} * PIXEL_SIZE;
-		p.createApearence.size = glm::vec2{2.5f, 3.5f} * PIXEL_SIZE;
-		p.endApearence.size = glm::vec2{1.0f, 2.0f} * PIXEL_SIZE;
-		p.dragX = glm::vec2{-40, -60} * PIXEL_SIZE;
-		p.dragY = glm::vec2{-40, -60} * PIXEL_SIZE;
+		p.onCreateCount = (short)count;
+		p.particleLifeTime *= lifeScale;
+		p.velocityX *= speedScale;
+		p.velocityY *= speedScale;
+		p.dragX *= speedScale;
+		p.dragY *= speedScale;
+		p.createApearence.size *= sizeScale;
+		p.endApearence.size *= sizeScale;
 		p.folowParent = false;
 		return p;
 	}
 
 	void emitDropParticles(ParticleSystem &particleSystem, std::ranlux24_base &rng,
-		glm::vec2 pos, glm::vec4 startColor, glm::vec4 endColor)
+		glm::vec2 pos, glm::vec4 startColor, glm::vec4 endColor,
+		int count, float sizeScale, float speedScale, float lifeScale)
 	{
-		ParticleSettings particle = buildDropParticle(startColor, endColor);
+		ParticleSettings particle = buildDropParticle(startColor, endColor,
+			count, sizeScale, speedScale, lifeScale);
+		particleSystem.emitParticles(particle, pos, rng, pos);
+	}
+
+	ParticleSettings buildPickupParticle(glm::vec4 startColor, glm::vec4 endColor, int count)
+	{
+		ParticleSettings p = getSmallSquareParticle(startColor, endColor);
+		p.onCreateCount = (short)count;
+		p.particleLifeTime = {0.25f, 0.5f};
+		p.velocityX = glm::vec2{-20, 20} * PIXEL_SIZE;
+		p.velocityY = glm::vec2{-20, 20} * PIXEL_SIZE;
+		p.dragX = glm::vec2{-20, -30} * PIXEL_SIZE;
+		p.dragY = glm::vec2{-20, -30} * PIXEL_SIZE;
+		p.createApearence.size = glm::vec2{2.0f, 3.0f} * PIXEL_SIZE;
+		p.endApearence.size = glm::vec2{1.0f, 1.5f} * PIXEL_SIZE;
+		p.tranzitionType = ParticleSettings::TRANZITION_TYPES::abruptCurbe;
+		p.animationType = ParticleSettings::ANIMATION_TYPES::animationSpiral;
+		p.animationSpeed = {8.0f, 12.0f};
+		p.animationScaleX = glm::vec2{PIXEL_SIZE * 3.0f, PIXEL_SIZE * 6.0f};
+		p.animationScaleY = glm::vec2{PIXEL_SIZE * 3.0f, PIXEL_SIZE * 6.0f};
+		p.animationRotation = {0.0f, 360.0f};
+		p.animationPhase = {0.0f, 6.2831f};
+		p.folowParent = false;
+		return p;
+	}
+
+	void emitPickupParticles(ParticleSystem &particleSystem, std::ranlux24_base &rng,
+		glm::vec2 pos, glm::vec4 startColor, glm::vec4 endColor, int count)
+	{
+		ParticleSettings particle = buildPickupParticle(startColor, endColor, count);
 		particleSystem.emitParticles(particle, pos, rng, pos);
 	}
 }
@@ -105,6 +138,7 @@ void DroppedItemSystem::spawnWand(glm::vec2 pos, const Wand &wand, std::ranlux24
 	item.pos = pos;
 	item.wand = wand;
 	item.hoverTimer = getRandomFloat(rng, 0.0f, 6.2831f);
+	item.particleTimer = getRandomFloat(rng, 0.0f, itemParticleInterval);
 	items.push_back(item);
 }
 
@@ -114,6 +148,7 @@ void DroppedItemSystem::spawnChest(glm::vec2 pos, std::ranlux24_base &rng)
 	item.type = DroppedItemType::Chest;
 	item.pos = pos;
 	item.hoverTimer = getRandomFloat(rng, 0.0f, 6.2831f);
+	item.particleTimer = getRandomFloat(rng, 0.0f, itemParticleInterval);
 	item.chestOpenTimer = 0.0f;
 	item.chestOpening = false;
 	items.push_back(item);
@@ -125,6 +160,7 @@ void DroppedItemSystem::spawnHearth(glm::vec2 pos, std::ranlux24_base &rng)
 	item.type = DroppedItemType::Hearth;
 	item.pos = pos;
 	item.hoverTimer = getRandomFloat(rng, 0.0f, 6.2831f);
+	item.particleTimer = getRandomFloat(rng, 0.0f, itemParticleInterval);
 	items.push_back(item);
 }
 
@@ -134,6 +170,7 @@ void DroppedItemSystem::spawnCoin(glm::vec2 pos, std::ranlux24_base &rng)
 	item.type = DroppedItemType::Coin;
 	item.pos = pos;
 	item.hoverTimer = getRandomFloat(rng, 0.0f, 6.2831f);
+	item.particleTimer = getRandomFloat(rng, 0.0f, itemParticleInterval);
 	items.push_back(item);
 }
 
@@ -180,12 +217,18 @@ int DroppedItemSystem::findClosestInteractableIndex(glm::vec2 playerPos, float m
 	return bestIndex;
 }
 
-void DroppedItemSystem::update(float deltaTime)
+void DroppedItemSystem::update(float deltaTime, ParticleSystem &particleSystem, std::ranlux24_base &rng)
 {
+	const glm::vec4 hearthStart = {1.0f, 0.2f, 0.2f, 0.65f};
+	const glm::vec4 hearthEnd = {0.6f, 0.05f, 0.05f, 0.0f};
+	const glm::vec4 coinStart = {1.0f, 0.9f, 0.25f, 0.65f};
+	const glm::vec4 coinEnd = {0.8f, 0.6f, 0.1f, 0.0f};
+
 	for (int i = 0; i < (int)items.size();)
 	{
 		auto &item = items[i];
 		item.hoverTimer += deltaTime;
+		item.particleTimer += deltaTime;
 		if (item.type == DroppedItemType::Chest && item.chestOpening)
 		{
 			item.chestOpenTimer += deltaTime;
@@ -194,6 +237,21 @@ void DroppedItemSystem::update(float deltaTime)
 				items[i] = items.back();
 				items.pop_back();
 				continue;
+			}
+		}
+
+		if (item.particleTimer >= itemParticleInterval)
+		{
+			item.particleTimer -= itemParticleInterval;
+			if (item.type == DroppedItemType::Hearth)
+			{
+				emitDropParticles(particleSystem, rng, item.pos,
+					hearthStart, hearthEnd, 2, 0.7f, 0.6f, 0.7f);
+			}
+			else if (item.type == DroppedItemType::Coin)
+			{
+				emitDropParticles(particleSystem, rng, item.pos,
+					coinStart, coinEnd, 2, 0.7f, 0.6f, 0.7f);
 			}
 		}
 		i++;
@@ -347,25 +405,32 @@ bool DroppedItemSystem::openChest(int itemIndex, std::ranlux24_base &rng, Partic
 	item.chestOpening = true;
 	item.chestOpenTimer = 0.0f;
 
-	const glm::vec4 hearthStart = {1.0f, 0.2f, 0.2f, 0.9f};
+	const glm::vec4 hearthStart = {1.0f, 0.2f, 0.2f, 1.0f};
 	const glm::vec4 hearthEnd = {0.6f, 0.05f, 0.05f, 0.0f};
-	const glm::vec4 coinStart = {1.0f, 0.9f, 0.25f, 0.9f};
+	const glm::vec4 coinStart = {1.0f, 0.9f, 0.25f, 1.0f};
 	const glm::vec4 coinEnd = {0.8f, 0.6f, 0.1f, 0.0f};
+	const glm::vec4 chestStart = {1.0f, 1.0f, 1.0f, 0.9f};
+	const glm::vec4 chestEnd = {1.0f, 1.0f, 1.0f, 0.0f};
+
+	emitDropParticles(particleSystem, rng, item.pos,
+		chestStart, chestEnd, 18, 1.1f, 1.3f, 0.8f);
 
 	if (getRandomInt(rng, 0, 1) == 0)
 	{
 		spawnHearth(item.pos, rng);
-		emitDropParticles(particleSystem, rng, item.pos, hearthStart, hearthEnd);
+		emitDropParticles(particleSystem, rng, item.pos,
+			hearthStart, hearthEnd, 8, 1.0f, 1.0f, 0.9f);
 	}
 	else
 	{
 		spawnCoin(item.pos, rng);
-		emitDropParticles(particleSystem, rng, item.pos, coinStart, coinEnd);
+		emitDropParticles(particleSystem, rng, item.pos,
+			coinStart, coinEnd, 8, 1.0f, 1.0f, 0.9f);
 	}
 	return true;
 }
 
-bool DroppedItemSystem::takeHearth(int itemIndex)
+bool DroppedItemSystem::takeHearth(int itemIndex, ParticleSystem &particleSystem, std::ranlux24_base &rng)
 {
 	if (itemIndex < 0 || itemIndex >= (int)items.size())
 	{
@@ -375,12 +440,16 @@ bool DroppedItemSystem::takeHearth(int itemIndex)
 	{
 		return false;
 	}
+	const glm::vec4 hearthStart = {1.0f, 0.2f, 0.2f, 1.0f};
+	const glm::vec4 hearthEnd = {0.6f, 0.05f, 0.05f, 0.0f};
+	emitPickupParticles(particleSystem, rng, items[itemIndex].pos,
+		hearthStart, hearthEnd, 20);
 	items[itemIndex] = items.back();
 	items.pop_back();
 	return true;
 }
 
-bool DroppedItemSystem::takeCoin(int itemIndex)
+bool DroppedItemSystem::takeCoin(int itemIndex, ParticleSystem &particleSystem, std::ranlux24_base &rng)
 {
 	if (itemIndex < 0 || itemIndex >= (int)items.size())
 	{
@@ -390,9 +459,21 @@ bool DroppedItemSystem::takeCoin(int itemIndex)
 	{
 		return false;
 	}
+	const glm::vec4 coinStart = {1.0f, 0.9f, 0.25f, 1.0f};
+	const glm::vec4 coinEnd = {0.8f, 0.6f, 0.1f, 0.0f};
+	emitPickupParticles(particleSystem, rng, items[itemIndex].pos,
+		coinStart, coinEnd, 20);
 	items[itemIndex] = items.back();
 	items.pop_back();
 	return true;
+}
+
+void DroppedItemSystem::emitWandPickupParticles(glm::vec2 pos, ParticleSystem &particleSystem, std::ranlux24_base &rng)
+{
+	const glm::vec4 wandStart = {1.0f, 1.0f, 1.0f, 1.0f};
+	const glm::vec4 wandEnd = {0.8f, 0.9f, 1.0f, 0.0f};
+	emitPickupParticles(particleSystem, rng, pos,
+		wandStart, wandEnd, 20);
 }
 
 bool DroppedItemSystem::trySwapWithPlayerIndex(int itemIndex, Wand *playerWands, bool *hasWands,

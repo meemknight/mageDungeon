@@ -59,7 +59,7 @@ struct EnemyBehavior
 	float projectileDamage = 1.0f;
 	float sideProjectileDamage = 1.0f;    // used by heavy volley
 	int burstCount = 3;                   // shots per burst
-	float burstInterval = 0.18f;          // time between burst shots
+	float burstInterval = 0.36f;          // time between burst shots
 	unsigned char specialShootPatterns = ShootPattern_None; // alternative patterns
 	float specialShootChance = 0.0f;      // chance to use special pattern per shot
 	float crossShotDamage = 1.0f;         // damage per rotating cross projectile
@@ -74,6 +74,16 @@ struct EnemyBehavior
 	float hoverMeleeArcStrength = 0.7f;   // sideways curve strength
 	float hoverMeleeMinDuration = 0.45f;  // minimum swoop time
 	float hoverMeleeSpeedMultiplier = 1.35f; // movement speed boost during swoop
+
+	// Dash attack configuration
+	bool dashEnabled = false;             // enable dash strike
+	float dashRange = 6.5f;               // trigger range for dash
+	float dashChance = 0.30f;             // chance per second while in range
+	float dashCooldown = 2.4f;            // seconds between dashes
+	float dashMinDuration = 0.28f;        // minimum dash time
+	float dashSpeedMultiplier = 3.0f;     // movement speed boost during dash
+	float dashContactDamage = 1.0f;       // damage on dash contact
+	float dashHitCooldown = 0.35f;        // summon hit cooldown during dash
 
 	// Orbit movement (close-range circling) configuration
 	bool orbitEnabled = false;            // circle target when in range
@@ -113,6 +123,14 @@ struct EnemyBehavior
 	float hoverMeleeActiveDuration = 0.0f;
 	float hoverMeleeCooldownTimer = 0.0f;
 	float hoverMeleeArcSign = 1.0f;
+
+	// Dash state
+	bool dashActive = false;
+	float dashTimer = 0.0f;
+	float dashDuration = 0.0f;
+	float dashCooldownTimer = 0.0f;
+	float dashHitCooldownTimer = 0.0f;
+	glm::vec2 dashDir = glm::vec2(1.0f, 0.0f);
 
 	// Orbit state
 	bool orbitActive = false;
@@ -174,10 +192,16 @@ struct EnemyBehavior
 		burstDamage = 1.0f;
 		useSpecialShot = false;
 		hoverMeleeActive = false;
-		hoverMeleeTimer = 0.0f;
-		hoverMeleeActiveDuration = 0.0f;
-		hoverMeleeCooldownTimer = 0.0f;
-		hoverMeleeArcSign = 1.0f;
+			hoverMeleeTimer = 0.0f;
+			hoverMeleeActiveDuration = 0.0f;
+			hoverMeleeCooldownTimer = 0.0f;
+			hoverMeleeArcSign = 1.0f;
+			dashActive = false;
+			dashTimer = 0.0f;
+			dashDuration = 0.0f;
+			dashCooldownTimer = 0.0f;
+			dashHitCooldownTimer = 0.0f;
+			dashDir = glm::vec2(1.0f, 0.0f);
 		orbitActive = false;
 		orbitDirectionTimer = 0.0f;
 		orbitRadialTimer = 0.0f;

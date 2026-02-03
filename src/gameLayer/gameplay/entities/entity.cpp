@@ -67,12 +67,35 @@ bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParti
 	if (glm::dot(moveDir, moveDir) > 0.0f)
 	{
 		float speedMultiplier = 1.0f;
-		if (behavior.hoverMeleeActive)
+		if (behavior.dashActive)
+		{
+			speedMultiplier = behavior.dashSpeedMultiplier;
+		}
+		else if (behavior.hoverMeleeActive)
 		{
 			speedMultiplier = behavior.hoverMeleeSpeedMultiplier;
 		}
 		float finalSpeed = behavior.speed * speedMultiplier * statusSpeedMultiplier;
 		physics.getPos() += moveDir * finalSpeed * deltaTime;
+	}
+
+	// Dash contact damage to summons
+	if (behavior.dashActive && behavior.dashHitCooldownTimer <= 0.0f &&
+		behavior.dashContactDamage > 0.0f)
+	{
+		for (auto &summon : summons.summons)
+		{
+			if (!summon->canBeTargeted()) { continue; }
+			if (physics.transform.intersectTransform(summon->physics.transform))
+			{
+				summon->life -= behavior.dashContactDamage;
+				glm::vec2 damagePos = summon->physics.getPos();
+				damagePos.y -= summon->physics.transform.size.y * 0.6f;
+				getDamageViewerSystem().addDamage(behavior.dashContactDamage, damagePos);
+				behavior.dashHitCooldownTimer = behavior.dashHitCooldown;
+				break;
+			}
+		}
 	}
 
 	// Determine current facing direction from movement (0=down, 1=side, 2=up) and flipX
@@ -147,6 +170,15 @@ void BasicMeleEnemy::onDamaged(float damage)
 		return;
 	}
 	behavior.requestPatrol();
+}
+
+float BasicMeleEnemy::getContactDamage() const
+{
+	if (behavior.dashActive)
+	{
+		return behavior.dashContactDamage;
+	}
+	return contactDamage;
 }
 
 void BasicMeleEnemy::render(gl2d::Renderer2D &renderer, ParticlePostProcessRenderer &particlePostProcessRenderer)

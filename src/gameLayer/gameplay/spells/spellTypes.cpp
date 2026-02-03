@@ -50,6 +50,7 @@ namespace SpellTypes
 			{Elements::Earth,Elements::Earth,Elements::Earth,Elements::Ice},	//earthRicochetIce,
 			{Elements::Earth,Elements::Earth,Elements::Earth,Elements::Water},	//earthRicochetWater,
 			{Elements::Ice,Elements::Ice,Elements::Ice},	//bigIceBlock,
+			{Elements::Fire,Elements::Fire,Elements::Ice},	//iceDragonsBreath,
 		};
 
 		static_assert(sizeof(allRecepies) / sizeof(allRecepies[0]) == SPELLS_COUNT);
@@ -152,6 +153,7 @@ namespace SpellTypes
 			"Earth Ricochet Ice",
 			"Earth Ricochet Water",
 			"Big Ice Block",
+			"Ice Dragon Breath",
 		};
 
 		static_assert(sizeof(names) / sizeof(names[0]) == SPELLS_COUNT);
@@ -321,6 +323,10 @@ namespace SpellTypes
 
 		case bigIceBlock:
 		return std::make_unique<BasicMagicMissleSpell>(getBigIceBlockSpell());
+		break;
+
+		case iceDragonsBreath:
+		return std::make_unique<BasicMagicMissleSpell>(getBasicBurstSpell(Elements::Ice));
 		break;
 
 		case none:

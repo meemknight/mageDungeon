@@ -103,9 +103,64 @@ namespace SpellTypes
 		ret.maxFireCount = 100;
 		ret.elementsPerCast = 3;
 		ret.triggerDelay = 0.03;
-		ret.projectile = std::make_unique<BasicMagicMissle>(hitStats, 2);
+		// Small animated particles for dragon breath bursts.
+		auto buildDragonBreathEmission = [&](int burstElement)
+		{
+			ParticleEmissionSettings emission;
+			glm::vec4 startColor = elementToSecondaryColor(burstElement); startColor.a = 0.65f;
+			glm::vec4 endColor = elementToColor(burstElement); endColor.a = 0.35f;
+			if (burstElement == Elements::Ice)
+			{
+				startColor.a = 0.8f;
+				endColor.a = 0.55f;
+			}
+
+			ParticleSettings spark;
+			if (burstElement == Elements::Ice)
+			{
+				spark = getFrostShardParticle(startColor, endColor);
+				spark.animationType = ParticleSettings::ANIMATION_TYPES::animationFigure8;
+			}
+			else
+			{
+				spark = getSparkBurstParticle(startColor, endColor);
+				spark.animationType = ParticleSettings::ANIMATION_TYPES::animationSpiral;
+			}
+
+			spark.onCreateCount = 1;
+			spark.particleLifeTime = {0.12f, 0.25f};
+			spark.velocityX *= 0.35f;
+			spark.velocityY *= 0.35f;
+			spark.dragX *= 0.6f;
+			spark.dragY *= 0.6f;
+			spark.createApearence.size *= 0.55f;
+			spark.endApearence.size *= 0.55f;
+			spark.animationSpeed = {-10.0f, 10.0f};
+			spark.animationAcceleration = {-2.0f, 2.0f};
+			spark.animationScaleX = {PIXEL_SIZE * 2.0f, PIXEL_SIZE * 4.0f};
+			spark.animationScaleY = {PIXEL_SIZE * 2.0f, PIXEL_SIZE * 4.0f};
+			spark.animationRotation = {-20.0f, 20.0f};
+			spark.animationPhase = {0.0f, 6.2831853f};
+			spark.folowParent = true;
+
+			emission.sustain = spark;
+			emission.create = spark;
+			emission.release = spark;
+			emission.release.particleLifeTime *= 1.6f;
+			emission.release.folowParent = false;
+			emission.emitTimer = 0.02f;
+
+			return emission;
+		};
+
+		ret.projectile = std::make_unique<BasicMagicMissle>(hitStats, 1.0f);
 		ret.projectile->timeAlieve = 0.25;
 		ret.driftAngleDegrees = 35.f;
+		if (auto missle = dynamic_cast<BasicMagicMissle *>(ret.projectile.get()))
+		{
+			missle->hasCustomEmission = true;
+			missle->customEmission = buildDragonBreathEmission(element);
+		}
 
 		return ret;
 	}
@@ -584,12 +639,12 @@ namespace SpellTypes
 		WaterSiphonSpell ret;
 		ret.element = Elements::Water;
 		ret.maxFireCount = 1;
-		ret.triggerDelay = 0.1f;
+		ret.triggerDelay = 0.2f;
 		return ret;
 	}
 
-	enum Spells
-	{
+		enum Spells
+		{
 		none,
 		sparkBolt, //empty spell with no element
 		fireBolt,
@@ -609,9 +664,9 @@ namespace SpellTypes
 		thornWall,
 		wildGrowth,
 		earthWaterThorn,
-		iceBolt,
-		dragonsBreath,
-		iceTrap,
+			iceBolt,
+			dragonsBreath,
+			iceTrap,
 		fireTrap,
 		waterTrap,
 		earthTrap,
@@ -629,11 +684,12 @@ namespace SpellTypes
 		waterSiphon,
 		earthRicochet,
 		earthRicochetIce,
-		earthRicochetWater,
-		bigIceBlock,
+			earthRicochetWater,
+			bigIceBlock,
+			iceDragonsBreath,
 
-		SPELLS_COUNT
-	};
+			SPELLS_COUNT
+		};
 
 	std::unique_ptr<Spell> getSpellFromRecepie(SpellRecepie recepie);
 

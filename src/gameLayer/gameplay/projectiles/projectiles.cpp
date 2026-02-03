@@ -1589,6 +1589,9 @@ bool FastMagicBoltProjectile::update(float deltaTime, Map &map, ParticleSystem &
 void FastMagicBoltProjectile::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
 	ParticlePostProcessRenderer &particlePostProcessRenderer)
 {
+	//collider
+	glm::vec4 aabb = physics.getAABB();
+	renderer.renderRectangle(aabb, {0.6f, 0.6f, 0.6f, 1.0f});
 	particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
 }
 

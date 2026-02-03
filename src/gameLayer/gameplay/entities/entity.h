@@ -100,6 +100,8 @@ struct Entity
 	EntityLifeThings life;
 	// Damage applied to the player on contact.
 	float contactDamage = 1.0f;
+	// Returns the current contact damage (can be overridden by subclasses).
+	virtual float getContactDamage() const { return contactDamage; }
 
 	int element = 0;
 
@@ -362,6 +364,7 @@ struct BasicMeleEnemy : public Entity
 		std::ranlux24_base &rng, Player &player, SummonHolder &summons,
 		ProjectileHolder &projectiles) override;
 	void onDamaged(float damage) override;
+	float getContactDamage() const override;
 
 	void render(gl2d::Renderer2D &renderer, ParticlePostProcessRenderer &particlePostProcessRenderer) override;
 };

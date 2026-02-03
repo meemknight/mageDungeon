@@ -28,6 +28,7 @@ struct DroppedItem
 	glm::vec2 pos = {};
 	Wand wand = {};
 	float hoverTimer = 0.0f;
+	float particleTimer = 0.0f; // idle particle pacing
 	float chestOpenTimer = 0.0f; // chest open animation + fade timer
 	bool chestOpening = false;
 };
@@ -39,7 +40,7 @@ struct DroppedItemSystem
 	std::vector<DroppedItem> items;
 
 	void clear();
-	void update(float deltaTime);
+	void update(float deltaTime, ParticleSystem &particleSystem, std::ranlux24_base &rng);
 	void render(gl2d::Renderer2D &renderer, AssetsManager &assetsManager,
 		glm::vec2 playerPos, bool usesController);
 
@@ -49,8 +50,9 @@ struct DroppedItemSystem
 	void spawnCoin(glm::vec2 pos, std::ranlux24_base &rng);
 	int findClosestInteractableIndex(glm::vec2 playerPos, float maxDist2) const;
 	bool openChest(int itemIndex, std::ranlux24_base &rng, ParticleSystem &particleSystem);
-	bool takeHearth(int itemIndex);
-	bool takeCoin(int itemIndex);
+	bool takeHearth(int itemIndex, ParticleSystem &particleSystem, std::ranlux24_base &rng);
+	bool takeCoin(int itemIndex, ParticleSystem &particleSystem, std::ranlux24_base &rng);
+	void emitWandPickupParticles(glm::vec2 pos, ParticleSystem &particleSystem, std::ranlux24_base &rng);
 	bool trySwapWithPlayerIndex(int itemIndex, Wand *playerWands, bool *hasWands,
 		int activeIndex, int &outSlot, bool &outSwapped, int &outItemIndex);
 	// tries to pick up or swap a wand; outputs slot, swap info, and item index

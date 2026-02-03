@@ -22,6 +22,31 @@
 
 #include <worldGen/floorGen.h>
 
+namespace
+{
+	// Spawns a random enemy from the basic roster.
+	void spawnRandomEnemy(EntityHolder &entityHolder, std::ranlux24_base &rng, glm::vec2 pos)
+	{
+		constexpr int enemyCount = 12;
+		int pick = getRandomInt(rng, 0, enemyCount - 1);
+		switch (pick)
+		{
+			case 0: entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), pos); break;
+			case 1: entityHolder.addEntity(EnemyTypes::getTemplarOriginalEnemy(), pos); break;
+			case 2: entityHolder.addEntity(EnemyTypes::getEarthTemplarEnemy(), pos); break;
+			case 3: entityHolder.addEntity(EnemyTypes::getFireTemplarEnemy(), pos); break;
+			case 4: entityHolder.addEntity(EnemyTypes::getIceTemplarEnemy(), pos); break;
+			case 5: entityHolder.addEntity(EnemyTypes::getWaterTemplarEnemy(), pos); break;
+			case 6: entityHolder.addEntity(EnemyTypes::getGoblinArcherEnemy(), pos); break;
+			case 7: entityHolder.addEntity(EnemyTypes::getGoblinSpearmanEnemy(), pos); break;
+			case 8: entityHolder.addEntity(EnemyTypes::getGoblinHeavyEnemy(), pos); break;
+			case 9: entityHolder.addEntity(EnemyTypes::getGoblinThiefEnemy(), pos); break;
+			case 10: entityHolder.addEntity(EnemyTypes::getOrcArcherEnemy(), pos); break;
+			default: entityHolder.addEntity(EnemyTypes::getDarkAngelEnemy(), pos); break;
+		}
+	}
+}
+
 bool GameLogic::init()
 {
 	
@@ -97,7 +122,7 @@ bool GameLogic::init()
 			spawnPositions[index] = spawnPositions.back();
 			spawnPositions.pop_back();
 
-		entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), pos);
+		spawnRandomEnemy(entityHolder, rng, pos);
 		}
 	}
 
@@ -345,23 +370,25 @@ bool GameLogic::update(float deltaTime,
 			}
 			else if (droppedItems.items[interactIndex].type == DroppedItemType::Hearth)
 			{
-				if (droppedItems.takeHearth(interactIndex))
+				if (droppedItems.takeHearth(interactIndex, particleSystem, rng))
 				{
 					player.life = std::min(player.maxLife, player.life + 2.0f);
 				}
 			}
 			else if (droppedItems.items[interactIndex].type == DroppedItemType::Coin)
 			{
-				droppedItems.takeCoin(interactIndex);
+				droppedItems.takeCoin(interactIndex, particleSystem, rng);
 			}
 			else
 			{
 				int pickedSlot = -1;
 				bool swappedWand = false;
 				int pickedItemIndex = -1;
+				glm::vec2 pickupPos = droppedItems.items[interactIndex].pos;
 				if (droppedItems.trySwapWithPlayerIndex(interactIndex, wands, hasWand,
 					activeWandIndex, pickedSlot, swappedWand, pickedItemIndex))
 				{
+					droppedItems.emitWandPickupParticles(pickupPos, particleSystem, rng);
 					if (pickedSlot >= 0)
 					{
 						if (swappedWand && pickedItemIndex >= 0
@@ -624,9 +651,9 @@ bool GameLogic::update(float deltaTime,
 			glm::vec2 spawnPos = player.physics.getPos() + glm::vec2(1.6f, 0.0f);
 			entityHolder.addEntity(enemy, spawnPos);
 		};
-		if (ImGui::Button("Skeleton"))
+		if (ImGui::Button("Random"))
 		{
-			spawnEnemyNearPlayer(EnemyTypes::getSkeletonEnemy());
+			spawnRandomEnemy(entityHolder, rng, player.physics.getPos() + glm::vec2(1.6f, 0.0f));
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Templar"))
@@ -886,7 +913,7 @@ bool GameLogic::update(float deltaTime,
 
 	particleSystem.update(simDelta);
 	damageViewerSystem.update(simDelta);
-	droppedItems.update(simDelta);
+	droppedItems.update(simDelta, particleSystem, rng);
 
 	summons.update(simDelta, map, particleSystem, projectiles, rng, player, entityHolder);
 
@@ -930,7 +957,7 @@ bool GameLogic::update(float deltaTime,
 			if (entity->dying) continue; // skip dying entities
 			if (player.physics.transform.intersectTransform(entity->physics.transform))
 			{
-				float damage = entity->contactDamage;
+				float damage = entity->getContactDamage();
 				if (damage <= 0.0f) { continue; }
 				player.life -= damage;
 				playerDamageCooldown = 0.5f;
@@ -1015,7 +1042,7 @@ bool GameLogic::update(float deltaTime,
 				}
 
 				if (!placed) { continue; }
-				entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), spawnPos);
+				spawnRandomEnemy(entityHolder, rng, spawnPos);
 				break;
 			}
 		}

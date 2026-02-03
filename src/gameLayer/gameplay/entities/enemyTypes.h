@@ -28,7 +28,7 @@ namespace EnemyTypes
 		enemy.behavior.projectileDamage = damage;
 		enemy.behavior.sideProjectileDamage = 1.0f;
 		enemy.behavior.burstCount = 3;
-		enemy.behavior.burstInterval = 0.18f;
+		enemy.behavior.burstInterval = 0.36f;
 	}
 
 	// Configures a melee-only enemy (life + no shooting).
@@ -176,6 +176,7 @@ namespace EnemyTypes
 		{
 			setupEnemy(*this, getAssetManager().darkAngel, 64);
 			setupRanged(*this, ShootPattern_Single, 40.0f, 2.0f);
+			behavior.speed = 2.6f;
 			behavior.shootRange = 10.0f;
 			behavior.shootCooldown = 1.7f;
 			behavior.projectileSpeed = 4.6f;
@@ -186,12 +187,21 @@ namespace EnemyTypes
 			behavior.hoverMeleeCooldown = 1.6f;
 			behavior.hoverMeleeArcStrength = 0.85f;
 			behavior.hoverMeleeSpeedMultiplier = 2.5f;
+			behavior.dashEnabled = true;
+			behavior.dashRange = 7.0f;
+			behavior.dashChance = 0.35f;
+			behavior.dashCooldown = 2.2f;
+			behavior.dashSpeedMultiplier = 3.2f;
+			behavior.dashContactDamage = 1.0f;
+			behavior.dashMinDuration = 0.28f;
+			behavior.dashHitCooldown = 0.35f;
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
 			behavior.specialShootChance = 0.45f;
+			contactDamage = 2.0f;
 			hoverEnabled = true;
 			hoverHeight = PIXEL_SIZE * 2.0f;
 			hoverSpeed = 2.3f;
-			renderOffsetY = PIXEL_SIZE * 24.0f;
+			renderOffsetY = PIXEL_SIZE * 26.0f;
 		}
 	};
 
