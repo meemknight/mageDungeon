@@ -341,7 +341,18 @@ bool GameLogic::update(float deltaTime,
 		{
 			if (droppedItems.items[interactIndex].type == DroppedItemType::Chest)
 			{
-				droppedItems.openChest(interactIndex);
+				droppedItems.openChest(interactIndex, rng, particleSystem);
+			}
+			else if (droppedItems.items[interactIndex].type == DroppedItemType::Hearth)
+			{
+				if (droppedItems.takeHearth(interactIndex))
+				{
+					player.life = std::min(player.maxLife, player.life + 2.0f);
+				}
+			}
+			else if (droppedItems.items[interactIndex].type == DroppedItemType::Coin)
+			{
+				droppedItems.takeCoin(interactIndex);
 			}
 			else
 			{
@@ -919,11 +930,13 @@ bool GameLogic::update(float deltaTime,
 			if (entity->dying) continue; // skip dying entities
 			if (player.physics.transform.intersectTransform(entity->physics.transform))
 			{
-				player.life -= 1.0f;
-				playerDamageCooldown = 0.6f;
+				float damage = entity->contactDamage;
+				if (damage <= 0.0f) { continue; }
+				player.life -= damage;
+				playerDamageCooldown = 0.5f;
 				glm::vec2 damagePos = player.physics.getPos();
 				damagePos.y -= player.physics.transform.size.y * 0.6f;
-				getDamageViewerSystem().addDamage(1.0f, damagePos);
+				getDamageViewerSystem().addDamage(damage, damagePos);
 				break;
 			}
 		}

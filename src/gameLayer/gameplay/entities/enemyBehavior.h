@@ -8,7 +8,7 @@
 #include <vector>
 
 struct SummonHolder;
-struct Summon;
+struct SummonEntity;
 struct ProjectileHolder;
 
 // Shooting pattern flags - can be combined
@@ -37,6 +37,17 @@ struct EnemyBehavior
 	bool seeThroughWalls = false;         // ignore LOS checks
 	bool wanderWhenIdle = false;          // wander randomly when not chasing
 	float stopChaseRange = 0.0f;          // stop moving when in LOS and within this distance
+	bool patrolEnabled = true;            // patrol when damaged or after losing LOS
+	float patrolHitDurationMin = 1.6f;    // min patrol time after damage
+	float patrolHitDurationMax = 3.2f;    // max patrol time after damage
+	float patrolAfterLoseMin = 2.0f;      // min patrol time after losing LOS
+	float patrolAfterLoseMax = 3.0f;      // max patrol time after losing LOS
+	float patrolDirChangeMin = 0.5f;      // min seconds before turning
+	float patrolDirChangeMax = 1.2f;      // max seconds before turning
+	float patrolStopChance = 0.08f;       // chance to pause while patrolling
+	float closeTargetExtraRange = 1.0f;   // extra distance beyond melee to switch targets
+	float targetSwitchCooldown = 1.0f;    // seconds between target switches
+	float targetSwitchMargin = 0.2f;      // distance margin before switching targets
 
 	// Shooting configuration
 	unsigned char shootPatterns = ShootPattern_None;  // which patterns this enemy uses
@@ -52,7 +63,7 @@ struct EnemyBehavior
 	unsigned char specialShootPatterns = ShootPattern_None; // alternative patterns
 	float specialShootChance = 0.0f;      // chance to use special pattern per shot
 	float crossShotDamage = 1.0f;         // damage per rotating cross projectile
-	float crossShotOrbitRadius = PIXEL_SIZE * 12.0f; // distance from center
+	float crossShotOrbitRadius = PIXEL_SIZE * 13.0f; // distance from center
 	float crossShotOrbitSpeed = 3.6f;     // radians per second
 
 	// Hover melee (flying swoop) configuration
@@ -110,6 +121,16 @@ struct EnemyBehavior
 	float orbitRadialOffset = 0.0f;
 	float orbitSign = 1.0f;
 
+	// Patrol state
+	bool patrolActive = false;
+	bool patrolRequested = false;
+	float patrolTimer = 0.0f;
+	float patrolDirTimer = 0.0f;
+	glm::vec2 patrolDir = glm::vec2(0.0f);
+	float targetSwitchTimer = 0.0f;
+	bool targetIsSummon = false;
+	SummonEntity *targetSummon = nullptr;
+
 	// Output from last update
 	glm::vec2 moveDir = glm::vec2(0.0f);
 	glm::vec2 currentTargetPos = glm::vec2(0.0f);
@@ -127,6 +148,9 @@ struct EnemyBehavior
 	// Spawns projectiles into the holder.
 	void shoot(glm::vec2 enemyPos, ProjectileHolder &projectiles,
 		Player &player, SummonHolder &summons, std::ranlux24_base &rng);
+
+	// Called when the enemy takes damage and should start patrolling.
+	void requestPatrol() { patrolRequested = true; }
 
 	// Reset state when enemy spawns or needs to forget everything
 	void reset()
@@ -159,6 +183,14 @@ struct EnemyBehavior
 		orbitRadialTimer = 0.0f;
 		orbitRadialOffset = 0.0f;
 		orbitSign = 1.0f;
+		patrolActive = false;
+		patrolRequested = false;
+		patrolTimer = 0.0f;
+		patrolDirTimer = 0.0f;
+		patrolDir = glm::vec2(0.0f);
+		targetSwitchTimer = 0.0f;
+		targetIsSummon = false;
+		targetSummon = nullptr;
 	}
 
 	// Called when enemy hits a wall, forces repath

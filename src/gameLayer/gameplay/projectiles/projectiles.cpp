@@ -28,6 +28,10 @@ bool basicProjectileHitEntitiesLogic(PhysicalEntity &physics,
 			glm::vec2 pushBack = {};
 
 			e->life.computeHit(hitStats, projectileElement, e->element, projectileMoveDirection, pushBack);
+			if (hitStats.damage > 0.0f)
+			{
+				e->onDamaged(hitStats.damage);
+			}
 			e->physics.velocity += pushBack;
 			addStatusEffectFromElement(e->statusEffects, e->statusImmunities, projectileElement, statusAmount);
 
@@ -427,6 +431,137 @@ static void applyWildColors(ParticleSettings &p, glm::vec4 startColor, glm::vec4
 	p.endApearence.color2 = endColor;
 }
 
+// trap visuals: layered ring + inner orbit, tuned per element.
+static ParticleSettings buildTrapRingParticle(int element)
+{
+	glm::vec4 startColor = elementToSecondaryColor(element);
+	glm::vec4 endColor = elementToColor(element);
+	startColor.a = 0.75f;
+	endColor.a = 0.7f;
+	const float sizeScale = 0.85f;
+
+	ParticleSettings p;
+	if (element == Elements::Fire)
+	{
+		p = getSparkBurstParticle(startColor, endColor);
+		p.onCreateCount = 1;
+		p.particleLifeTime = {0.18f, 0.32f};
+		p.velocityX *= 0.35f;
+		p.velocityY *= 0.35f;
+		p.dragX *= 0.5f;
+		p.dragY *= 0.5f;
+	}
+	else if (element == Elements::Ice)
+	{
+		p = getFrostShardParticle(startColor, endColor);
+		p.onCreateCount = 1;
+		p.particleLifeTime = {0.24f, 0.4f};
+		p.velocityX *= 0.3f;
+		p.velocityY *= 0.3f;
+		p.dragX *= 0.6f;
+		p.dragY *= 0.6f;
+	}
+	else if (element == Elements::Water)
+	{
+		startColor = elementToColor(element);
+		endColor = elementToSecondaryColor(element);
+		startColor.a = 0.65f;
+		endColor.a = 0.6f;
+		p = getArcaneTrailParticle(startColor, endColor);
+		p.onCreateCount = 1;
+		p.particleLifeTime = {0.28f, 0.45f};
+		p.velocityX *= 0.35f;
+		p.velocityY *= 0.25f;
+		p.dragX *= 0.6f;
+		p.dragY *= 0.6f;
+	}
+	else if (element == Elements::Earth)
+	{
+		startColor = elementToColor(element);
+		endColor = changeColorBrightness(startColor, -0.25f);
+		startColor.a = 0.7f;
+		endColor.a = 0.65f;
+		p = getPoisonMistParticle(startColor, endColor);
+		p.onCreateCount = 1;
+		p.particleLifeTime = {0.4f, 0.65f};
+		p.velocityX *= 0.35f;
+		p.velocityY *= 0.35f;
+		p.dragX *= 0.5f;
+		p.dragY *= 0.5f;
+	}
+	else
+	{
+		p = getSmallSquareParticle(startColor, endColor);
+	}
+
+	p.createApearence.size *= sizeScale;
+	p.endApearence.size *= sizeScale;
+	p.folowParent = false;
+	return p;
+}
+
+static ParticleSettings buildTrapOrbitParticle(int element, float radius)
+{
+	glm::vec4 startColor = elementToSecondaryColor(element);
+	glm::vec4 endColor = elementToColor(element);
+	startColor.a = 0.6f;
+	endColor.a = 0.5f;
+	const float sizeScale = 0.85f;
+
+	ParticleSettings p;
+	if (element == Elements::Water)
+	{
+		p = getFigure8Particle(startColor, endColor);
+	}
+	else if (element == Elements::Earth)
+	{
+		p = getSpiralParticle(startColor, endColor);
+	}
+	else if (element == Elements::Ice)
+	{
+		p = getAtomParticle(startColor, endColor);
+	}
+	else
+	{
+		p = getOrbitParticle(startColor, endColor);
+	}
+
+	p.onCreateCount = 2;
+	p.particleLifeTime = {0.8f, 1.4f};
+	p.createApearence.size = glm::vec2{2.2f, 3.2f} * PIXEL_SIZE;
+	p.endApearence.size = glm::vec2{1.0f, 2.0f} * PIXEL_SIZE;
+	p.createApearence.size *= sizeScale;
+	p.endApearence.size *= sizeScale;
+	p.animationScaleX = {radius * 0.55f, radius * 0.95f};
+	p.animationScaleY = {radius * 0.55f, radius * 0.95f};
+	p.animationSpeed = {-4.5f, 4.5f};
+	p.animationAcceleration = {-0.8f, 0.8f};
+	p.animationRotation = {-25.0f, 25.0f};
+	p.folowParent = false;
+
+	return p;
+}
+
+static ParticleSettings buildTrapBurstParticle(int element)
+{
+	glm::vec4 startColor = elementToSecondaryColor(element);
+	glm::vec4 endColor = elementToColor(element);
+	if (element == Elements::Earth)
+	{
+		startColor = elementToColor(element);
+		endColor = changeColorBrightness(startColor, -0.2f);
+	}
+	startColor.a = 0.85f;
+	endColor.a = 0.8f;
+
+	ParticleSettings p = getTeleportPuffParticle(startColor, endColor);
+	p.onCreateCount = 14;
+	p.createApearence.size *= 0.6f;
+	p.endApearence.size *= 0.6f;
+	p.folowParent = false;
+	return p;
+}
+
 AimableBoltProjectile::AimableBoltProjectile()
 {
 	hitStats.damage = 18.0f;
@@ -816,24 +951,71 @@ bool TrapProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParti
 {
 	physics.transform.size = glm::vec2(trapRadious * 2);
 
+	if (!particlesInitialized)
+	{
+		particlesInitialized = true;
+		ringParticle = buildTrapRingParticle(element);
+		orbitParticle = buildTrapOrbitParticle(element, trapRadious);
+		burstParticle = buildTrapBurstParticle(element);
+
+		ringRotation = getRandomFloat(rng, 0.0f, 6.2831853f);
+		ringSpinSpeed = getRandomFloat(rng, 0.6f, 1.2f);
+		if (getRandomChance(rng, 0.5f)) { ringSpinSpeed *= -1.0f; }
+
+		if (element == Elements::Fire)
+		{
+			ringEmitInterval = 0.14f;
+			orbitEmitInterval = 0.24f;
+			ringStep = 0.26f;
+		}
+		else if (element == Elements::Ice)
+		{
+			ringEmitInterval = 0.18f;
+			orbitEmitInterval = 0.28f;
+			ringStep = 0.28f;
+		}
+		else if (element == Elements::Water)
+		{
+			ringEmitInterval = 0.2f;
+			orbitEmitInterval = 0.3f;
+			ringStep = 0.32f;
+		}
+		else if (element == Elements::Earth)
+		{
+			ringEmitInterval = 0.22f;
+			orbitEmitInterval = 0.36f;
+			ringStep = 0.34f;
+		}
+
+		particleTimer = getRandomFloat(rng, 0.0f, ringEmitInterval);
+		orbitTimer = getRandomFloat(rng, 0.0f, orbitEmitInterval);
+	}
+
+	ringRotation += ringSpinSpeed * deltaTime;
+
 	particleTimer -= deltaTime;
 	if (particleTimer < 0)
 	{
-		particleTimer += 0.20f;
-		auto particle = getSmallSquareParticle(elementToColor(element),
-			elementToSecondaryColor(element));
-		particle.folowParent = false;
-
-		for (float i = 0; i < 3.14159f * 2; i += 0.3f)
+		particleTimer += ringEmitInterval;
+		const float twoPi = 6.2831853f;
+		for (float i = 0; i < twoPi; i += ringStep)
 		{
 			float dist = trapRadious;
-			glm::vec2 p = getPos() + glm::vec2(std::cos(i), std::sin(i)) * dist;
+			float angle = i + ringRotation;
+			glm::vec2 p = getPos() + glm::vec2(std::cos(angle), std::sin(angle)) * dist;
 
 			if (HasLineOfSightGrid(map, getPos(), p))
 			{
-				particleSystem.emitParticles(particle, p, rng, physics.getPos());
+				particleSystem.emitParticles(ringParticle, p, rng, physics.getPos());
 			}
 		}
+	}
+
+	orbitTimer -= deltaTime;
+	if (orbitTimer <= 0.0f)
+	{
+		orbitTimer += orbitEmitInterval;
+		particleSystem.emitParticles(orbitParticle, getPos(), rng, physics.getPos());
 	}
 
 	auto projectile = physics.transform;
@@ -845,6 +1027,10 @@ bool TrapProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParti
 		glm::vec2 pushBack = {};
 		glm::vec2 hitDir = target.physics.getPos() - getPos();
 		target.life.computeHit(hitStats, element, target.element, hitDir, pushBack);
+		if (hitStats.damage > 0.0f)
+		{
+			target.onDamaged(hitStats.damage);
+		}
 		target.physics.velocity += pushBack;
 		addStatusEffectFromElement(target.statusEffects, target.statusImmunities, element, statusAmount);
 
@@ -872,55 +1058,7 @@ bool TrapProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParti
 		triggerTimer -= deltaTime;
 		if (triggerTimer <= 0)
 		{
-			if (element == Elements::Earth)
-			{
-				// Earth trap: spawn a thorn ring around the player.
-				auto &player = getPlayer();
-				glm::vec2 playerPos = player.physics.getPos();
-				glm::ivec2 playerTile = WorldToTile(playerPos);
-				auto &projectileHolder = getProjectileHolder();
-
-				auto isBlocked = [&](const glm::ivec2 &tile)
-				{
-					if (tile.x < 0 || tile.y < 0 || tile.x >= map.size.x || tile.y >= map.size.y)
-					{
-						return true;
-					}
-					return map.isCollidableAtPosSafe(tile.x, tile.y);
-				};
-
-				const float twoPi = 6.2831853f;
-				float angleStep = twoPi / (float)earthThornCount;
-				float baseAngle = getRandomFloat(rng, 0.0f, twoPi);
-
-				for (int i = 0; i < earthThornCount; i++)
-				{
-					float angle = baseAngle + angleStep * (float)i;
-					bool spawned = false;
-					for (int tries = 0; tries < earthRingAttempts && !spawned; tries++)
-					{
-						float jitterAngle = angle + getRandomFloat(rng, -earthRingAngleJitter, earthRingAngleJitter);
-						float radius = earthRingRadius + getRandomFloat(rng, -earthRingRadiusJitter, earthRingRadiusJitter);
-						glm::vec2 spawnPos = playerPos + glm::vec2(std::cos(jitterAngle), std::sin(jitterAngle)) * radius;
-						glm::ivec2 spawnTile = WorldToTile(spawnPos);
-						if (isBlocked(spawnTile))
-						{
-							continue;
-						}
-						if (!HasLineOfSightGrid(map, playerTile, spawnTile))
-						{
-							continue;
-						}
-						auto thorn = std::make_unique<ThornProjectile>();
-						thorn->element = Elements::Earth;
-						projectileHolder.addProjectileDeferredAsPtr(std::move(thorn), spawnPos);
-						spawned = true;
-					}
-				}
-
-				return false;
-			}
-
+			particleSystem.emitParticles(burstParticle, getPos(), rng, physics.getPos());
 			if (element == Elements::Water)
 			{
 				Entity *bestTarget = nullptr;
@@ -981,6 +1119,10 @@ bool ThornProjectile::update(float deltaTime, Map &map, ParticleSystem &mainPart
 		{
 			glm::vec2 pushBack = {};
 			e->life.computeHit(hitStats, element, e->element, {}, pushBack);
+			if (hitStats.damage > 0.0f)
+			{
+				e->onDamaged(hitStats.damage);
+			}
 			e->physics.velocity += pushBack;
 
 			glm::vec2 damagePos = e->physics.getPos();
@@ -1256,6 +1398,10 @@ bool RicochetProjectile::update(float deltaTime, Map &map, ParticleSystem &mainP
 			{
 				glm::vec2 pushBack = {};
 				e->life.computeHit(hitStats, element, e->element, physics.velocity, pushBack);
+				if (hitStats.damage > 0.0f)
+				{
+					e->onDamaged(hitStats.damage);
+				}
 				e->physics.velocity += pushBack;
 				addStatusEffectFromElement(e->statusEffects, e->statusImmunities, element, 2.0f);
 
@@ -1421,6 +1567,10 @@ bool FastMagicBoltProjectile::update(float deltaTime, Map &map, ParticleSystem &
 		{
 			glm::vec2 pushBack = {};
 			e->life.computeHit(hitStats, element, e->element, physics.velocity, pushBack);
+			if (hitStats.damage > 0.0f)
+			{
+				e->onDamaged(hitStats.damage);
+			}
 			e->physics.velocity += pushBack;
 
 			glm::vec2 damagePos = e->physics.getPos();
@@ -1794,6 +1944,10 @@ bool ElementWallProjectile::update(float deltaTime, Map &map, ParticleSystem &ma
 				hitDir = e->physics.getPos() - physics.getPos();
 			}
 			e->life.computeHit(hitStats, element, e->element, {hitDir}, pushBack);
+			if (hitStats.damage > 0.0f)
+			{
+				e->onDamaged(hitStats.damage);
+			}
 			e->physics.velocity += pushBack;
 			glm::vec2 damagePos = e->physics.getPos();
 			damagePos.y -= e->physics.transform.size.y * 0.6f;
@@ -2053,7 +2207,7 @@ void EnemyOrbProjectile::setupParticles()
 
 void EnemyOrbProjectile::updateDamageColors()
 {
-	float t = std::clamp((damage - 1.0f) / 2.0f, 0.0f, 1.0f);
+	float t = std::clamp((damage - 1.0f) / 1.5f, 0.0f, 1.0f);
 
 	glm::vec4 coreA = {0.9f, 0.7f, 0.2f, 1.f};
 	glm::vec4 coreB = {0.9f, 0.6f, 0.1f, 1.f};

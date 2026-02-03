@@ -88,6 +88,7 @@ struct FloorGenerator
 		float floor2Chance = 0.12f;
 		float grassRoomDirtSpotChance = 0.08f;
 		float roadDirtDecorChance = 0.18f;
+		float grassRoomDirtExpandChance = 0.30f;
 
 		float grassDecorNoiseFrequency = 0.1f;
 		int grassDecorNoiseOctaves = 3;
@@ -105,7 +106,7 @@ struct FloorGenerator
 		float dirtDecorCutoff = 0.80f;
 
 		float plainsDirtThreshold = 0.4f;
-		float grassRoomDirtThreshold = 0.18f;
+		float grassRoomDirtThreshold = 0.16f;
 
 		float grassDecorThresholdPlains = 0.48f;
 		float grassDecorThresholdDungeon = 0.55f;
@@ -1056,6 +1057,54 @@ struct FloorGenerator
 					}
 				}
 				if (!placed) { break; }
+			}
+		};
+
+		// Slightly thickens dirt blobs inside grass rooms.
+		auto expandGrassRoomDirtPatches = [&](const Rect &room)
+		{
+			if (cosmetics.grassRoomDirtExpandChance <= 0.0f) { return; }
+			const int offsets[4][2] = {{1,0}, {-1,0}, {0,1}, {0,-1}};
+			std::vector<glm::ivec2> toDirt;
+			for (int y = room.y + 1; y < room.y2() - 1; y++)
+			{
+				for (int x = room.x + 1; x < room.x2() - 1; x++)
+				{
+					auto &base = map.firstLayer.getBlockUnsafe(x, y);
+					if (base.type != Blocks::dirt && base.type != Blocks::dirtDecoration) { continue; }
+					for (auto &o : offsets)
+					{
+						int nx = x + o[0];
+						int ny = y + o[1];
+						if (nx < room.x + 1 || nx >= room.x2() - 1 || ny < room.y + 1 || ny >= room.y2() - 1)
+						{
+							continue;
+						}
+						auto &nb = map.firstLayer.getBlockUnsafe(nx, ny);
+						if (nb.type == Blocks::grass || nb.type == Blocks::grassDecoration
+							|| nb.type == Blocks::grassDecorationStones
+							|| nb.type == Blocks::grassDecorationFlowers
+							|| nb.type == Blocks::grassDecorationMushrooms)
+						{
+							if (getRandomChance(rng, cosmetics.grassRoomDirtExpandChance))
+							{
+								toDirt.push_back({nx, ny});
+							}
+						}
+					}
+				}
+			}
+
+			for (auto pos : toDirt)
+			{
+				auto &tile = map.firstLayer.getBlockUnsafe(pos.x, pos.y);
+				if (tile.type == Blocks::grass || tile.type == Blocks::grassDecoration
+					|| tile.type == Blocks::grassDecorationStones
+					|| tile.type == Blocks::grassDecorationFlowers
+					|| tile.type == Blocks::grassDecorationMushrooms)
+				{
+					tile.type = Blocks::dirt;
+				}
 			}
 		};
 
@@ -2457,6 +2506,13 @@ struct FloorGenerator
 		if (hasGrassRooms)
 		{
 			placeRandomDirtSpots(map, seed + 140, cosmetics.grassRoomDirtThreshold);
+			for (const auto &room : rooms)
+			{
+				if (room.isGrassRoom)
+				{
+					expandGrassRoomDirtPatches(room);
+				}
+			}
 			decorateGrassPatches(map, seed + 303);
 			for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
 			{

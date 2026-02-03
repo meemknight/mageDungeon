@@ -98,6 +98,8 @@ struct Entity
 	float statusSpeedMultiplier = 1.0f;
 
 	EntityLifeThings life;
+	// Damage applied to the player on contact.
+	float contactDamage = 1.0f;
 
 	int element = 0;
 
@@ -127,6 +129,8 @@ struct Entity
 	virtual bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		std::ranlux24_base &rng, Player &player, SummonHolder &summons,
 		ProjectileHolder &projectiles) = 0;
+	// Called when entity takes damage.
+	virtual void onDamaged(float damage) { (void)damage; }
 
 	virtual void render(gl2d::Renderer2D &renderer, ParticlePostProcessRenderer &particlePostProcessRenderer) = 0;
 
@@ -357,6 +361,7 @@ struct BasicMeleEnemy : public Entity
 	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		std::ranlux24_base &rng, Player &player, SummonHolder &summons,
 		ProjectileHolder &projectiles) override;
+	void onDamaged(float damage) override;
 
 	void render(gl2d::Renderer2D &renderer, ParticlePostProcessRenderer &particlePostProcessRenderer) override;
 };

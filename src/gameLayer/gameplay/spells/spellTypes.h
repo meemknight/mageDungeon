@@ -481,6 +481,21 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline EarthTrapSpell getEarthTrapSpell()
+	{
+		EarthTrapSpell ret;
+		ret.element = Elements::Earth;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.0f;
+		ret.thornCount = 15;
+		ret.minRadius = 0.25f;
+		ret.maxRadius = 1.1f;
+		ret.offsetJitter = 0.1f;
+		ret.spawnAttempts = 12;
+		ret.particleBurstCount = 3.0f;
+		return ret;
+	}
+
 	inline BasicMagicMissleSpell getEarthWaterThornSpell()
 	{
 		BasicMagicMissleSpell ret;

@@ -679,7 +679,98 @@ struct WildGrowthSpell: public Spell
 		}
 	}
 
-	return true;
+		return true;
+	}
+};
+
+// Instantly sprouts a tight patch of thorns around the player.
+struct EarthTrapSpell: public Spell
+{
+	// **configuration variables**
+	int thornCount = 15;
+	float minRadius = 0.35f;
+	float maxRadius = 1.35f;
+	float offsetJitter = 0.12f;
+	int spawnAttempts = 10;
+	float particleBurstCount = 3.0f;
+
+	// **state variables**
+	// (none)
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		(void)deltaTime;
+		(void)entityHolder;
+		(void)currentAimDir;
+
+		glm::vec2 origin = player.physics.getPos();
+		glm::ivec2 originTile = WorldToTile(origin);
+
+		auto isBlocked = [&](const glm::ivec2 &tile)
+		{
+			if (tile.x < 0 || tile.y < 0 || tile.x >= map.size.x || tile.y >= map.size.y)
+			{
+				return true;
+			}
+			return map.isCollidableAtPosSafe(tile.x, tile.y);
+		};
+
+		auto hasLocalThorn = [&](const glm::ivec2 &tile, const std::vector<glm::ivec2> &placedTiles)
+		{
+			for (auto &t : placedTiles)
+			{
+				if (t == tile) { return true; }
+			}
+			return false;
+		};
+
+		glm::vec4 startColor = elementToSecondaryColor(Elements::Earth);
+		glm::vec4 endColor = elementToColor(Elements::Earth);
+		startColor.g *= 0.8f;
+		endColor.g *= 0.8f;
+		auto burst = getSmallSquareParticle(startColor, endColor);
+		burst.onCreateCount = (short)particleBurstCount;
+		burst.particleLifeTime = {0.25f, 0.4f};
+		burst.velocityX = glm::vec2{-8.0f, 8.0f} * PIXEL_SIZE;
+		burst.velocityY = glm::vec2{-8.0f, 8.0f} * PIXEL_SIZE;
+		burst.createApearence.size = glm::vec2{2.0f, 2.8f} * PIXEL_SIZE;
+		burst.endApearence.size = glm::vec2{0.6f, 1.2f} * PIXEL_SIZE;
+		burst.folowParent = false;
+
+		std::vector<glm::ivec2> placedTiles;
+		placedTiles.reserve(thornCount);
+
+		const float twoPi = 6.2831853f;
+		for (int i = 0; i < thornCount; i++)
+		{
+			bool spawned = false;
+			for (int tries = 0; tries < spawnAttempts && !spawned; tries++)
+			{
+				float angle = getRandomFloat(rng, 0.0f, twoPi);
+				float radius = minRadius + (maxRadius - minRadius)
+					* std::sqrt(getRandomFloat(rng, 0.0f, 1.0f));
+				glm::vec2 offset = glm::vec2(std::cos(angle), std::sin(angle)) * radius;
+				offset.x += getRandomFloat(rng, -offsetJitter, offsetJitter);
+				offset.y += getRandomFloat(rng, -offsetJitter, offsetJitter);
+				glm::vec2 spawnPos = origin + offset;
+
+				glm::ivec2 spawnTile = WorldToTile(spawnPos);
+				if (isBlocked(spawnTile)) { continue; }
+				if (hasLocalThorn(spawnTile, placedTiles)) { continue; }
+				if (!HasLineOfSightGrid(map, originTile, spawnTile)) { continue; }
+
+				auto thorn = std::make_unique<ThornProjectile>();
+				thorn->element = Elements::Earth;
+				projectileHolder.addProjectileDeferredAsPtr(std::move(thorn), spawnPos);
+				mainParticleSystem.emitParticles(burst, spawnPos, rng, spawnPos);
+				placedTiles.push_back(spawnTile);
+				spawned = true;
+			}
+		}
+
+		return true;
 	}
 };
 
@@ -880,6 +971,10 @@ struct WaterSiphonSpell: public Spell
 				HitStats rampStats = hitStats;
 				rampStats.damage = rampDamage;
 				target->life.computeHit(rampStats, element, target->element, aimDir, pushBack);
+				if (rampStats.damage > 0.0f)
+				{
+					target->onDamaged(rampStats.damage);
+				}
 				target->physics.velocity += pushBack;
 				glm::vec2 damagePos = target->physics.getPos();
 				damagePos.y -= target->physics.transform.size.y * 0.6f;

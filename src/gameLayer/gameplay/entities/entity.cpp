@@ -140,6 +140,15 @@ bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParti
 	return true;
 }
 
+void BasicMeleEnemy::onDamaged(float damage)
+{
+	if (damage <= 0.0f)
+	{
+		return;
+	}
+	behavior.requestPatrol();
+}
+
 void BasicMeleEnemy::render(gl2d::Renderer2D &renderer, ParticlePostProcessRenderer &particlePostProcessRenderer)
 {
 	glm::vec4 aabb = physics.getAABB();

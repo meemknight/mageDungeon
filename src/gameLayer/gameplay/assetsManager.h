@@ -70,6 +70,8 @@ struct AssetsManager
 
 	TileSet wands;
 	TileSet woodenChest;
+	TileSet hearth;
+	TileSet coin;
 	TileSet carpetDecals;
 	ButtonSprites buttonSprites;
 

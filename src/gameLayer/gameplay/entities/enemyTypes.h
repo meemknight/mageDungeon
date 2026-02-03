@@ -55,7 +55,8 @@ namespace EnemyTypes
 			setupMele(*this, 22.0f);
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
 			behavior.specialShootChance = 0.18f;
-			renderOffsetY = PIXEL_SIZE * 4.0f;
+			contactDamage = 2.0f;
+			renderOffsetY = PIXEL_SIZE * 10.0f;
 		}
 	};
 
@@ -67,8 +68,9 @@ namespace EnemyTypes
 			setupMele(*this, 22.0f);
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
 			behavior.specialShootChance = 0.18f;
+			contactDamage = 2.0f;
 			element = Elements::Earth;
-			renderOffsetY = PIXEL_SIZE * 4.0f;
+			renderOffsetY = PIXEL_SIZE * 10.0f;
 		}
 	};
 
@@ -80,8 +82,9 @@ namespace EnemyTypes
 			setupMele(*this, 22.0f);
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
 			behavior.specialShootChance = 0.18f;
+			contactDamage = 2.0f;
 			element = Elements::Fire;
-			renderOffsetY = PIXEL_SIZE * 4.0f;
+			renderOffsetY = PIXEL_SIZE * 10.0f;
 		}
 	};
 
@@ -93,8 +96,9 @@ namespace EnemyTypes
 			setupMele(*this, 22.0f);
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
 			behavior.specialShootChance = 0.18f;
+			contactDamage = 2.0f;
 			element = Elements::Ice;
-			renderOffsetY = PIXEL_SIZE * 4.0f;
+			renderOffsetY = PIXEL_SIZE * 10.0f;
 		}
 	};
 
@@ -106,8 +110,9 @@ namespace EnemyTypes
 			setupMele(*this, 22.0f);
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
 			behavior.specialShootChance = 0.18f;
+			contactDamage = 2.0f;
 			element = Elements::Water;
-			renderOffsetY = PIXEL_SIZE * 4.0f;
+			renderOffsetY = PIXEL_SIZE * 10.0f;
 		}
 	};
 
@@ -186,7 +191,7 @@ namespace EnemyTypes
 			hoverEnabled = true;
 			hoverHeight = PIXEL_SIZE * 2.0f;
 			hoverSpeed = 2.3f;
-			renderOffsetY = PIXEL_SIZE * 18.0f;
+			renderOffsetY = PIXEL_SIZE * 24.0f;
 		}
 	};
 

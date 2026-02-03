@@ -5,6 +5,7 @@
 #include <gameplay/wand.h>
 
 struct AssetsManager;
+struct ParticleSystem;
 
 namespace gl2d
 {
@@ -16,7 +17,9 @@ enum class DroppedItemType
 {
 	None,
 	Wand,
-	Chest
+	Chest,
+	Hearth,
+	Coin
 };
 
 struct DroppedItem
@@ -30,7 +33,7 @@ struct DroppedItem
 };
 
 // Handles dropped items in the world (spawn, hover, render, pickup).
-// Chests play an open animation then fade out before removal.
+// Chests play an open animation, drop a coin or hearth, then fade out before removal.
 struct DroppedItemSystem
 {
 	std::vector<DroppedItem> items;
@@ -42,8 +45,12 @@ struct DroppedItemSystem
 
 	void spawnWand(glm::vec2 pos, const Wand &wand, std::ranlux24_base &rng);
 	void spawnChest(glm::vec2 pos, std::ranlux24_base &rng);
+	void spawnHearth(glm::vec2 pos, std::ranlux24_base &rng);
+	void spawnCoin(glm::vec2 pos, std::ranlux24_base &rng);
 	int findClosestInteractableIndex(glm::vec2 playerPos, float maxDist2) const;
-	bool openChest(int itemIndex);
+	bool openChest(int itemIndex, std::ranlux24_base &rng, ParticleSystem &particleSystem);
+	bool takeHearth(int itemIndex);
+	bool takeCoin(int itemIndex);
 	bool trySwapWithPlayerIndex(int itemIndex, Wand *playerWands, bool *hasWands,
 		int activeIndex, int &outSlot, bool &outSwapped, int &outItemIndex);
 	// tries to pick up or swap a wand; outputs slot, swap info, and item index

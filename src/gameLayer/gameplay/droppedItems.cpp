@@ -1,6 +1,8 @@
 #include <gameplay/droppedItems.h>
 #include <gameplay/assetsManager.h>
 #include <gameplay/inputPrompts.h>
+#include <gameplay/particleSystem.h>
+#include <particles/particleCreator.h>
 #include <randomStuff.h>
 #include <algorithm>
 #include <glm/glm.hpp>
@@ -13,6 +15,8 @@ namespace
 	constexpr float chestHoldTime = 0.35f;
 	constexpr float chestFadeTime = 0.35f;
 	constexpr float chestTotalTime = chestFrameCount * chestFrameTime + chestHoldTime + chestFadeTime;
+	constexpr int coinFrameCount = 6;
+	constexpr float coinFrameTime = 0.08f;
 
 	int findClosestWandIndex(const std::vector<DroppedItem> &items,
 		glm::vec2 playerPos, float maxDist2)
@@ -58,6 +62,35 @@ namespace
 		float fadeT = (openTimer - fadeStart) / chestFadeTime;
 		return 1.0f - glm::clamp(fadeT, 0.0f, 1.0f);
 	}
+
+	int getCoinFrame(float animTimer)
+	{
+		int frame = (int)(animTimer / coinFrameTime) % coinFrameCount;
+		if (frame < 0) { frame = 0; }
+		return frame;
+	}
+
+	ParticleSettings buildDropParticle(glm::vec4 startColor, glm::vec4 endColor)
+	{
+		ParticleSettings p = getSmallSquareParticle(startColor, endColor);
+		p.onCreateCount = 5;
+		p.particleLifeTime = {0.2f, 0.4f};
+		p.velocityX = glm::vec2{-6, 6} * PIXEL_SIZE;
+		p.velocityY = glm::vec2{-12, -18} * PIXEL_SIZE;
+		p.createApearence.size = glm::vec2{2.5f, 3.5f} * PIXEL_SIZE;
+		p.endApearence.size = glm::vec2{1.0f, 2.0f} * PIXEL_SIZE;
+		p.dragX = glm::vec2{-40, -60} * PIXEL_SIZE;
+		p.dragY = glm::vec2{-40, -60} * PIXEL_SIZE;
+		p.folowParent = false;
+		return p;
+	}
+
+	void emitDropParticles(ParticleSystem &particleSystem, std::ranlux24_base &rng,
+		glm::vec2 pos, glm::vec4 startColor, glm::vec4 endColor)
+	{
+		ParticleSettings particle = buildDropParticle(startColor, endColor);
+		particleSystem.emitParticles(particle, pos, rng, pos);
+	}
 }
 
 void DroppedItemSystem::clear()
@@ -86,6 +119,24 @@ void DroppedItemSystem::spawnChest(glm::vec2 pos, std::ranlux24_base &rng)
 	items.push_back(item);
 }
 
+void DroppedItemSystem::spawnHearth(glm::vec2 pos, std::ranlux24_base &rng)
+{
+	DroppedItem item;
+	item.type = DroppedItemType::Hearth;
+	item.pos = pos;
+	item.hoverTimer = getRandomFloat(rng, 0.0f, 6.2831f);
+	items.push_back(item);
+}
+
+void DroppedItemSystem::spawnCoin(glm::vec2 pos, std::ranlux24_base &rng)
+{
+	DroppedItem item;
+	item.type = DroppedItemType::Coin;
+	item.pos = pos;
+	item.hoverTimer = getRandomFloat(rng, 0.0f, 6.2831f);
+	items.push_back(item);
+}
+
 int DroppedItemSystem::findClosestInteractableIndex(glm::vec2 playerPos, float maxDist2) const
 {
 	int bestIndex = -1;
@@ -100,6 +151,14 @@ int DroppedItemSystem::findClosestInteractableIndex(glm::vec2 playerPos, float m
 			canInteract = true;
 		}
 		else if (item.type == DroppedItemType::Chest && !item.chestOpening)
+		{
+			canInteract = true;
+		}
+		else if (item.type == DroppedItemType::Hearth)
+		{
+			canInteract = true;
+		}
+		else if (item.type == DroppedItemType::Coin)
 		{
 			canInteract = true;
 		}
@@ -151,6 +210,10 @@ void DroppedItemSystem::render(gl2d::Renderer2D &renderer, AssetsManager &assets
 	const float wandSize = PIXEL_SIZE * 16.0f;
 	const float chestSize = PIXEL_SIZE * 16.0f;
 	const float chestShadowSize = PIXEL_SIZE * 12.0f;
+	const float hearthSize = PIXEL_SIZE * 16.0f;
+	const float hearthShadowSize = PIXEL_SIZE * 8.0f;
+	const float coinSize = PIXEL_SIZE * 16.0f;
+	const float coinShadowSize = PIXEL_SIZE * 8.0f;
 	const float pickupRadius = PIXEL_SIZE * 16.0f;
 	const float promptSize = PIXEL_SIZE * 12.0f;
 	const float promptAlpha = 0.72f;
@@ -214,10 +277,61 @@ void DroppedItemSystem::render(gl2d::Renderer2D &renderer, AssetsManager &assets
 					pickupPrompt, promptPos, promptSize, promptAlpha);
 			}
 		}
+		else if (item.type == DroppedItemType::Hearth)
+		{
+			float hover = std::sin(item.hoverTimer * hoverSpeed) * hoverHeight;
+			glm::vec2 basePos = item.pos;
+			glm::vec2 drawPos = {basePos.x, basePos.y - hover};
+
+			glm::vec4 shadowRect = {basePos.x - hearthShadowSize * 0.5f, basePos.y - hearthShadowSize * 0.5f,
+				hearthShadowSize, hearthShadowSize};
+			renderer.renderRectangle(shadowRect, assetsManager.particleCircle,
+				{0.0f, 0.0f, 0.0f, 0.45f});
+
+			glm::vec4 hearthRect = {drawPos.x - hearthSize * 0.5f, drawPos.y - hearthSize * 0.5f,
+				hearthSize, hearthSize};
+			renderer.renderRectangle(hearthRect, assetsManager.hearth.texture, {1, 1, 1, 1},
+				{hearthSize * 0.5f, hearthSize * 0.5f}, 0.0f,
+				assetsManager.hearth.atlas.get(0, 0));
+
+			if (i == promptIndex)
+			{
+				float promptOffset = hearthSize * 0.65f + promptSize * 0.5f;
+				glm::vec2 promptPos = {drawPos.x, drawPos.y - promptOffset};
+				renderPrompt(renderer, assetsManager, usesController,
+					pickupPrompt, promptPos, promptSize, promptAlpha);
+			}
+		}
+		else if (item.type == DroppedItemType::Coin)
+		{
+			float hover = std::sin(item.hoverTimer * hoverSpeed) * hoverHeight;
+			glm::vec2 basePos = item.pos;
+			glm::vec2 drawPos = {basePos.x, basePos.y - hover};
+
+			glm::vec4 shadowRect = {basePos.x - coinShadowSize * 0.5f, basePos.y - coinShadowSize * 0.5f,
+				coinShadowSize, coinShadowSize};
+			renderer.renderRectangle(shadowRect, assetsManager.particleCircle,
+				{0.0f, 0.0f, 0.0f, 0.45f});
+
+			int frame = getCoinFrame(item.hoverTimer);
+			glm::vec4 coinRect = {drawPos.x - coinSize * 0.5f, drawPos.y - coinSize * 0.5f,
+				coinSize, coinSize};
+			renderer.renderRectangle(coinRect, assetsManager.coin.texture, {1, 1, 1, 1},
+				{coinSize * 0.5f, coinSize * 0.5f}, 0.0f,
+				assetsManager.coin.atlas.get(frame, 0));
+
+			if (i == promptIndex)
+			{
+				float promptOffset = coinSize * 0.65f + promptSize * 0.5f;
+				glm::vec2 promptPos = {drawPos.x, drawPos.y - promptOffset};
+				renderPrompt(renderer, assetsManager, usesController,
+					pickupPrompt, promptPos, promptSize, promptAlpha);
+			}
+		}
 	}
 }
 
-bool DroppedItemSystem::openChest(int itemIndex)
+bool DroppedItemSystem::openChest(int itemIndex, std::ranlux24_base &rng, ParticleSystem &particleSystem)
 {
 	if (itemIndex < 0 || itemIndex >= (int)items.size())
 	{
@@ -232,6 +346,52 @@ bool DroppedItemSystem::openChest(int itemIndex)
 
 	item.chestOpening = true;
 	item.chestOpenTimer = 0.0f;
+
+	const glm::vec4 hearthStart = {1.0f, 0.2f, 0.2f, 0.9f};
+	const glm::vec4 hearthEnd = {0.6f, 0.05f, 0.05f, 0.0f};
+	const glm::vec4 coinStart = {1.0f, 0.9f, 0.25f, 0.9f};
+	const glm::vec4 coinEnd = {0.8f, 0.6f, 0.1f, 0.0f};
+
+	if (getRandomInt(rng, 0, 1) == 0)
+	{
+		spawnHearth(item.pos, rng);
+		emitDropParticles(particleSystem, rng, item.pos, hearthStart, hearthEnd);
+	}
+	else
+	{
+		spawnCoin(item.pos, rng);
+		emitDropParticles(particleSystem, rng, item.pos, coinStart, coinEnd);
+	}
+	return true;
+}
+
+bool DroppedItemSystem::takeHearth(int itemIndex)
+{
+	if (itemIndex < 0 || itemIndex >= (int)items.size())
+	{
+		return false;
+	}
+	if (items[itemIndex].type != DroppedItemType::Hearth)
+	{
+		return false;
+	}
+	items[itemIndex] = items.back();
+	items.pop_back();
+	return true;
+}
+
+bool DroppedItemSystem::takeCoin(int itemIndex)
+{
+	if (itemIndex < 0 || itemIndex >= (int)items.size())
+	{
+		return false;
+	}
+	if (items[itemIndex].type != DroppedItemType::Coin)
+	{
+		return false;
+	}
+	items[itemIndex] = items.back();
+	items.pop_back();
 	return true;
 }
 

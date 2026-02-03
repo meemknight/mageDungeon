@@ -258,18 +258,22 @@ struct TrapProjectile: public CloneableProjectile<TrapProjectile>
 	HitStats hitStats;
 	float trapRadious = 1.5f;
 	float statusAmount = 5.0f;
-	// Earth trap spawns a thorn ring around the player.
-	int earthThornCount = 15;
-	float earthRingRadius = 2.2f;
-	float earthRingRadiusJitter = 0.3f;
-	float earthRingAngleJitter = 0.12f;
-	int earthRingAttempts = 3;
 	constexpr static float activateRadiousMultiplier = 0.8f;
 
 	// **state variables**
 	float particleTimer = 0.0f;
+	float orbitTimer = 0.0f;
+	float ringRotation = 0.0f;
+	float ringSpinSpeed = 0.0f;
+	float ringEmitInterval = 0.2f;
+	float orbitEmitInterval = 0.32f;
+	float ringStep = 0.3f;
 	bool triggered = 0;
 	float triggerTimer = 0.4f;
+	bool particlesInitialized = false;
+	ParticleSettings ringParticle;
+	ParticleSettings orbitParticle;
+	ParticleSettings burstParticle;
 
 	TrapProjectile();
 	TrapProjectile(HitStats hitStats);

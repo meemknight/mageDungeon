@@ -288,7 +288,7 @@ namespace SpellTypes
 		break;
 
 		case earthTrap:
-		return std::make_unique<BasicMagicMissleSpell>(getTrapSpell(Elements::Earth));
+		return std::make_unique<EarthTrapSpell>(getEarthTrapSpell());
 		break;
 
 		case flameWall:

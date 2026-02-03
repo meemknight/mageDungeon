@@ -192,6 +192,14 @@ void AssetsManager::loadAllAssets()
 	s = woodenChest.texture.GetSize();
 	woodenChest.atlas = gl2d::TextureAtlasPadding(4, 1, s.x, s.y);
 
+	hearth.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "items/hearth.png", 16);
+	s = hearth.texture.GetSize();
+	hearth.atlas = gl2d::TextureAtlasPadding(1, 1, s.x, s.y);
+
+	coin.texture.loadFromFileWithPixelPadding(RESOURCES_PATH "items/coin.png", 16);
+	s = coin.texture.GetSize();
+	coin.atlas = gl2d::TextureAtlasPadding(6, 1, s.x, s.y);
+
 	PaletteEffect palette;
 	palette.loadPalette();
 	bool hasPalette = palette.hasPalette();

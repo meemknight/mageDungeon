@@ -23,6 +23,12 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		hoverMeleeCooldownTimer -= deltaTime;
 	}
 
+	if (targetSwitchTimer > 0.0f)
+	{
+		targetSwitchTimer -= deltaTime;
+		if (targetSwitchTimer < 0.0f) { targetSwitchTimer = 0.0f; }
+	}
+
 	if (burstRemaining > 0)
 	{
 		burstTimer -= deltaTime;
@@ -36,18 +42,128 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 	// Find best target (player or nearby summon)
 	glm::vec2 targetPos = playerPos;
 	glm::ivec2 targetTile = WorldToTile(playerPos);
+	const float playerDist2 = glm::length2(playerPos - enemyPos);
 
-	float bestSummonDist2 = summonAggroRange * summonAggroRange;
+	SummonEntity *bestSummon = nullptr;
+	glm::vec2 bestSummonPos = {};
+	float bestSummonDist2 = 999999.0f;
 	for (auto &summon : summons.summons)
 	{
 		if (!summon->canBeTargeted()) { continue; }
 		glm::vec2 summonPos = summon->physics.getPos();
+		if (!seeThroughWalls &&
+			!HasLineOfSightTiles(map, WorldToTile(enemyPos), WorldToTile(summonPos)))
+		{
+			continue;
+		}
 		float distToSummon2 = glm::length2(summonPos - enemyPos);
-		if (distToSummon2 > bestSummonDist2) { continue; }
-		if (!HasLineOfSightTiles(map, WorldToTile(enemyPos), WorldToTile(summonPos))) { continue; }
+		if (distToSummon2 >= bestSummonDist2) { continue; }
 		bestSummonDist2 = distToSummon2;
-		targetPos = summonPos;
-		targetTile = WorldToTile(summonPos);
+		bestSummonPos = summonPos;
+		bestSummon = summon.get();
+	}
+
+	SummonEntity *currentSummon = nullptr;
+	glm::vec2 currentSummonPos = {};
+	float currentSummonDist2 = 0.0f;
+	if (targetIsSummon && targetSummon)
+	{
+		for (auto &summon : summons.summons)
+		{
+			if (summon.get() != targetSummon) { continue; }
+			if (!summon->canBeTargeted()) { break; }
+			currentSummon = targetSummon;
+			currentSummonPos = summon->physics.getPos();
+			currentSummonDist2 = glm::length2(currentSummonPos - enemyPos);
+			break;
+		}
+	}
+
+	if (!currentSummon)
+	{
+		targetIsSummon = false;
+		targetSummon = nullptr;
+	}
+
+	bool desiredIsSummon = targetIsSummon;
+	SummonEntity *desiredSummon = currentSummon;
+	glm::vec2 desiredSummonPos = currentSummonPos;
+	float desiredSummonDist2 = currentSummonDist2;
+
+	const float closeRange = meleeRange + closeTargetExtraRange;
+	const float closeRange2 = closeRange * closeRange;
+	const float summonAggroRange2 = summonAggroRange * summonAggroRange;
+	const bool playerClose = playerDist2 <= closeRange2;
+	const bool summonClose = bestSummon && bestSummonDist2 <= closeRange2;
+
+	if (targetSwitchTimer <= 0.0f)
+	{
+		bool switched = false;
+		if (summonClose || playerClose)
+		{
+			if (summonClose && playerClose)
+			{
+				if (bestSummonDist2 + targetSwitchMargin < playerDist2)
+				{
+					desiredIsSummon = true;
+					desiredSummon = bestSummon;
+					desiredSummonPos = bestSummonPos;
+					desiredSummonDist2 = bestSummonDist2;
+					switched = !targetIsSummon || targetSummon != bestSummon;
+				}
+				else if (playerDist2 + targetSwitchMargin < bestSummonDist2)
+				{
+					desiredIsSummon = false;
+					desiredSummon = nullptr;
+					switched = targetIsSummon;
+				}
+			}
+			else if (summonClose)
+			{
+				desiredIsSummon = true;
+				desiredSummon = bestSummon;
+				desiredSummonPos = bestSummonPos;
+				desiredSummonDist2 = bestSummonDist2;
+				switched = !targetIsSummon || targetSummon != bestSummon;
+			}
+			else
+			{
+				desiredIsSummon = false;
+				desiredSummon = nullptr;
+				switched = targetIsSummon;
+			}
+		}
+		else
+		{
+			if (bestSummon && bestSummonDist2 <= summonAggroRange2 &&
+				bestSummonDist2 + targetSwitchMargin < playerDist2)
+			{
+				desiredIsSummon = true;
+				desiredSummon = bestSummon;
+				desiredSummonPos = bestSummonPos;
+				desiredSummonDist2 = bestSummonDist2;
+				switched = !targetIsSummon || targetSummon != bestSummon;
+			}
+			else if (targetIsSummon && currentSummonDist2 > summonAggroRange2)
+			{
+				desiredIsSummon = false;
+				desiredSummon = nullptr;
+				switched = true;
+			}
+		}
+
+		if (switched)
+		{
+			targetSwitchTimer = targetSwitchCooldown;
+			targetIsSummon = desiredIsSummon;
+			targetSummon = desiredSummon;
+		}
+	}
+
+	if (targetIsSummon && desiredSummon)
+	{
+		targetPos = desiredSummonPos;
+		targetTile = WorldToTile(targetPos);
 	}
 
 	currentTargetPos = targetPos;
@@ -81,6 +197,8 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		lastSeenTargetPos = targetPos;
 		lastSeenTargetTile = targetTile;
 		hasLastSeen = true;
+		patrolActive = false;
+		patrolRequested = false;
 	}
 	else
 	{
@@ -93,8 +211,23 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 				pathTiles.clear();
 				pathIndex = 0;
 				hasLastSeen = false;
+				if (patrolEnabled)
+				{
+					patrolActive = true;
+					patrolRequested = false;
+					patrolTimer = getRandomFloat(rng, patrolAfterLoseMin, patrolAfterLoseMax);
+					patrolDirTimer = 0.0f;
+				}
 			}
 		}
+	}
+
+	if (patrolRequested && patrolEnabled && !chasing)
+	{
+		patrolRequested = false;
+		patrolActive = true;
+		patrolTimer = getRandomFloat(rng, patrolHitDurationMin, patrolHitDurationMax);
+		patrolDirTimer = 0.0f;
 	}
 
 	// Trigger a hover melee swoop when close and in LOS
@@ -186,6 +319,34 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 			}
 		}
 	}
+	else if (patrolActive)
+	{
+		// Patrol: random search movement after damage or losing LOS.
+		patrolTimer -= deltaTime;
+		if (patrolTimer <= 0.0f)
+		{
+			patrolActive = false;
+		}
+		else
+		{
+			patrolDirTimer -= deltaTime;
+			if (patrolDirTimer <= 0.0f)
+			{
+				patrolDirTimer = getRandomFloat(rng, patrolDirChangeMin, patrolDirChangeMax);
+
+				static const glm::vec2 dirs[8] = {
+					{ 1, 0},{-1, 0},{ 0, 1},{ 0,-1},
+					{ 1, 1},{ 1,-1},{-1, 1},{-1,-1}
+				};
+				patrolDir = glm::normalize(dirs[getRandomInt(rng, 0, 7)]);
+			}
+
+			if (getRandomChance(rng, patrolStopChance))
+				moveDir = glm::vec2(0.0f);
+			else
+				moveDir = patrolDir;
+		}
+	}
 	else if (!chasing)
 	{
 		// Idle behavior
@@ -265,6 +426,15 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		distanceToTarget <= stopChaseRange)
 	{
 		moveDir = glm::vec2(0.0f);
+	}
+
+	// If we're close enough to nearly melee, push in for contact
+	if (chasing && canSeeTarget && !hoverMeleeActive &&
+		distanceToTarget <= (meleeRange + 1.0f))
+	{
+		orbitActive = false;
+		orbitRadialOffset = 0.0f;
+		moveDir = directionToTarget;
 	}
 
 	// Hover melee swoop movement with a curved trajectory

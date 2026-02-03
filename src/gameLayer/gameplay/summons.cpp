@@ -170,7 +170,7 @@ void resolveSummonEntityPush(EntityHolder &entityHolder, SummonHolder &summons)
 
 SlimeSummon::SlimeSummon()
 {
-	maxLife = 5.0f;
+	maxLife = 6.0f;
 	life = maxLife;
 	timeLeft = 60.0f;
 	tileSet = getAssetManager().waterSlime;
@@ -428,6 +428,7 @@ bool SlimeSummon::update(float deltaTime, Map &map, ParticleSystem &mainParticle
 			glm::vec2 toTarget = targetPos - summonPos;
 			float dist = glm::length(toTarget);
 			glm::vec2 aimDir = dist > 0.0001f ? (toTarget / dist) : glm::vec2(1.0f, 0.0f);
+			moveSpeed = baseSpeed * attackMoveSpeedMultiplier;
 			if (attackCooldown <= 0.0f)
 			{
 				HitStats hitStats;
@@ -441,7 +442,11 @@ bool SlimeSummon::update(float deltaTime, Map &map, ParticleSystem &mainParticle
 				attackCooldown = attackInterval;
 			}
 
-			if (dist > 1.4f)
+			if (dist < attackKeepDistance)
+			{
+				moveDir = -aimDir;
+			}
+			else if (dist > attackApproachDistance)
 			{
 				moveDir = aimDir;
 			}
