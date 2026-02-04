@@ -1024,9 +1024,9 @@ void AimableEarthBoltProjectile::onDestroy(std::ranlux24_base &rng)
 {
 }
 
-WildMagicBoltProjectile::WildMagicBoltProjectile()
+	WildMagicBoltProjectile::WildMagicBoltProjectile()
 {
-	hitStats.damage = 12.0f;
+	hitStats.damage = 13.0f;
 	hitStats.pushBack = 4.0f;
 	element = Elements::NoneElement;
 	timeAlieve = 7.0f;
