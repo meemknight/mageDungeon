@@ -39,6 +39,7 @@ BlockSettings blockSettings[]
 	BlockSettings{}.setTileSet(TileSets::woodenFloor).setAtlasPos({0,0}).setRandomAtlasOffsets({4, 0}), //wooden floor
 	BlockSettings{}.setTileSet(TileSets::woodenWall3D).setAtlasPos({4,2}).setCollidable().setIsWall().setWall3DTileSet(TileSets::woodenWall3D).setRandomAtlasOffsets({1, 1}), //wooden wall
 	BlockSettings{}.setTileSet(TileSets::carpetDecals).setAtlasPos({4,2}).setIsCarpet().setRandomAtlasOffsets({1, 1}), //carpet
+	BlockSettings{}.setTileSet(TileSets::none).setCollidable(), //door collision (invisible)
 
 
 	

@@ -526,8 +526,8 @@ struct FloorGenerator
 
 		std::vector<Rect> rooms;
 		int attempts = std::max(28, (sizeX * sizeY) / 140);
-		int minRoomSize = 14;
-		int maxRoomSize = 20;
+		int minRoomSize = 16;
+		int maxRoomSize = 26;
 		int padding = 4;
 		int maxRoomConnections = 3;
 
@@ -645,14 +645,8 @@ struct FloorGenerator
 		auto paintCaveCircle = [&](const Rect &room, glm::ivec2 center, int radius,
 			BlockType newType, BlockType requiredType)
 		{
-			if (room.isCaveMaze)
-			{
-				paintCircleInRoom(room, center, radius, newType, requiredType);
-			}
-			else
-			{
-				paintCircle(center, radius, newType, requiredType);
-			}
+			// Keep cave carving inside the room bounds.
+			paintCircleInRoom(room, center, radius, newType, requiredType);
 		};
 
 		auto carveCaveRoom = [&](const Rect &room)
@@ -3022,18 +3016,15 @@ struct FloorGenerator
 					}
 				};
 
-				if (!room.isCave)
+				for (int x = room.x; x < room.x2(); x++)
 				{
-					for (int x = room.x; x < room.x2(); x++)
-					{
-						map.firstLayer.getBlockUnsafe(x, room.y).type = wallType;
-						map.firstLayer.getBlockUnsafe(x, room.y2() - 1).type = wallType;
-					}
-					for (int y = room.y; y < room.y2(); y++)
-					{
-						map.firstLayer.getBlockUnsafe(room.x, y).type = wallType;
-						map.firstLayer.getBlockUnsafe(room.x2() - 1, y).type = wallType;
-					}
+					map.firstLayer.getBlockUnsafe(x, room.y).type = wallType;
+					map.firstLayer.getBlockUnsafe(x, room.y2() - 1).type = wallType;
+				}
+				for (int y = room.y; y < room.y2(); y++)
+				{
+					map.firstLayer.getBlockUnsafe(room.x, y).type = wallType;
+					map.firstLayer.getBlockUnsafe(room.x2() - 1, y).type = wallType;
 				}
 
 				for (auto d : uniqueDoors)

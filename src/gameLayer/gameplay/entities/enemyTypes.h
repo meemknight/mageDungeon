@@ -43,7 +43,7 @@ namespace EnemyTypes
 		SkeletonEnemy()
 		{
 			setupEnemy(*this, getAssetManager().skeleton, 48);
-			setupMele(*this, 18.0f);
+			setupRanged(*this, ShootPattern_Spread5, 18.0f, 1.0f);
 		}
 	};
 

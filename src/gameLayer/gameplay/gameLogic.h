@@ -83,6 +83,11 @@ struct GameLogic
 	void close();
 
 	float zoom = 100;
+	// World seed used for procedural floor generation.
+	int worldSeed = 1234;
+	// Free camera debug mode decouples camera from player.
+	bool freeCameraMode = false;
+	glm::vec2 freeCameraPosition = {};
 	bool inGame = 0;
 
 	std::ranlux24_base rng{std::random_device()()};

@@ -55,10 +55,38 @@ bool GameLogic::init()
 	floorGenerator.init();
 
 	std::vector<FloorConnection> connections;
+	if (worldSeed <= 0)
+	{
+		worldSeed = getRandomInt(std::ranlux24_base{std::random_device()()}, 1, 2000000000);
+	}
 
-	floorGenerator.generateDungeonFloor(140, 140, map, 12345, connections, true, floorInfo, doorHolder);
+	floorGenerator.generateDungeonFloor(140, 140, map, worldSeed, connections, true, floorInfo, doorHolder);
 
 	floorGenerator.clear();
+
+	// Place door collision blocks after world generation.
+	auto placeDoorCollisionBlocks = [&]()
+	{
+		for (auto &doorPair : doorHolder.doors)
+		{
+			auto &door = doorPair.second;
+			if (door.orientation != Door::Orientation::Horizontal) { continue; }
+			if (door.open) { continue; }
+			glm::ivec2 pos = doorPair.first;
+			for (int dx = 0; dx <= 1; dx++)
+			{
+				int x = pos.x + dx;
+				int y = pos.y;
+				if (x < 0 || y < 0 || x >= map.size.x || y >= map.size.y) { continue; }
+				auto &tile = map.secondLayer.getBlockUnsafe(x, y);
+				if (tile.type == Blocks::none || tile.type == Blocks::doorCollision)
+				{
+					tile.type = Blocks::doorCollision;
+				}
+			}
+		}
+	};
+	placeDoorCollisionBlocks();
 
 	wands[0] = getRandomWand(0, rng);
 	hasWand[0] = true;
@@ -98,34 +126,6 @@ bool GameLogic::init()
 	}
 	player.resetHealth();
 	playerDamageCooldown = 0.0f;
-
-	for (int i = 0; i < (int)floorInfo.rooms.size(); i++)
-	{
-		const auto &room = floorInfo.rooms[i];
-		if (room.isSpawnRoom)
-		{
-			continue;
-		}
-
-		if (room.enemySpawnPositions.empty())
-		{
-			continue;
-		}
-
-		int maxSpawns = std::min(2, (int)room.enemySpawnPositions.size());
-		int spawnCount = getRandomInt(rng, 0, maxSpawns);
-
-		auto spawnPositions = room.enemySpawnPositions;
-		for (int j = 0; j < spawnCount; j++)
-		{
-			int index = getRandomInt(rng, 0, (int)spawnPositions.size() - 1);
-			glm::vec2 pos = spawnPositions[index];
-			spawnPositions[index] = spawnPositions.back();
-			spawnPositions.pop_back();
-
-		spawnRandomEnemy(entityHolder, rng, pos);
-		}
-	}
 
 	// spawn a few wands and chests in rooms
 	{
@@ -182,6 +182,65 @@ bool GameLogic::init()
 		}
 	}
 
+	// spawn enemies, avoid wand/chest pickup spots
+	{
+		const float itemBlockRadius = PIXEL_SIZE * 8.0f;
+		const float itemBlockDist2 = itemBlockRadius * itemBlockRadius;
+		auto isItemBlocking = [&](glm::vec2 pos)
+		{
+			for (const auto &item : droppedItems.items)
+			{
+				if (item.type != DroppedItemType::Wand && item.type != DroppedItemType::Chest)
+				{
+					continue;
+				}
+				glm::vec2 diff = item.pos - pos;
+				if (glm::dot(diff, diff) <= itemBlockDist2)
+				{
+					return true;
+				}
+			}
+			return false;
+		};
+
+		for (int i = 0; i < (int)floorInfo.rooms.size(); i++)
+		{
+			const auto &room = floorInfo.rooms[i];
+			if (room.isSpawnRoom)
+			{
+				continue;
+			}
+
+			if (room.enemySpawnPositions.empty())
+			{
+				continue;
+			}
+
+			int maxSpawns = std::min(2, (int)room.enemySpawnPositions.size());
+			int spawnCount = getRandomInt(rng, 0, maxSpawns);
+
+			auto spawnPositions = room.enemySpawnPositions;
+			for (int j = 0; j < spawnCount; j++)
+			{
+				bool spawned = false;
+				while (!spawnPositions.empty() && !spawned)
+				{
+					int index = getRandomInt(rng, 0, (int)spawnPositions.size() - 1);
+					glm::vec2 pos = spawnPositions[index];
+					spawnPositions[index] = spawnPositions.back();
+					spawnPositions.pop_back();
+
+					if (isItemBlocking(pos))
+					{
+						continue;
+					}
+					spawnRandomEnemy(entityHolder, rng, pos);
+					spawned = true;
+				}
+			}
+		}
+	}
+
 
 
 	inGame = true;
@@ -193,7 +252,9 @@ bool GameLogic::update(float deltaTime,
 	AssetsManager &assetsManager,
 	platform::Input &input)
 {
+
 	bool exitDungeon = false;
+
 	if (!hasWand[activeWandIndex])
 	{
 		activeWandIndex = hasWand[0] ? 0 : 1;
@@ -356,7 +417,7 @@ bool GameLogic::update(float deltaTime,
 	}
 
 	int wandCountBefore = (hasWand[0] ? 1 : 0) + (hasWand[1] ? 1 : 0);
-	bool pickupInput = !inventoryOpen && (input.buttons[platform::Button::E].pressed ||
+	bool pickupInput = !inventoryOpen && !freeCameraMode && (input.buttons[platform::Button::E].pressed ||
 		input.controller.buttons[platform::Controller::A].pressed);
 	if (pickupInput)
 	{
@@ -427,10 +488,20 @@ bool GameLogic::update(float deltaTime,
 	validateQuickActions(1);
 
 	Wand &currentWand = wands[activeWandIndex];
+	bool resetWorld = false;
+	int resetWorldSeed = 0;
 
 
-#pragma region imgui
+	#pragma region imgui
 	//ImGui::ShowDemoWindow();
+	if (input.buttons[platform::Button::F9].pressed)
+	{
+		freeCameraMode = !freeCameraMode;
+		if (freeCameraMode)
+		{
+			freeCameraPosition = renderer.currentCamera.position;
+		}
+	}
 	if (input.buttons[platform::Button::F10].pressed)
 	{
 		ImGui::toggleImguiWindowOpen();
@@ -443,6 +514,15 @@ bool GameLogic::update(float deltaTime,
 	{
 		ImGui::DragFloat2("Position", &player.physics.getPos()[0], 0.01);
 		ImGui::DragFloat("zoom", &zoom);
+	}
+	if (ImGui::CollapsingHeader("World", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		ImGui::Text("World Seed: %d", worldSeed);
+		if (ImGui::Button("Reset World (New Seed)"))
+		{
+			resetWorldSeed = getRandomInt(rng, 1, 2000000000);
+			resetWorld = true;
+		}
 	}
 	if (ImGui::CollapsingHeader("Wands", ImGuiTreeNodeFlags_DefaultOpen))
 	{
@@ -728,6 +808,13 @@ bool GameLogic::update(float deltaTime,
 		ImGui::End();
 		renderSpellRecepieWindow(spellsHolder, player, fireDirection);
 	}
+	if (resetWorld)
+	{
+		close();
+		worldSeed = resetWorldSeed;
+		init();
+		return true;
+	}
 #pragma endregion
 
 	glm::vec2 cursorPos = platform::getRelMousePosition();
@@ -794,10 +881,67 @@ bool GameLogic::update(float deltaTime,
 		updateStatusEffectParticles(player.statusEffects, particleSystem, rng, player.physics.getPos(), simDelta);
 	}
 
+	const float freeCameraZoomMin = 10.0f;
+	const float freeCameraZoomMax = 100.0f;
+
 #pragma region input
 	{
 
-		if (!inventoryOpen)
+		if (freeCameraMode)
+		{
+
+			const float freeCameraZoomTravelSeconds = 1.f;
+			const float freeCameraMoveSpeedRatio = 0.6f;
+
+			// Free camera input: WASD pan, Q/E zoom.
+			float zoomInput = 0.0f;
+			if (platform::isButtonHeld(platform::Button::Q))
+			{
+				zoomInput -= 1.0f;
+			}
+			if (platform::isButtonHeld(platform::Button::E))
+			{
+				zoomInput += 1.0f;
+			}
+			if (zoomInput != 0.0f)
+			{
+				float zoomSpeed = (freeCameraZoomMax - freeCameraZoomMin) / freeCameraZoomTravelSeconds;
+				zoom += zoomInput * zoomSpeed * deltaTime;
+			}
+			zoom = glm::clamp(zoom, freeCameraZoomMin, freeCameraZoomMax);
+
+			glm::vec2 camMove = {};
+			if (platform::isButtonHeld(platform::Button::A))
+			{
+				camMove.x -= 1;
+			}
+			if (platform::isButtonHeld(platform::Button::D))
+			{
+				camMove.x += 1;
+			}
+			if (platform::isButtonHeld(platform::Button::W))
+			{
+				camMove.y -= 1;
+			}
+			if (platform::isButtonHeld(platform::Button::S))
+			{
+				camMove.y += 1;
+			}
+
+			if (glm::length(camMove) > 0.0001f)
+			{
+				camMove = glm::normalize(camMove);
+				float viewW = renderer.windowW / zoom;
+				float viewH = renderer.windowH / zoom;
+				float cameraSpeed = std::min(viewW, viewH) * freeCameraMoveSpeedRatio;
+				freeCameraPosition += camMove * cameraSpeed * deltaTime;
+			}
+
+			fireInputActive = false;
+			usesController = false;
+		}
+
+		if (!inventoryOpen && !freeCameraMode)
 		{
 			glm::vec2 move = {};
 			if (platform::isButtonHeld(platform::Button::A))
@@ -903,7 +1047,7 @@ bool GameLogic::update(float deltaTime,
 				}
 			}
 		}
-		else
+		else if (!freeCameraMode)
 		{
 			fireInputActive = false;
 		}
@@ -932,10 +1076,18 @@ bool GameLogic::update(float deltaTime,
 #pragma endregion
 
 
+	zoom = glm::clamp(zoom, freeCameraZoomMin, freeCameraZoomMax);
 	renderer.currentCamera.zoom = zoom;
-	renderer.currentCamera.follow(player.physics.transform.getCenter(),
-		simDelta * 4.f, 0.00001, 0,
-		renderer.windowW, renderer.windowH);
+	if (freeCameraMode)
+	{
+		renderer.currentCamera.position = freeCameraPosition;
+	}
+	else
+	{
+		renderer.currentCamera.follow(player.physics.transform.getCenter(),
+			simDelta * 4.f, 0.00001, 0,
+			renderer.windowW, renderer.windowH);
+	}
 
 	particlePostProcessRenderer.updateWindowMetrics(renderer);
 
@@ -1063,6 +1215,83 @@ bool GameLogic::update(float deltaTime,
 	//renderer.renderRectangle(player.physical.getAABB(), Colors_Red);
 	player.update(simDelta);
 
+	std::vector<glm::vec4> doorTriggerRects;
+	doorTriggerRects.reserve(doorHolder.doors.size());
+
+	// Door collisions and opening logic (horizontal doors only).
+	auto updateDoors = [&]()
+	{
+		glm::vec4 playerRect = player.physics.getAABB();
+		doorTriggerRects.clear();
+		glm::vec2 moveIntent = {};
+		if (!inventoryOpen)
+		{
+			if (platform::isButtonHeld(platform::Button::W)) { moveIntent.y -= 1.0f; }
+			if (platform::isButtonHeld(platform::Button::S)) { moveIntent.y += 1.0f; }
+			moveIntent += platform::getControllerButtons().LStick * glm::vec2(1, -1);
+			float moveLen = glm::length(moveIntent);
+			if (moveLen > 0.0001f) { moveIntent /= moveLen; }
+		}
+		const float triggerThickness = 1.2f;
+		const float triggerInset = 0.1f;
+		const float moveThreshold = 0.2f;
+		for (auto &doorPair : doorHolder.doors)
+		{
+			auto &door = doorPair.second;
+			if (door.orientation != Door::Orientation::Horizontal) { continue; }
+			glm::ivec2 pos = doorPair.first;
+			glm::vec4 triggerRect = {
+				(float)pos.x + triggerInset,
+				(float)pos.y + 0.5f - triggerThickness * 0.5f,
+				2.0f - triggerInset * 2.0f,
+				triggerThickness
+			};
+			doorTriggerRects.push_back(triggerRect);
+
+			float doorCenterY = (float)pos.y + 0.5f;
+			float playerCenterY = player.physics.getPos().y;
+			bool movingToward = false;
+			if (playerCenterY >= doorCenterY)
+			{
+				movingToward = moveIntent.y < -moveThreshold;
+			}
+			else
+			{
+				movingToward = moveIntent.y > moveThreshold;
+			}
+
+			if (!door.open && movingToward && checkCollisionRecs(playerRect, triggerRect))
+			{
+				door.open = true;
+			}
+
+			bool solid = !door.open;
+			for (int dx = 0; dx <= 1; dx++)
+			{
+				int x = pos.x + dx;
+				int y = pos.y;
+				if (x < 0 || y < 0 || x >= map.size.x || y >= map.size.y) { continue; }
+				auto &tile = map.secondLayer.getBlockUnsafe(x, y);
+				if (solid)
+				{
+					if (tile.type == Blocks::none || tile.type == Blocks::doorCollision)
+					{
+						tile.type = Blocks::doorCollision;
+					}
+				}
+				else
+				{
+					if (tile.type == Blocks::doorCollision)
+					{
+						tile.type = Blocks::none;
+					}
+				}
+			}
+		}
+	};
+
+	updateDoors();
+
 	// Render entities/player/doors sorted by Y for proper overlap.
 	struct RenderEntry
 	{
@@ -1186,6 +1415,11 @@ bool GameLogic::update(float deltaTime,
 				}
 				break;
 		}
+	}
+
+	for (auto &rect : doorTriggerRects)
+	{
+		renderer.renderRectangleOutline(rect, Colors_Blue, 0.02f);
 	}
 
 	auto renderStatusIcons = [&](glm::vec4 aabb, const StatusEffects &effects)
@@ -1388,15 +1622,18 @@ bool GameLogic::update(float deltaTime,
 			renderer.popCamera();
 		}
 
-		// magic ui
+		if (!freeCameraMode)
 		{
-			spellSelectionLogic[activeWandIndex].update(simDelta, renderer, assetsManager,
-				spellRecepies[activeWandIndex], spellsHolder, map, projectiles, entityHolder,
-				player, fireDirection, usesController, currentWand, input);
-			if (spellSelectionLogic[activeWandIndex].noManaFeedback)
+			// magic ui
 			{
-				player.wandFailTimer = 0.2f;
-				spellSelectionLogic[activeWandIndex].noManaFeedback = false;
+				spellSelectionLogic[activeWandIndex].update(simDelta, renderer, assetsManager,
+					spellRecepies[activeWandIndex], spellsHolder, map, projectiles, entityHolder,
+					player, fireDirection, usesController, currentWand, input);
+				if (spellSelectionLogic[activeWandIndex].noManaFeedback)
+				{
+					player.wandFailTimer = 0.2f;
+					spellSelectionLogic[activeWandIndex].noManaFeedback = false;
+				}
 			}
 		}
 	}
@@ -2036,7 +2273,8 @@ bool GameLogic::update(float deltaTime,
 
 void GameLogic::close()
 {
-
+	int keepSeed = worldSeed;
 	*this = {};
+	worldSeed = keepSeed; // keep current world seed across resets
 	inGame = 0;
 }

@@ -36,6 +36,7 @@ namespace Blocks
 		woodenFloor,
 		woodenWall,
 		carpetFloor,
+		doorCollision,
 
 		BLOCKS_COUNT
 
