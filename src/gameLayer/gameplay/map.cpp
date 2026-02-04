@@ -2,6 +2,10 @@
 #include <imgui.h>
 #include <imguiTools.h>
 #include <gameplay/doors.h>
+#include <gameplay/Physics.h>
+
+static constexpr float DOOR_VERTICAL_Y_OFFSET = PIXEL_SIZE * -1.0f;
+static constexpr float DOOR_VERTICAL_HEIGHT = 4.0f;
 
 // Hash-based offsets for per-tile atlas variation.
 static unsigned int hashPosition(int x, int y)
@@ -861,7 +865,9 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 							: assetManager.doorClosedVertical;
 						if (sprite.isValid())
 						{
-							glm::vec4 rect = {(float)x, (float)y - 2.0f, 1.0f, 3.0f};
+							// Vertical door is drawn taller but keeps the same bottom anchor.
+							float doorBottom = (float)y + 1.0f - DOOR_VERTICAL_Y_OFFSET;
+							glm::vec4 rect = {(float)x, doorBottom - DOOR_VERTICAL_HEIGHT, 1.0f, DOOR_VERTICAL_HEIGHT};
 							renderer.renderRectangle(rect, sprite, Colors_White);
 						}
 					}
