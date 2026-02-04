@@ -37,6 +37,7 @@ struct FloorRoom
 	bool isSpawnRoom = false;
 	bool isBigRoom = false;
 	bool isEmptyRoom = false;
+	bool isExitRoom = false;
 
 	glm::ivec2 center() const { return {pos.x + size.x / 2, pos.y + size.y / 2}; }
 };
@@ -47,6 +48,8 @@ struct FloorInfo
 	std::vector<glm::vec2> enemySpawnPositions;
 	std::optional<glm::vec2> playerSpawnPos;
 	std::optional<int> spawnRoomIndex;
+	std::optional<int> exitRoomIndex;
+	std::optional<glm::vec2> exitPos;
 };
 
 struct FloorGenerator
@@ -83,6 +86,8 @@ struct FloorGenerator
 		int caveMazeRoomExtentPadding = 4;
 		// Carpet roads linking entrances inside wooden rooms.
 		float woodRoomCarpetRoadChance = 0.35f;
+		// Dungeon wall decorations.
+		float wallDecorChance = 0.08f;
 		// If true, rooms can stay empty (flagged for future use).
 		bool allowEmptyRooms = true;
 		float bigRoomChance = 0.12f;
@@ -1381,6 +1386,14 @@ struct FloorGenerator
 			int style = Corridor_Dungeon;
 		};
 
+		struct DoorConnection
+		{
+			int roomIndex = -1;
+			glm::ivec2 doorPos = {};
+			glm::ivec2 doorOut = {};
+			int style = Corridor_Dungeon;
+		};
+
 		auto findRoomIndexAt = [&](int x, int y)
 		{
 			for (int i = 0; i < (int)rooms.size(); i++)
@@ -1723,6 +1736,8 @@ struct FloorGenerator
 			std::vector<char>(rooms.size(), 0));
 		std::vector<CorridorLink> corridorLinks;
 		corridorLinks.reserve(rooms.size() * 2);
+		std::vector<DoorConnection> doorConnections;
+		doorConnections.reserve(rooms.size() * 2);
 
 		auto registerDoor = [&](int roomIndex, glm::ivec2 pos)
 		{
@@ -1855,6 +1870,8 @@ struct FloorGenerator
 			carveDoorOpening(doorB, style);
 			glm::ivec2 outA = getDoorOutsidePos(a, doorA);
 			glm::ivec2 outB = getDoorOutsidePos(b, doorB);
+			doorConnections.push_back({a, doorA, outA, style});
+			doorConnections.push_back({b, doorB, outB, style});
 			if (outA != doorA)
 			{
 				carveCorridorWithStyle(doorA, outA, style);
@@ -2975,6 +2992,7 @@ struct FloorGenerator
 					roomConnections[nearestIndex]++;
 				}
 				glm::ivec2 doorOut = getDoorOutsidePos(nearestIndex, door);
+				doorConnections.push_back({nearestIndex, door, doorOut, style});
 				if (doorOut != door)
 				{
 					carveCorridorWithStyle(door, doorOut, style);
@@ -3507,6 +3525,208 @@ struct FloorGenerator
 			}
 		}
 
+		// Places wall decorations on dungeon walls.
+		auto placeWallDecorations = [&]()
+		{
+			for (int y = 1; y < sizeY - 1; y++)
+			{
+				for (int x = 1; x < sizeX - 1; x++)
+				{
+					auto &base = map.firstLayer.getBlockUnsafe(x, y);
+					if (base.type != Blocks::dungeonWall) { continue; }
+					auto &over = map.secondLayer.getBlockUnsafe(x, y);
+					if (over.type != Blocks::none) { continue; }
+					auto &below = map.firstLayer.getBlockUnsafe(x, y + 1);
+					if (isWall(below.type)) { continue; }
+					if (!getRandomChance(rng, cosmetics.wallDecorChance)) { continue; }
+					over.type = Blocks::wallDecorations;
+				}
+			}
+		};
+
+		// Places breakable wooden decorations (cover) on the second layer.
+		auto placeWoodDecorations = [&]()
+		{
+			auto isDoorTooCloseLocal = [&](int roomIndex, glm::ivec2 pos, int minDist)
+			{
+				if (roomIndex < 0 || roomIndex >= (int)outInfo.rooms.size()) { return false; }
+				for (auto d : outInfo.rooms[roomIndex].doorPositions)
+				{
+					for (int dy = 0; dy <= 1; dy++)
+					{
+						for (int dx = 0; dx <= 1; dx++)
+						{
+							int dist = std::abs(pos.x - (d.x + dx)) + std::abs(pos.y - (d.y + dy));
+							if (dist < minDist)
+							{
+								return true;
+							}
+						}
+					}
+				}
+				return false;
+			};
+
+			auto canPlaceDecorTile = [&](int x, int y)
+			{
+				if (x < 0 || y < 0 || x >= sizeX || y >= sizeY) { return false; }
+				auto &base = map.firstLayer.getBlockUnsafe(x, y);
+				if (isWall(base.type) || base.type == Blocks::none) { return false; }
+				auto &over = map.secondLayer.getBlockUnsafe(x, y);
+				if (over.type != Blocks::none) { return false; }
+				return true;
+			};
+
+			auto canPlaceDecorInRoom = [&](int roomIndex, int x, int y)
+			{
+				const Rect &room = rooms[roomIndex];
+				if (x <= room.x || x >= room.x2() - 1 || y <= room.y || y >= room.y2() - 1)
+				{
+					return false;
+				}
+				if (isDoorTileForRoom(roomIndex, x, y)) { return false; }
+				if (isDoorTooCloseLocal(roomIndex, {x, y}, 2)) { return false; }
+				return canPlaceDecorTile(x, y);
+			};
+
+			auto placeDecorTile = [&](int x, int y)
+			{
+				map.secondLayer.getBlockUnsafe(x, y).type = Blocks::woodenDecorations;
+			};
+
+			auto tryPlaceDecorBlock = [&](int roomIndex, int x, int y)
+			{
+				if (!canPlaceDecorInRoom(roomIndex, x, y)
+					|| !canPlaceDecorInRoom(roomIndex, x + 1, y)
+					|| !canPlaceDecorInRoom(roomIndex, x, y + 1)
+					|| !canPlaceDecorInRoom(roomIndex, x + 1, y + 1))
+				{
+					return false;
+				}
+				placeDecorTile(x, y);
+				placeDecorTile(x + 1, y);
+				placeDecorTile(x, y + 1);
+				placeDecorTile(x + 1, y + 1);
+				return true;
+			};
+
+			auto tryPlaceDecorLine = [&](int roomIndex, glm::ivec2 start, int length, bool horizontal)
+			{
+				for (int i = 0; i < length; i++)
+				{
+					int x = start.x + (horizontal ? i : 0);
+					int y = start.y + (horizontal ? 0 : i);
+					if (!canPlaceDecorInRoom(roomIndex, x, y)) { return false; }
+				}
+				for (int i = 0; i < length; i++)
+				{
+					int x = start.x + (horizontal ? i : 0);
+					int y = start.y + (horizontal ? 0 : i);
+					placeDecorTile(x, y);
+				}
+				return true;
+			};
+
+			auto roomCoverRatio = [&](int roomIndex)
+			{
+				const Rect &room = rooms[roomIndex];
+				int coverCount = 0;
+				int area = 0;
+				for (int y = room.y + 1; y < room.y2() - 1; y++)
+				{
+					for (int x = room.x + 1; x < room.x2() - 1; x++)
+					{
+						auto &base = map.firstLayer.getBlockUnsafe(x, y);
+						auto &over = map.secondLayer.getBlockUnsafe(x, y);
+						area++;
+						if (isWall(base.type)
+							|| (over.type != Blocks::none && (isBlockColidable(over.type)
+								|| over.type == Blocks::woodenDecorations)))
+						{
+							coverCount++;
+						}
+					}
+				}
+				if (area <= 0) { return 1.0f; }
+				return (float)coverCount / (float)area;
+			};
+
+			for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
+			{
+				const Rect &room = rooms[roomIndex];
+				float coverRatio = roomCoverRatio(roomIndex);
+				int budget = room.isBigRoom ? 4 : 2;
+				if (room.w * room.h > 260) { budget++; }
+				if (room.isCave || room.isGrassRoom) { budget = std::min(budget, 2); }
+				if (room.isWoodRoom) { budget++; }
+				if (coverRatio > 0.12f) { budget = 0; }
+				else if (coverRatio > 0.08f) { budget = std::min(budget, 1); }
+				if (budget <= 0) { continue; }
+
+				int attempts = budget * 4 + 4;
+				for (int attempt = 0; attempt < attempts && budget > 0; attempt++)
+				{
+					int minX = room.x + 2;
+					int maxX = room.x2() - 3;
+					int minY = room.y + 2;
+					int maxY = room.y2() - 3;
+					if (minX > maxX || minY > maxY) { break; }
+					int x = getRandomInt(rng, minX, maxX);
+					int y = getRandomInt(rng, minY, maxY);
+					int shape = getRandomInt(rng, 0, 2);
+					bool placed = false;
+					if (shape == 0)
+					{
+						placed = tryPlaceDecorBlock(roomIndex, x, y);
+					}
+					else
+					{
+						int length = getRandomInt(rng, 3, 5);
+						bool horizontal = getRandomChance(rng, 0.5f);
+						placed = tryPlaceDecorLine(roomIndex, {x, y}, length, horizontal);
+					}
+					if (placed) { budget--; }
+				}
+			}
+
+			auto isDoorOutTile = [&](int x, int y)
+			{
+				for (auto &entry : doorConnections)
+				{
+					if (entry.doorOut.x == x && entry.doorOut.y == y) { return true; }
+				}
+				return false;
+			};
+
+			// Sparse corridor cover.
+			for (int y = 1; y < sizeY - 1; y++)
+			{
+				for (int x = 1; x < sizeX - 1; x++)
+				{
+					if (findRoomIndexAt(x, y) >= 0) { continue; }
+					if (isDoorOutTile(x, y)) { continue; }
+					if (!canPlaceDecorTile(x, y)) { continue; }
+					if (getRandomChance(rng, 0.008f))
+					{
+						placeDecorTile(x, y);
+					}
+				}
+			}
+
+			// Very rare cover right outside doors.
+			for (auto &entry : doorConnections)
+			{
+				if (!getRandomChance(rng, 0.003f)) { continue; }
+				int x = entry.doorOut.x;
+				int y = entry.doorOut.y;
+				if (!canPlaceDecorTile(x, y)) { continue; }
+				placeDecorTile(x, y);
+			}
+		};
+
+		placeWallDecorations();
+		placeWoodDecorations();
+
 		// Flags rooms that end up without cover so they can stay empty.
 		auto roomHasCover = [&](int roomIndex)
 		{
@@ -3518,10 +3738,13 @@ struct FloorGenerator
 				{
 					auto &base = map.firstLayer.getBlockUnsafe(x, y);
 					auto &over = map.secondLayer.getBlockUnsafe(x, y);
-					if (isWall(base.type) || (over.type != Blocks::none && isBlockColidable(over.type)))
-					{
-						return true;
-					}
+				if (isWall(base.type)
+					|| (over.type != Blocks::none && (isBlockColidable(over.type)
+						|| over.type == Blocks::woodenDecorations
+						|| over.type == Blocks::wallDecorations)))
+				{
+					return true;
+				}
 				}
 			}
 			return false;
@@ -3623,7 +3846,10 @@ struct FloorGenerator
 				if (!canSpawnOnTile(room, tile.type)) { continue; }
 				if (isWall(tile.type) || tile.type == Blocks::none) { continue; }
 				auto &over = map.secondLayer.getBlockUnsafe(spawn.x, spawn.y);
-				if (over.type != Blocks::none && isBlockColidable(over.type)) { continue; }
+				if (over.type != Blocks::none && (isBlockColidable(over.type)
+					|| over.type == Blocks::woodenDecorations
+					|| over.type == Blocks::wallDecorations
+					|| over.type == Blocks::exit)) { continue; }
 				return spawn;
 			}
 
@@ -3647,7 +3873,10 @@ struct FloorGenerator
 			auto &centerTile = map.firstLayer.getBlockUnsafe(candidate.x, candidate.y);
 			auto &centerOver = map.secondLayer.getBlockUnsafe(candidate.x, candidate.y);
 			if (!isWall(centerTile.type) && centerTile.type != Blocks::none
-				&& (centerOver.type == Blocks::none || !isBlockColidable(centerOver.type))
+				&& (centerOver.type == Blocks::none || (!isBlockColidable(centerOver.type)
+					&& centerOver.type != Blocks::woodenDecorations
+					&& centerOver.type != Blocks::wallDecorations
+					&& centerOver.type != Blocks::exit))
 				&& canSpawnOnTile(room, centerTile.type))
 			{
 				return candidate;
@@ -3661,13 +3890,119 @@ struct FloorGenerator
 					if (isWall(tile.type) || tile.type == Blocks::none) { continue; }
 					if (!canSpawnOnTile(room, tile.type)) { continue; }
 					auto &over = map.secondLayer.getBlockUnsafe(x, y);
-					if (over.type != Blocks::none && isBlockColidable(over.type)) { continue; }
+				if (over.type != Blocks::none && (isBlockColidable(over.type)
+					|| over.type == Blocks::woodenDecorations
+					|| over.type == Blocks::wallDecorations
+					|| over.type == Blocks::exit)) { continue; }
 					return glm::ivec2{x, y};
 				}
 			}
 
 			return {};
 		};
+
+		auto pickExitRoomIndex = [&]() -> int
+		{
+			if (rooms.empty()) { return -1; }
+			int spawnIndex = outInfo.spawnRoomIndex.value_or(0);
+			spawnIndex = std::clamp(spawnIndex, 0, (int)rooms.size() - 1);
+
+			std::vector<int> dist(rooms.size(), -1);
+			std::vector<int> queue;
+			queue.reserve(rooms.size());
+			dist[spawnIndex] = 0;
+			queue.push_back(spawnIndex);
+
+			for (size_t i = 0; i < queue.size(); i++)
+			{
+				int current = queue[i];
+				for (int j = 0; j < (int)rooms.size(); j++)
+				{
+					if (!roomLinks[current][j]) { continue; }
+					if (dist[j] != -1) { continue; }
+					dist[j] = dist[current] + 1;
+					queue.push_back(j);
+				}
+			}
+
+			int bestIndex = -1;
+			int bestDist = -1;
+			int minRoomDistance = 3;
+			for (int i = 0; i < (int)rooms.size(); i++)
+			{
+				if (i == spawnIndex) { continue; }
+				if (outInfo.rooms[i].isEmptyRoom) { continue; }
+				int d = dist[i];
+				if (d < 0) { continue; }
+				if (d < minRoomDistance) { continue; }
+				if (d > bestDist)
+				{
+					bestDist = d;
+					bestIndex = i;
+				}
+			}
+
+			if (bestIndex == -1)
+			{
+				for (int i = 0; i < (int)rooms.size(); i++)
+				{
+					if (i == spawnIndex) { continue; }
+					if (outInfo.rooms[i].isEmptyRoom) { continue; }
+					int d = dist[i];
+					if (d > bestDist)
+					{
+						bestDist = d;
+						bestIndex = i;
+					}
+				}
+			}
+
+			if (bestIndex == -1)
+			{
+				bestIndex = spawnIndex;
+			}
+			return bestIndex;
+		};
+
+		auto pickExitPosition = [&](int roomIndex, const Rect &room) -> std::optional<glm::ivec2>
+		{
+			int minX = room.x + 2;
+			int maxX = room.x2() - 3;
+			int minY = room.y + 2;
+			int maxY = room.y2() - 3;
+			if (minX > maxX || minY > maxY) { return {}; }
+			int attempts = 12;
+			for (int attempt = 0; attempt < attempts; attempt++)
+			{
+				glm::ivec2 pos = {
+					getRandomInt(rng, minX, maxX),
+					getRandomInt(rng, minY, maxY)
+				};
+				if (isDoorTooClose(roomIndex, pos, 3)) { continue; }
+				auto &tile = map.firstLayer.getBlockUnsafe(pos.x, pos.y);
+				if (!canSpawnOnTile(room, tile.type)) { continue; }
+				if (isWall(tile.type) || tile.type == Blocks::none) { continue; }
+				auto &over = map.secondLayer.getBlockUnsafe(pos.x, pos.y);
+				if (over.type != Blocks::none) { continue; }
+				return pos;
+			}
+			return {};
+		};
+
+		int exitRoomIndex = pickExitRoomIndex();
+		if (exitRoomIndex >= 0 && exitRoomIndex < (int)rooms.size())
+		{
+			outInfo.exitRoomIndex = exitRoomIndex;
+			outInfo.rooms[exitRoomIndex].isExitRoom = true;
+			auto exitPick = pickExitPosition(exitRoomIndex, rooms[exitRoomIndex]);
+			if (exitPick)
+			{
+				glm::ivec2 pos = *exitPick;
+				auto &over = map.secondLayer.getBlockUnsafe(pos.x, pos.y);
+				over.type = Blocks::exit;
+				outInfo.exitPos = {pos.x + 0.5f, pos.y + 0.5f};
+			}
+		}
 
 		auto clearDoorTilesForRoom = [&](int roomIndex)
 		{
@@ -3964,9 +4299,22 @@ struct FloorGenerator
 			}
 		};
 
-		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
+		for (auto &room : outInfo.rooms)
 		{
-			clearDoorTilesForRoom(roomIndex);
+			room.doorPositions.clear();
+		}
+		for (auto &entry : doorConnections)
+		{
+			if (entry.roomIndex < 0 || entry.roomIndex >= (int)outInfo.rooms.size()) { continue; }
+			bool exists = false;
+			for (auto d : outInfo.rooms[entry.roomIndex].doorPositions)
+			{
+				if (d == entry.doorPos) { exists = true; break; }
+			}
+			if (!exists)
+			{
+				outInfo.rooms[entry.roomIndex].doorPositions.push_back(entry.doorPos);
+			}
 		}
 
 		enforceRoomPerimeters();
@@ -3978,6 +4326,87 @@ struct FloorGenerator
 				ensureCaveRoomConnectivity(roomIndex);
 				restoreCaveDoorEdges(roomIndex);
 			}
+		}
+
+		auto findCorridorStyleForDoor = [&](glm::ivec2 doorPos, glm::ivec2 doorOut) -> int
+		{
+			for (auto &link : corridorLinks)
+			{
+				if (link.from == doorPos || link.to == doorPos
+					|| link.from == doorOut || link.to == doorOut)
+				{
+					return link.style;
+				}
+			}
+			return (int)Corridor_Dungeon;
+		};
+
+		auto forceDoorConnection = [&](int roomIndex, glm::ivec2 d, int style)
+		{
+			const Rect &room = rooms[roomIndex];
+			auto carveOutsideTile = [&](int x, int y)
+			{
+				if (x < 0 || y < 0 || x >= sizeX || y >= sizeY) { return; }
+				paintCorridorTile(x, y, style);
+				auto &over = map.secondLayer.getBlockUnsafe(x, y);
+				if (over.type != Blocks::none && isBlockColidable(over.type))
+				{
+					over.type = Blocks::none;
+				}
+			};
+
+			bool onNorth = d.y == room.y;
+			bool onSouth = d.y == room.y2() - 2;
+			bool onWest = d.x == room.x;
+			bool onEast = d.x == room.x2() - 2;
+			if (onNorth)
+			{
+				int y = room.y - 1;
+				for (int x = d.x; x <= d.x + 1; x++)
+				{
+					carveOutsideTile(x, y);
+				}
+			}
+			if (onSouth)
+			{
+				int y = room.y2();
+				for (int x = d.x; x <= d.x + 1; x++)
+				{
+					carveOutsideTile(x, y);
+				}
+			}
+			if (onWest)
+			{
+				int x = room.x - 1;
+				for (int y = d.y; y <= d.y + 1; y++)
+				{
+					carveOutsideTile(x, y);
+				}
+			}
+			if (onEast)
+			{
+				int x = room.x2();
+				for (int y = d.y; y <= d.y + 1; y++)
+				{
+					carveOutsideTile(x, y);
+				}
+			}
+		};
+
+		// Re-open door tiles and ensure corridor stubs meet the room openings.
+		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
+		{
+			clearDoorTilesForRoom(roomIndex);
+		}
+		for (auto &entry : doorConnections)
+		{
+			if (entry.roomIndex < 0 || entry.roomIndex >= (int)rooms.size()) { continue; }
+			int style = entry.style;
+			if (style == Corridor_Dungeon)
+			{
+				style = findCorridorStyleForDoor(entry.doorPos, entry.doorOut);
+			}
+			forceDoorConnection(entry.roomIndex, entry.doorPos, style);
 		}
 
 		if (outInfo.spawnRoomIndex && *outInfo.spawnRoomIndex >= 0
@@ -4083,7 +4512,10 @@ struct FloorGenerator
 						if (!canSpawnOnTile(room, tile.type)) { continue; }
 						if (isWall(tile.type) || tile.type == Blocks::none) { continue; }
 						auto &over = map.secondLayer.getBlockUnsafe(candidate.x, candidate.y);
-						if (over.type != Blocks::none && isBlockColidable(over.type)) { continue; }
+						if (over.type != Blocks::none && (isBlockColidable(over.type)
+							|| over.type == Blocks::woodenDecorations
+							|| over.type == Blocks::wallDecorations
+							|| over.type == Blocks::exit)) { continue; }
 						fallback = candidate;
 						break;
 					}

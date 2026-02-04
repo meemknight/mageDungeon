@@ -39,6 +39,8 @@ namespace Blocks
 		doorCollision,
 
 		woodenDecorations,
+		exit,
+		wallDecorations,
 
 		BLOCKS_COUNT
 
@@ -78,6 +80,8 @@ namespace TileSets
 		woodenWall3D,
 		carpetDecals,
 		woodenDecorations,
+		exit,
+		wallDecorations,
 
 		TILE_SETS_COUNT
 	};
@@ -99,7 +103,7 @@ struct BlockSettings
 	bool isSmallWall = 0;
 	bool chunkyTile = 0;
 	int wall3DTileSet = 0; 
-	bool isBreakableDecorations = 0;
+	bool isBreakableDecorations = 0; // breakable decoration marker rendered outside map pass
 
 	//if this is not 0, than the block can have up to
 	// this extra offsets selected randomly
@@ -200,3 +204,4 @@ bool isGrass(BlockType block);
 bool isCarpet(BlockType block);
 bool isWall(BlockType block);
 bool isChunkyTile(BlockType block);
+bool isBreakableDecoration(BlockType block);

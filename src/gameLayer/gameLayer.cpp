@@ -16,6 +16,8 @@
 #include <gameplay/gameLogic.h>
 #include <gameplay/spellPreviewContext.h>
 #include <gameplay/assetsManager.h>
+#include "gameplay/aStar.h"
+#include <particles/particleCreator.h>
 
 
 
@@ -74,6 +76,91 @@ StandbyProjectileSystem &getStandbyProjectilesSystem()
 {
 	if (spellPreviewContext) { return spellPreviewContext->standbyProjectiles; }
 	return game.standbyProjectiles;
+}
+
+// Burst of brown chips when a decoration breaks.
+static void emitDecorationBreakParticles(ParticleSystem &system,
+	std::ranlux24_base &rng, glm::vec2 pos)
+{
+	glm::vec4 startColor = {0.52f, 0.34f, 0.18f, 0.9f};
+	glm::vec4 endColor = {0.28f, 0.18f, 0.1f, 0.6f};
+	ParticleSettings chips = getSmallSquareParticle(startColor, endColor);
+	chips.onCreateCount = 6;
+	chips.particleLifeTime = {0.22f, 0.4f};
+	chips.velocityX = glm::vec2{-18.0f, 18.0f} * PIXEL_SIZE;
+	chips.velocityY = glm::vec2{-10.0f, -4.0f} * PIXEL_SIZE;
+	chips.dragX = glm::vec2{-25.0f, -45.0f} * PIXEL_SIZE;
+	chips.dragY = glm::vec2{-25.0f, -45.0f} * PIXEL_SIZE;
+	chips.createApearence.size = glm::vec2{3.2f, 4.2f} * PIXEL_SIZE;
+	chips.endApearence.size = glm::vec2{2.0f, 3.0f} * PIXEL_SIZE;
+	chips.positionX = glm::vec2{-4.0f, 4.0f} * PIXEL_SIZE;
+	chips.positionY = glm::vec2{-4.0f, 4.0f} * PIXEL_SIZE;
+	system.emitParticles(chips, pos, rng, pos);
+}
+
+// Breakable decorations are small map markers that can be destroyed on contact.
+int breakDecorationsAtCollider(const Transform2D &collider)
+{
+	if (spellPreviewContext) { return 0; }
+	auto &decorations = game.breakableDecorations.positions;
+	if (decorations.empty()) { return 0; }
+
+	Transform2D decorationCollider = {};
+	decorationCollider.size = {1.0f, 1.0f};
+	decorationCollider.isCircleCollider = true;
+
+	int broken = 0;
+	for (size_t i = 0; i < decorations.size(); )
+	{
+		glm::ivec2 tilePos = decorations[i];
+		glm::vec2 breakPos = {tilePos.x + 0.5f, tilePos.y + 0.5f};
+		decorationCollider.pos = breakPos;
+		if (decorationCollider.intersectTransform(collider))
+		{
+			emitDecorationBreakParticles(game.particleSystem, game.rng, breakPos);
+			decorations[i] = decorations.back();
+			decorations.pop_back();
+			broken++;
+			continue;
+		}
+		++i;
+	}
+
+	return broken;
+}
+
+int breakDecorationsInRadius(Map *map, glm::vec2 center, float radius, bool useLineOfSight)
+{
+	if (spellPreviewContext) { return 0; }
+	if (radius <= 0.0f) { return 0; }
+	auto &decorations = game.breakableDecorations.positions;
+	if (decorations.empty()) { return 0; }
+
+	float radius2 = radius * radius;
+	glm::ivec2 originTile = WorldToTile(center);
+	int broken = 0;
+	for (size_t i = 0; i < decorations.size(); )
+	{
+		glm::ivec2 tilePos = decorations[i];
+		glm::vec2 breakPos = {tilePos.x + 0.5f, tilePos.y + 0.5f};
+		glm::vec2 diff = breakPos - center;
+		if (glm::dot(diff, diff) <= radius2)
+		{
+			if (useLineOfSight && map && !HasLineOfSightGrid(*map, originTile, WorldToTile(breakPos)))
+			{
+				++i;
+				continue;
+			}
+			emitDecorationBreakParticles(game.particleSystem, game.rng, breakPos);
+			decorations[i] = decorations.back();
+			decorations.pop_back();
+			broken++;
+			continue;
+		}
+		++i;
+	}
+
+	return broken;
 }
 
 void setSpellPreviewContext(SpellPreviewContext *context)
@@ -140,7 +227,7 @@ bool gameLogic(float deltaTime, platform::Input &input, SDL_Renderer *sdlRendere
 
 		uirenderer.Begin(1);
 
-		uirenderer.Text("Lowest Level Dungeon XD", Colors_White);
+		uirenderer.Text("Mages Dungeon", Colors_White);
 
 		//todo (LLGD): add a nice texture here for the button.
 		if (uirenderer.Button("Play", Colors_White))

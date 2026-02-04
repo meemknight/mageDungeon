@@ -102,6 +102,34 @@ bool GameLogic::init()
 			}
 		}
 	};
+
+	// Extract map-placed breakable decorations for custom handling/rendering.
+	breakableDecorations.clear();
+	auto extractBreakableDecorations = [&](MapLayer &layer)
+	{
+		for (int y = 0; y < layer.size.y; y++)
+		{
+			for (int x = 0; x < layer.size.x; x++)
+			{
+				auto &tile = layer.getBlockUnsafe(x, y);
+				if (!isBreakableDecoration(tile.type)) { continue; }
+				glm::ivec2 pos = {x, y};
+				auto found = std::find_if(breakableDecorations.positions.begin(),
+					breakableDecorations.positions.end(), [&](const glm::ivec2 &other)
+					{
+						return other.x == pos.x && other.y == pos.y;
+					});
+				if (found == breakableDecorations.positions.end())
+				{
+					breakableDecorations.positions.push_back(pos);
+				}
+				tile.type = Blocks::none;
+			}
+		}
+	};
+	extractBreakableDecorations(map.firstLayer);
+	extractBreakableDecorations(map.secondLayer);
+
 	placeDoorCollisionBlocks();
 
 	wands[0] = getRandomWand(0, rng);
@@ -1128,6 +1156,17 @@ bool GameLogic::update(float deltaTime,
 	resolveEntityPush(entityHolder, player);
 	resolveSummonEntityPush(entityHolder, summons);
 
+	// Break decorations on contact with player or enemies.
+	if (!breakableDecorations.positions.empty())
+	{
+		breakDecorationsAtCollider(player.physics.transform);
+		for (auto &entity : entityHolder.entities)
+		{
+			if (entity->dying) { continue; }
+			breakDecorationsAtCollider(entity->physics.transform);
+		}
+	}
+
 	// contact damage from enemies
 	playerDamageCooldown = std::max(0.0f, playerDamageCooldown - simDelta);
 	if (playerDamageCooldown <= 0.0f)
@@ -1370,7 +1409,8 @@ bool GameLogic::update(float deltaTime,
 			Entity,
 			Summon,
 			Player,
-			Door
+			Door,
+			BreakableDecoration
 		};
 		float sortY = 0.0f;
 		Kind kind = Kind::Entity;
@@ -1378,11 +1418,12 @@ bool GameLogic::update(float deltaTime,
 		SummonEntity *summon = nullptr;
 		const Door *door = nullptr;
 		glm::ivec2 doorPos = {};
+		glm::ivec2 decorationPos = {};
 	};
 
 	std::vector<RenderEntry> renderEntries;
 	renderEntries.reserve(entityHolder.entities.size() + summons.summons.size()
-		+ doorHolder.doors.size() + 2);
+		+ doorHolder.doors.size() + breakableDecorations.positions.size() + 2);
 
 	for (auto &entity : entityHolder.entities)
 	{
@@ -1407,30 +1448,46 @@ bool GameLogic::update(float deltaTime,
 	playerEntry.sortY = player.physics.transform.getBottom().y;
 	renderEntries.push_back(playerEntry);
 
+	auto doorViewRect = renderer.getViewRect();
+	glm::ivec4 viewRectInt = {};
+	viewRectInt.x = int(doorViewRect.x) - 2;
+	viewRectInt.y = int(doorViewRect.y) - 2;
+	viewRectInt.z = int(doorViewRect.z + 2.5f) + 2;
+	viewRectInt.w = int(doorViewRect.w + 2.5f) + 2;
+	viewRectInt.z += doorViewRect.x;
+	viewRectInt.w += doorViewRect.y;
+	viewRectInt = glm::clamp(viewRectInt, {0, 0, 0, 0},
+		{map.size.x - 1, map.size.y - 1, map.size.x - 1, map.size.y - 1});
+
+	auto isInViewRect = [&](glm::ivec2 pos)
+	{
+		return pos.x >= viewRectInt.x && pos.x < viewRectInt.z
+			&& pos.y >= viewRectInt.y && pos.y < viewRectInt.w;
+	};
+
+	auto addBreakableDecorationEntries = [&]()
+	{
+		if (breakableDecorations.positions.empty()) { return; }
+		for (const auto &pos : breakableDecorations.positions)
+		{
+			if (!isInViewRect(pos)) { continue; }
+			RenderEntry entry = {};
+			entry.kind = RenderEntry::Kind::BreakableDecoration;
+			entry.sortY = (float)pos.y + 1.0f;
+			entry.decorationPos = pos;
+			renderEntries.push_back(entry);
+		}
+	};
+
 	auto addDoorRenderEntries = [&]()
 	{
 		if (doorHolder.doors.empty()) { return; }
-		auto viewRect = renderer.getViewRect();
-		glm::ivec4 viewRectInt = {};
-		viewRectInt.x = int(viewRect.x) - 2;
-		viewRectInt.y = int(viewRect.y) - 2;
-		viewRectInt.z = int(viewRect.z + 2.5f) + 2;
-		viewRectInt.w = int(viewRect.w + 2.5f) + 2;
-		viewRectInt.z += viewRect.x;
-		viewRectInt.w += viewRect.y;
-		viewRectInt = glm::clamp(viewRectInt, {0, 0, 0, 0},
-			{map.size.x - 1, map.size.y - 1, map.size.x - 1, map.size.y - 1});
-
 		for (const auto &doorPair : doorHolder.doors)
 		{
 			const glm::ivec2 pos = doorPair.first;
 			const Door &door = doorPair.second;
 			if (door.orientation != Door::Orientation::Horizontal) { continue; }
-			if (pos.x < viewRectInt.x || pos.x >= viewRectInt.z
-				|| pos.y < viewRectInt.y || pos.y >= viewRectInt.w)
-			{
-				continue;
-			}
+			if (!isInViewRect(pos)) { continue; }
 
 			RenderEntry entry = {};
 			entry.kind = RenderEntry::Kind::Door;
@@ -1441,6 +1498,7 @@ bool GameLogic::update(float deltaTime,
 		}
 	};
 
+	addBreakableDecorationEntries();
 	addDoorRenderEntries();
 
 	std::sort(renderEntries.begin(), renderEntries.end(),
@@ -1465,6 +1523,38 @@ bool GameLogic::update(float deltaTime,
 		renderer.renderRectangleOutline(rect, Colors_Green, 0.03f);
 	};
 
+	auto hashPosition = [](int x, int y)
+	{
+		unsigned int h = 2166136261u;
+		h = (h ^ (unsigned int)x) * 16777619u;
+		h = (h ^ (unsigned int)y) * 16777619u;
+		return h;
+	};
+
+	auto pickAtlasOffset = [](unsigned int h, int maxOffset, unsigned int salt)
+	{
+		if (maxOffset <= 0) { return 0; }
+		h ^= salt + 0x9e3779b9u + (h << 6) + (h >> 2);
+		return int(h % (unsigned int)(maxOffset + 1));
+	};
+
+	auto renderBreakableDecoration = [&](glm::ivec2 pos)
+	{
+		auto &decorations = assetsManager.tileSets[TileSets::woodenDecorations];
+		if (!decorations.texture.isValid()) { return; }
+		glm::vec4 rect = {
+			(float)pos.x,
+			(float)pos.y,
+			1.0f,
+			1.0f
+		};
+		glm::ivec2 randomOffsets = getRandomAtlasOffsets(Blocks::woodenDecorations);
+		unsigned int h = hashPosition(pos.x, pos.y);
+		int offsetX = pickAtlasOffset(h, randomOffsets.x, 0x68bc21ebu);
+		renderer.renderRectangle(rect, decorations.texture, Colors_White, {}, 0,
+			decorations.atlas.get(offsetX, 0));
+	};
+
 	for (auto &entry : renderEntries)
 	{
 		switch (entry.kind)
@@ -1483,6 +1573,9 @@ bool GameLogic::update(float deltaTime,
 				{
 					renderHorizontalDoor(entry.doorPos, *entry.door);
 				}
+				break;
+			case RenderEntry::Kind::BreakableDecoration:
+				renderBreakableDecoration(entry.decorationPos);
 				break;
 		}
 	}

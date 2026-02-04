@@ -259,36 +259,17 @@ bool StandbyProjectileSystem::tryFire(Map &map, ProjectileHolder &projectileHold
 	}
 
 	(void)map;
+	(void)entityHolder;
 
 	glm::vec2 playerPos = player.physics.getPos();
-	glm::vec2 targetPos = {};
-	bool hasTarget = false;
-	float bestDist2 = fireRange * fireRange;
-
-	for (auto &e : entityHolder.entities)
+	float aimLen = glm::length(aimDir);
+	if (aimLen <= 0.0001f)
 	{
-		if (e->dying) continue; // skip dying entities
-		glm::vec2 diff = e->physics.getPos() - playerPos;
-		float dist2 = glm::dot(diff, diff);
-		if (dist2 > bestDist2)
-		{
-			continue;
-		}
-
-		bestDist2 = dist2;
-		targetPos = e->physics.getPos();
-		hasTarget = true;
-	}
-
-	glm::vec2 targetDir = hasTarget ? (targetPos - playerPos) : aimDir;
-	float targetLen = glm::length(targetDir);
-	if (targetLen <= 0.0001f)
-	{
-		targetDir = {1.0f, 0.0f};
+		aimDir = {1.0f, 0.0f};
 	}
 	else
 	{
-		targetDir /= targetLen;
+		aimDir /= aimLen;
 	}
 
 	int bestIndex = 0;
@@ -310,7 +291,7 @@ bool StandbyProjectileSystem::tryFire(Map &map, ProjectileHolder &projectileHold
 	standbyProjectiles.pop_back();
 
 	firedEntry.projectile->physics.teleport(playerPos);
-	firedEntry.projectile->physics.velocity = targetDir * firedEntry.throwVelocity;
+	firedEntry.projectile->physics.velocity = aimDir * firedEntry.throwVelocity;
 	projectileHolder.addProjectileDeferredAsPtr(std::move(firedEntry.projectile), playerPos);
 	return true;
 }
@@ -707,6 +688,8 @@ static void applyExplosionDamage(Map &map, EntityHolder &entityHolder,
 			getDamageViewerSystem().addDamage(hitStats.damage, damagePos);
 		}
 	}
+
+	breakDecorationsInRadius(&map, center, radius, useLineOfSight);
 }
 
 // trap visuals: layered ring + inner orbit, tuned per element.
@@ -1686,6 +1669,10 @@ bool RicochetProjectile::update(float deltaTime, Map &map, ParticleSystem &mainP
 	}
 
 	physics.updateMove();
+	if (breakDecorationsAtCollider(physics.transform) > 0)
+	{
+		return false;
+	}
 
 	if (hitCooldown <= 0.0f)
 	{
@@ -1812,6 +1799,8 @@ void FastMagicBoltProjectile::explode(EntityHolder &entityHolder, std::ranlux24_
 			}
 		}
 	}
+
+	breakDecorationsInRadius(nullptr, physics.getPos(), explosionRadius, false);
 }
 
 bool FastMagicBoltProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
@@ -1852,6 +1841,12 @@ bool FastMagicBoltProjectile::update(float deltaTime, Map &map, ParticleSystem &
 	{
 		trailTimer += trailInterval;
 		particleSystem.emitParticles(trailParticle, physics.getPos(), rng, physics.getPos());
+	}
+
+	if (breakDecorationsAtCollider(physics.transform) > 0)
+	{
+		explode(entityHolder, rng);
+		return false;
 	}
 
 	if (physics.leftTouch || physics.rightTouch || physics.upTouch || physics.downTouch)
@@ -3299,6 +3294,10 @@ bool EnemyOrbProjectile::update(float deltaTime, Map &map, ParticleSystem &mainP
 		physics.velocity = moveDir * speed;
 		physics.resolveConstrains(map);
 		physics.updateMove();
+		if (breakDecorationsAtCollider(physics.transform) > 0)
+		{
+			return false;
+		}
 		if (physics.leftTouch || physics.rightTouch || physics.upTouch || physics.downTouch)
 		{
 			return false;

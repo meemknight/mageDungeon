@@ -34,6 +34,17 @@ struct WandStoneSlot
 	MagicStone stone = {};
 };
 
+struct BreakableDecorationSystem
+{
+	// Holds map-placed breakable decorations for custom logic/rendering.
+	std::vector<glm::ivec2> positions;
+
+	void clear()
+	{
+		positions.clear();
+	}
+};
+
 struct GameLogic
 {
 	Map map;
@@ -48,6 +59,7 @@ struct GameLogic
 	DamageViewerSystem damageViewerSystem;
 	FloorInfo floorInfo;
 	DoorHolder doorHolder;
+	BreakableDecorationSystem breakableDecorations;
 	Wand wands[2];
 	bool hasWand[2] = {};
 	int activeWandIndex = 0;

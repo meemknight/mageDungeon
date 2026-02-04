@@ -41,7 +41,9 @@ BlockSettings blockSettings[]
 	BlockSettings{}.setTileSet(TileSets::carpetDecals).setAtlasPos({4,2}).setIsCarpet().setRandomAtlasOffsets({1, 1}), //carpet
 	BlockSettings{}.setTileSet(TileSets::none).setCollidable(), //door collision (invisible)
 
-	BlockSettings{}.setTileSet(TileSets::woodenDecorations).setCollidableOnlyForProjectiles().setAtlasPos({0,0}).setBreakableDecoration().setRandomAtlasOffsets({3,0}), //wood decorations
+	BlockSettings{}.setTileSet(TileSets::none).setCollidableOnlyForProjectiles().setAtlasPos({0,0}).setBreakableDecoration().setRandomAtlasOffsets({3,0}), //breakable wood decoration marker (rendered manually)
+	BlockSettings{}.setTileSet(TileSets::exit).setAtlasPos({0,0}), //exit
+	BlockSettings{}.setTileSet(TileSets::wallDecorations).setAtlasPos({0,0}).setRandomAtlasOffsets({15,0}), //wall decorations
 
 	
 };
@@ -143,4 +145,12 @@ bool isChunkyTile(BlockType block)
 	permaAssertDevelopement(block >= 0);
 
 	return blockSettings[block].chunkyTile;
+}
+
+bool isBreakableDecoration(BlockType block)
+{
+	permaAssertDevelopement(block < Blocks::BLOCKS_COUNT);
+	permaAssertDevelopement(block >= 0);
+
+	return blockSettings[block].isBreakableDecorations;
 }

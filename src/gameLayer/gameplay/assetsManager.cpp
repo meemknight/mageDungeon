@@ -38,6 +38,8 @@ void AssetsManager::loadAllAssets()
 		16, //wooden wall 3D,
 		16, //carpet decals,
 		16, //woodenDecorations
+		16, //exit
+		16, //wallDecorations
 	};
 
 	//if you see an error that means you added a sprite but forgot to add
@@ -67,6 +69,8 @@ void AssetsManager::loadAllAssets()
 		{6,4}, //wooden wall 3D
 		{6,4}, //carpet decals
 		{4,1}, //woodenDecorations
+		{1,1}, //exit
+		{16,1}, //wallDecorations
 
 	};
 

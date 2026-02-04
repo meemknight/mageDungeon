@@ -16,6 +16,10 @@
 
 struct Player;
 
+// Breakable decoration helpers (defined in gameLayer.cpp).
+int breakDecorationsAtCollider(const Transform2D &collider);
+int breakDecorationsInRadius(Map *map, glm::vec2 center, float radius, bool useLineOfSight);
+
 struct Projectile
 {
 	// **configuration variables**
@@ -51,6 +55,11 @@ struct Projectile
 		physics.updateForces(deltaTime, 0);
 		physics.resolveConstrains(map);
 		physics.updateMove();
+
+		if (breakDecorationsAtCollider(physics.transform) > 0)
+		{
+			return 0;
+		}
 
 		if (physics.leftTouch || physics.rightTouch || physics.downTouch || physics.upTouch)
 		{
