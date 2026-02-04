@@ -91,6 +91,8 @@ struct AssetsManager
 	gl2d::Texture thorn;
 	gl2d::Texture doorClosedHorizontal;
 	gl2d::Texture doorOpenedHorizontal;
+	gl2d::Texture doorClosedVertical;
+	gl2d::Texture doorOpenedVertical;
 
 	
 

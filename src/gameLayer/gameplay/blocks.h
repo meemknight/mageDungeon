@@ -38,6 +38,8 @@ namespace Blocks
 		carpetFloor,
 		doorCollision,
 
+		woodenDecorations,
+
 		BLOCKS_COUNT
 
 	};
@@ -75,6 +77,7 @@ namespace TileSets
 		woodenFloor,
 		woodenWall3D,
 		carpetDecals,
+		woodenDecorations,
 
 		TILE_SETS_COUNT
 	};
@@ -86,6 +89,7 @@ struct BlockSettings
 
 
 	bool collidable = 0;
+	bool collidableOnlyForProjectiles = 0;
 	glm::ivec2 atlasPos = {};
 	int tileSet = 0;
 	bool canHaveGrassDecals = 0; //todo remove
@@ -95,6 +99,7 @@ struct BlockSettings
 	bool isSmallWall = 0;
 	bool chunkyTile = 0;
 	int wall3DTileSet = 0; 
+	bool isBreakableDecorations = 0;
 
 	//if this is not 0, than the block can have up to
 	// this extra offsets selected randomly
@@ -104,6 +109,18 @@ struct BlockSettings
 	BlockSettings &setCollidable()
 	{
 		collidable = true;
+		return *this;
+	}
+
+	BlockSettings &setCollidableOnlyForProjectiles()
+	{
+		collidableOnlyForProjectiles = true;
+		return *this;
+	}
+
+	BlockSettings &setBreakableDecoration()
+	{
+		isBreakableDecorations = true;
 		return *this;
 	}
 

@@ -1381,6 +1381,34 @@ struct FloorGenerator
 			int style = Corridor_Dungeon;
 		};
 
+		auto findRoomIndexAt = [&](int x, int y)
+		{
+			for (int i = 0; i < (int)rooms.size(); i++)
+			{
+				const Rect &room = rooms[i];
+				if (x >= room.x && x < room.x2() && y >= room.y && y < room.y2())
+				{
+					return i;
+				}
+			}
+			return -1;
+		};
+
+		auto isDoorTileForRoom = [&](int roomIndex, int x, int y)
+		{
+			if (roomIndex < 0 || roomIndex >= (int)outInfo.rooms.size()) { return false; }
+			for (auto d : outInfo.rooms[roomIndex].doorPositions)
+			{
+				if (x >= d.x && x <= d.x + 1 && y >= d.y && y <= d.y + 1)
+				{
+					return true;
+				}
+			}
+			return false;
+		};
+
+
+
 		auto paintCorridorTile = [&](int x, int y, int style)
 		{
 			if (x < 0 || y < 0 || x >= sizeX || y >= sizeY) { return; }
@@ -1439,6 +1467,13 @@ struct FloorGenerator
 		auto carveCorridorWithStyle = [&](glm::ivec2 from, glm::ivec2 to, int style)
 		{
 			int width = 2;
+			auto canCarveCorridorTile = [&](int x, int y)
+			{
+				int roomIndex = findRoomIndexAt(x, y);
+				if (roomIndex < 0) { return true; }
+				if (!rooms[roomIndex].isCave) { return true; }
+				return isDoorTileForRoom(roomIndex, x, y);
+			};
 			auto carveLine = [&](glm::ivec2 start, glm::ivec2 end)
 			{
 				if (start.x == end.x)
@@ -1449,6 +1484,7 @@ struct FloorGenerator
 					{
 						for (int x = start.x; x < start.x + width; x++)
 						{
+							if (!canCarveCorridorTile(x, y)) { continue; }
 							paintCorridorTile(x, y, style);
 						}
 					}
@@ -1461,6 +1497,7 @@ struct FloorGenerator
 					{
 						for (int y = start.y; y < start.y + width; y++)
 						{
+							if (!canCarveCorridorTile(x, y)) { continue; }
 							paintCorridorTile(x, y, style);
 						}
 					}
@@ -1792,6 +1829,7 @@ struct FloorGenerator
 
 			return best;
 		};
+
 
 		auto linkRooms = [&](int a, int b, bool allowMaze)
 		{
@@ -2985,16 +3023,21 @@ struct FloorGenerator
 					if (!exists) { uniqueDoors.push_back(d); }
 				}
 
-				auto openDoorTiles = [&](glm::ivec2 d)
+		auto openDoorTiles = [&](glm::ivec2 d)
+		{
+			for (int y = d.y; y <= d.y + 1; y++)
+			{
+				for (int x = d.x; x <= d.x + 1; x++)
 				{
-					for (int y = d.y; y <= d.y + 1; y++)
+					map.firstLayer.getBlockUnsafe(x, y).type = floorType;
+					auto &over = map.secondLayer.getBlockUnsafe(x, y);
+					if (over.type != Blocks::none && isBlockColidable(over.type))
 					{
-						for (int x = d.x; x <= d.x + 1; x++)
-						{
-							map.firstLayer.getBlockUnsafe(x, y).type = floorType;
-						}
+						over.type = Blocks::none;
 					}
-				};
+				}
+			}
+		};
 
 				auto isOpenTile = [&](int x, int y)
 				{
@@ -3031,10 +3074,10 @@ struct FloorGenerator
 				{
 					if (d.x < room.x || d.y < room.y) { continue; }
 					if (d.x + 1 >= room.x2() || d.y + 1 >= room.y2()) { continue; }
-					bool onNorth = d.y == room.y;
-					bool onSouth = d.y == room.y2() - 2;
-					bool onWest = d.x == room.x;
-					bool onEast = d.x == room.x2() - 2;
+				bool onNorth = d.y == room.y;
+				bool onSouth = d.y == room.y2() - 2;
+				bool onWest = d.x == room.x;
+				bool onEast = d.x == room.x2() - 2;
 				bool isOnEdge = onNorth || onSouth || onWest || onEast;
 				if (!isOnEdge) { continue; }
 				openDoorTiles(d);
@@ -3043,6 +3086,16 @@ struct FloorGenerator
 				if (!onWest && !onEast)
 				{
 					addDoorSprite(d, onNorth, onSouth, corridorUp, corridorDown);
+				}
+				if (onWest || onEast)
+				{
+					int anchorX = onWest ? d.x : (d.x + 1);
+					int anchorY = d.y + 1;
+					glm::ivec2 anchor = {anchorX, anchorY};
+					if (anchor.x >= 0 && anchor.y >= 0 && anchor.x < sizeX && anchor.y < sizeY)
+					{
+						doorHolder.addDoor(anchor, Door::Orientation::Vertical);
+					}
 				}
 			}
 			}
@@ -3677,11 +3730,28 @@ struct FloorGenerator
 				return (x - room.x) + (y - room.y) * roomW;
 			};
 
+			auto isDoorTile = [&](int x, int y)
+			{
+				return isDoorTileForRoom(roomIndex, x, y);
+			};
+
+			auto isInteriorTile = [&](int x, int y)
+			{
+				return x > room.x && x < room.x2() - 1
+					&& y > room.y && y < room.y2() - 1;
+			};
+
 			auto carveCaveTile = [&](int x, int y)
 			{
 				if (!isInsideRoom(x, y)) { return; }
+				if (!isInteriorTile(x, y) && !isDoorTile(x, y)) { return; }
 				auto &tile = map.firstLayer.getBlockUnsafe(x, y);
 				tile.type = Blocks::caveFloor;
+				auto &over = map.secondLayer.getBlockUnsafe(x, y);
+				if (over.type != Blocks::none && isBlockColidable(over.type))
+				{
+					over.type = Blocks::none;
+				}
 			};
 
 			for (int pass = 0; pass < 2; pass++)
@@ -3866,22 +3936,12 @@ struct FloorGenerator
 					}
 				}
 
-				glm::ivec2 center = room.center();
-				int dx = (d.x + 1) - center.x;
-				int dy = (d.y + 1) - center.y;
-				bool horizontal = std::abs(dx) >= std::abs(dy);
+				bool onNorth = d.y == room.y;
+				bool onSouth = d.y == room.y2() - 2;
+				bool onWest = d.x == room.x;
+				bool onEast = d.x == room.x2() - 2;
 
-				if (horizontal)
-				{
-					int yTop = d.y - 1;
-					int yBottom = d.y + 2;
-					for (int x = d.x; x <= d.x + 1; x++)
-					{
-						setWallIfFloor(x, yTop);
-						setWallIfFloor(x, yBottom);
-					}
-				}
-				else
+				if (onNorth || onSouth)
 				{
 					int xLeft = d.x - 1;
 					int xRight = d.x + 2;
@@ -3889,6 +3949,16 @@ struct FloorGenerator
 					{
 						setWallIfFloor(xLeft, y);
 						setWallIfFloor(xRight, y);
+					}
+				}
+				else if (onWest || onEast)
+				{
+					int yTop = d.y - 1;
+					int yBottom = d.y + 2;
+					for (int x = d.x; x <= d.x + 1; x++)
+					{
+						setWallIfFloor(x, yTop);
+						setWallIfFloor(x, yBottom);
 					}
 				}
 			}
@@ -3899,6 +3969,8 @@ struct FloorGenerator
 			clearDoorTilesForRoom(roomIndex);
 		}
 
+		enforceRoomPerimeters();
+
 		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
 		{
 			if (rooms[roomIndex].isCave)
@@ -3907,8 +3979,6 @@ struct FloorGenerator
 				restoreCaveDoorEdges(roomIndex);
 			}
 		}
-
-		enforceRoomPerimeters();
 
 		if (outInfo.spawnRoomIndex && *outInfo.spawnRoomIndex >= 0
 			&& *outInfo.spawnRoomIndex < (int)rooms.size())

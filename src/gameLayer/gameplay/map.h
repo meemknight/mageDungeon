@@ -3,6 +3,8 @@
 #include <vector>
 #include <gameplay/assetsManager.h>
 
+struct DoorHolder;
+
 
 struct MapLayer
 {
@@ -25,7 +27,7 @@ struct MapLayer
 
 	//for rendering tall walls and stuff
 	void renderMapAfterEntities(gl2d::Renderer2D &renderer,
-		AssetsManager &assetManager);
+		AssetsManager &assetManager, const DoorHolder *doorHolder = nullptr);
 };
 
 struct Map
@@ -71,6 +73,6 @@ struct Map
 
 	//for rendering tall walls and stuff
 	void renderMapAfterEntities(gl2d::Renderer2D &renderer,
-		AssetsManager &assetManager);
+		AssetsManager &assetManager, const DoorHolder *doorHolder = nullptr);
 
 };

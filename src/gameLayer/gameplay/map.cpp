@@ -1,6 +1,7 @@
 #include "map.h"
 #include <imgui.h>
 #include <imguiTools.h>
+#include <gameplay/doors.h>
 
 // Hash-based offsets for per-tile atlas variation.
 static unsigned int hashPosition(int x, int y)
@@ -240,11 +241,12 @@ void Map::renderWallShadows(gl2d::Renderer2D &renderer, AssetsManager &assetMana
 
 }
 
-void Map::renderMapAfterEntities(gl2d::Renderer2D &renderer, AssetsManager &assetManager)
+void Map::renderMapAfterEntities(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+	const DoorHolder *doorHolder)
 {
 
-	firstLayer.renderMapAfterEntities(renderer, assetManager);
-	secondLayer.renderMapAfterEntities(renderer, assetManager);
+	firstLayer.renderMapAfterEntities(renderer, assetManager, doorHolder);
+	secondLayer.renderMapAfterEntities(renderer, assetManager, nullptr);
 
 }
 
@@ -815,7 +817,7 @@ void MapLayer::renderMap(gl2d::Renderer2D &renderer,
 }
 
 void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
-	AssetsManager &assetManager)
+	AssetsManager &assetManager, const DoorHolder *doorHolder)
 {
 
 
@@ -846,7 +848,26 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 	{
 		for (int x = viewRectInt.x; x < viewRectInt.z; x++)
 		{
-			
+			if (doorHolder)
+			{
+				auto it = doorHolder->doors.find({x, y});
+				if (it != doorHolder->doors.end())
+				{
+					const Door &door = it->second;
+					if (door.orientation == Door::Orientation::Vertical)
+					{
+						gl2d::Texture &sprite = door.open
+							? assetManager.doorOpenedVertical
+							: assetManager.doorClosedVertical;
+						if (sprite.isValid())
+						{
+							glm::vec4 rect = {(float)x, (float)y - 2.0f, 1.0f, 3.0f};
+							renderer.renderRectangle(rect, sprite, Colors_White);
+						}
+					}
+				}
+			}
+
 			auto current = getBlockUnsafe(x, y);
 			if (isWall(current.type))
 			{

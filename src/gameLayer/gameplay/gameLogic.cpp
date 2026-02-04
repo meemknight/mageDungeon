@@ -70,18 +70,34 @@ bool GameLogic::init()
 		for (auto &doorPair : doorHolder.doors)
 		{
 			auto &door = doorPair.second;
-			if (door.orientation != Door::Orientation::Horizontal) { continue; }
 			if (door.open) { continue; }
 			glm::ivec2 pos = doorPair.first;
-			for (int dx = 0; dx <= 1; dx++)
+			if (door.orientation == Door::Orientation::Horizontal)
 			{
-				int x = pos.x + dx;
-				int y = pos.y;
-				if (x < 0 || y < 0 || x >= map.size.x || y >= map.size.y) { continue; }
-				auto &tile = map.secondLayer.getBlockUnsafe(x, y);
-				if (tile.type == Blocks::none || tile.type == Blocks::doorCollision)
+				for (int dx = 0; dx <= 1; dx++)
 				{
-					tile.type = Blocks::doorCollision;
+					int x = pos.x + dx;
+					int y = pos.y;
+					if (x < 0 || y < 0 || x >= map.size.x || y >= map.size.y) { continue; }
+					auto &tile = map.secondLayer.getBlockUnsafe(x, y);
+					if (tile.type == Blocks::none || tile.type == Blocks::doorCollision)
+					{
+						tile.type = Blocks::doorCollision;
+					}
+				}
+			}
+			else if (door.orientation == Door::Orientation::Vertical)
+			{
+				for (int dy = 0; dy <= 1; dy++)
+				{
+					int x = pos.x;
+					int y = pos.y - dy;
+					if (x < 0 || y < 0 || x >= map.size.x || y >= map.size.y) { continue; }
+					auto &tile = map.secondLayer.getBlockUnsafe(x, y);
+					if (tile.type == Blocks::none || tile.type == Blocks::doorCollision)
+					{
+						tile.type = Blocks::doorCollision;
+					}
 				}
 			}
 		}
@@ -1226,6 +1242,8 @@ bool GameLogic::update(float deltaTime,
 		glm::vec2 moveIntent = {};
 		if (!inventoryOpen)
 		{
+			if (platform::isButtonHeld(platform::Button::A)) { moveIntent.x -= 1.0f; }
+			if (platform::isButtonHeld(platform::Button::D)) { moveIntent.x += 1.0f; }
 			if (platform::isButtonHeld(platform::Button::W)) { moveIntent.y -= 1.0f; }
 			if (platform::isButtonHeld(platform::Button::S)) { moveIntent.y += 1.0f; }
 			moveIntent += platform::getControllerButtons().LStick * glm::vec2(1, -1);
@@ -1238,52 +1256,104 @@ bool GameLogic::update(float deltaTime,
 		for (auto &doorPair : doorHolder.doors)
 		{
 			auto &door = doorPair.second;
-			if (door.orientation != Door::Orientation::Horizontal) { continue; }
 			glm::ivec2 pos = doorPair.first;
-			glm::vec4 triggerRect = {
-				(float)pos.x + triggerInset,
-				(float)pos.y + 0.5f - triggerThickness * 0.5f,
-				2.0f - triggerInset * 2.0f,
-				triggerThickness
-			};
-			doorTriggerRects.push_back(triggerRect);
+			if (door.orientation == Door::Orientation::Horizontal)
+			{
+				glm::vec4 triggerRect = {
+					(float)pos.x + triggerInset,
+					(float)pos.y + 0.5f - triggerThickness * 0.5f,
+					2.0f - triggerInset * 2.0f,
+					triggerThickness
+				};
+				doorTriggerRects.push_back(triggerRect);
 
-			float doorCenterY = (float)pos.y + 0.5f;
-			float playerCenterY = player.physics.getPos().y;
-			bool movingToward = false;
-			if (playerCenterY >= doorCenterY)
-			{
-				movingToward = moveIntent.y < -moveThreshold;
-			}
-			else
-			{
-				movingToward = moveIntent.y > moveThreshold;
-			}
-
-			if (!door.open && movingToward && checkCollisionRecs(playerRect, triggerRect))
-			{
-				door.open = true;
-			}
-
-			bool solid = !door.open;
-			for (int dx = 0; dx <= 1; dx++)
-			{
-				int x = pos.x + dx;
-				int y = pos.y;
-				if (x < 0 || y < 0 || x >= map.size.x || y >= map.size.y) { continue; }
-				auto &tile = map.secondLayer.getBlockUnsafe(x, y);
-				if (solid)
+				float doorCenterY = (float)pos.y + 0.5f;
+				float playerCenterY = player.physics.getPos().y;
+				bool movingToward = false;
+				if (playerCenterY >= doorCenterY)
 				{
-					if (tile.type == Blocks::none || tile.type == Blocks::doorCollision)
-					{
-						tile.type = Blocks::doorCollision;
-					}
+					movingToward = moveIntent.y < -moveThreshold;
 				}
 				else
 				{
-					if (tile.type == Blocks::doorCollision)
+					movingToward = moveIntent.y > moveThreshold;
+				}
+
+				if (!door.open && movingToward && checkCollisionRecs(playerRect, triggerRect))
+				{
+					door.open = true;
+				}
+
+				bool solid = !door.open;
+				for (int dx = 0; dx <= 1; dx++)
+				{
+					int x = pos.x + dx;
+					int y = pos.y;
+					if (x < 0 || y < 0 || x >= map.size.x || y >= map.size.y) { continue; }
+					auto &tile = map.secondLayer.getBlockUnsafe(x, y);
+					if (solid)
 					{
-						tile.type = Blocks::none;
+						if (tile.type == Blocks::none || tile.type == Blocks::doorCollision)
+						{
+							tile.type = Blocks::doorCollision;
+						}
+					}
+					else
+					{
+						if (tile.type == Blocks::doorCollision)
+						{
+							tile.type = Blocks::none;
+						}
+					}
+				}
+			}
+			else if (door.orientation == Door::Orientation::Vertical)
+			{
+				glm::vec4 triggerRect = {
+					(float)pos.x + 0.5f - triggerThickness * 0.5f,
+					(float)pos.y - 1.0f + triggerInset,
+					triggerThickness,
+					2.0f - triggerInset * 2.0f
+				};
+				doorTriggerRects.push_back(triggerRect);
+
+				float doorCenterX = (float)pos.x + 0.5f;
+				float playerCenterX = player.physics.getPos().x;
+				bool movingToward = false;
+				if (playerCenterX >= doorCenterX)
+				{
+					movingToward = moveIntent.x < -moveThreshold;
+				}
+				else
+				{
+					movingToward = moveIntent.x > moveThreshold;
+				}
+
+				if (!door.open && movingToward && checkCollisionRecs(playerRect, triggerRect))
+				{
+					door.open = true;
+				}
+
+				bool solid = !door.open;
+				for (int dy = 0; dy <= 1; dy++)
+				{
+					int x = pos.x;
+					int y = pos.y - dy;
+					if (x < 0 || y < 0 || x >= map.size.x || y >= map.size.y) { continue; }
+					auto &tile = map.secondLayer.getBlockUnsafe(x, y);
+					if (solid)
+					{
+						if (tile.type == Blocks::none || tile.type == Blocks::doorCollision)
+						{
+							tile.type = Blocks::doorCollision;
+						}
+					}
+					else
+					{
+						if (tile.type == Blocks::doorCollision)
+						{
+							tile.type = Blocks::none;
+						}
 					}
 				}
 			}
@@ -1498,7 +1568,7 @@ bool GameLogic::update(float deltaTime,
 		particlePostProcessRenderer.finalRender(renderer);
 	}
 
-	map.renderMapAfterEntities(renderer, assetsManager);
+	map.renderMapAfterEntities(renderer, assetsManager, &doorHolder);
 	damageViewerSystem.render(renderer, assetsManager.font);
 
 #pragma endregion

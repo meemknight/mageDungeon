@@ -37,6 +37,7 @@ void AssetsManager::loadAllAssets()
 		16, //wooden floor,
 		16, //wooden wall 3D,
 		16, //carpet decals,
+		16, //woodenDecorations
 	};
 
 	//if you see an error that means you added a sprite but forgot to add
@@ -65,6 +66,7 @@ void AssetsManager::loadAllAssets()
 		{4,1}, //wooden floor
 		{6,4}, //wooden wall 3D
 		{6,4}, //carpet decals
+		{4,1}, //woodenDecorations
 
 	};
 
@@ -200,8 +202,10 @@ void AssetsManager::loadAllAssets()
 	s = coin.texture.GetSize();
 	coin.atlas = gl2d::TextureAtlasPadding(6, 1, s.x, s.y);
 
-	doorClosedHorizontal.loadFromFileWithPixelPadding(RESOURCES_PATH "map/doorClosedHorizontal.png", 32);
-	doorOpenedHorizontal.loadFromFileWithPixelPadding(RESOURCES_PATH "map/doorOpenedHorizontal.png", 32);
+	doorClosedHorizontal.loadFromFile(RESOURCES_PATH "map/doorClosedHorizontal.png");
+	doorOpenedHorizontal.loadFromFile(RESOURCES_PATH "map/doorOpenedHorizontal.png");
+	doorClosedVertical.loadFromFile(RESOURCES_PATH "map/doorClosedVertical.png");
+	doorOpenedVertical.loadFromFile(RESOURCES_PATH "map/doorOpenedVertical.png");
 
 	PaletteEffect palette;
 	palette.loadPalette();

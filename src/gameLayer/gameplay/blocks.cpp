@@ -41,6 +41,7 @@ BlockSettings blockSettings[]
 	BlockSettings{}.setTileSet(TileSets::carpetDecals).setAtlasPos({4,2}).setIsCarpet().setRandomAtlasOffsets({1, 1}), //carpet
 	BlockSettings{}.setTileSet(TileSets::none).setCollidable(), //door collision (invisible)
 
+	BlockSettings{}.setTileSet(TileSets::woodenDecorations).setCollidableOnlyForProjectiles().setAtlasPos({0,0}).setBreakableDecoration().setRandomAtlasOffsets({3,0}), //wood decorations
 
 	
 };
