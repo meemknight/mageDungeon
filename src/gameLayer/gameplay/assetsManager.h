@@ -89,6 +89,8 @@ struct AssetsManager
 	gl2d::Texture particleSmoke;
 	gl2d::Texture target;
 	gl2d::Texture thorn;
+	gl2d::Texture doorClosedHorizontal;
+	gl2d::Texture doorOpenedHorizontal;
 
 	
 

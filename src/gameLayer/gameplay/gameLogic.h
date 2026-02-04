@@ -1,5 +1,6 @@
 #pragma once
 #include <gameplay/map.h>
+#include <gameplay/doors.h>
 #include <gameplay/elements.h>
 #include <vector>
 #include <gameplay/Physics.h>
@@ -46,6 +47,7 @@ struct GameLogic
 	SleppSelectionInputLogic spellSelectionLogic[2]; // spell selection input and UI per wand
 	DamageViewerSystem damageViewerSystem;
 	FloorInfo floorInfo;
+	DoorHolder doorHolder;
 	Wand wands[2];
 	bool hasWand[2] = {};
 	int activeWandIndex = 0;

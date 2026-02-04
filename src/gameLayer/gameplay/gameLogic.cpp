@@ -56,7 +56,7 @@ bool GameLogic::init()
 
 	std::vector<FloorConnection> connections;
 
-	floorGenerator.generateDungeonFloor(140, 140, map, 12345, connections, true, floorInfo);
+	floorGenerator.generateDungeonFloor(140, 140, map, 12345, connections, true, floorInfo, doorHolder);
 
 	floorGenerator.clear();
 
@@ -1060,13 +1060,133 @@ bool GameLogic::update(float deltaTime,
 		}
 	}
 	#pragma endregion
-	entityHolder.render(renderer, particlePostProcessRenderer);
-	summons.render(renderer, particlePostProcessRenderer);
-
-
 	//renderer.renderRectangle(player.physical.getAABB(), Colors_Red);
 	player.update(simDelta);
-	player.render(renderer, assetsManager, currentWand, fireDirection);
+
+	// Render entities/player/doors sorted by Y for proper overlap.
+	struct RenderEntry
+	{
+		enum class Kind
+		{
+			Entity,
+			Summon,
+			Player,
+			Door
+		};
+		float sortY = 0.0f;
+		Kind kind = Kind::Entity;
+		Entity *entity = nullptr;
+		SummonEntity *summon = nullptr;
+		const Door *door = nullptr;
+		glm::ivec2 doorPos = {};
+	};
+
+	std::vector<RenderEntry> renderEntries;
+	renderEntries.reserve(entityHolder.entities.size() + summons.summons.size()
+		+ doorHolder.doors.size() + 2);
+
+	for (auto &entity : entityHolder.entities)
+	{
+		RenderEntry entry = {};
+		entry.kind = RenderEntry::Kind::Entity;
+		entry.sortY = entity->physics.transform.getBottom().y;
+		entry.entity = entity.get();
+		renderEntries.push_back(entry);
+	}
+
+	for (auto &summon : summons.summons)
+	{
+		RenderEntry entry = {};
+		entry.kind = RenderEntry::Kind::Summon;
+		entry.sortY = summon->physics.transform.getBottom().y;
+		entry.summon = summon.get();
+		renderEntries.push_back(entry);
+	}
+
+	RenderEntry playerEntry = {};
+	playerEntry.kind = RenderEntry::Kind::Player;
+	playerEntry.sortY = player.physics.transform.getBottom().y;
+	renderEntries.push_back(playerEntry);
+
+	auto addDoorRenderEntries = [&]()
+	{
+		if (doorHolder.doors.empty()) { return; }
+		auto viewRect = renderer.getViewRect();
+		glm::ivec4 viewRectInt = {};
+		viewRectInt.x = int(viewRect.x) - 2;
+		viewRectInt.y = int(viewRect.y) - 2;
+		viewRectInt.z = int(viewRect.z + 2.5f) + 2;
+		viewRectInt.w = int(viewRect.w + 2.5f) + 2;
+		viewRectInt.z += viewRect.x;
+		viewRectInt.w += viewRect.y;
+		viewRectInt = glm::clamp(viewRectInt, {0, 0, 0, 0},
+			{map.size.x - 1, map.size.y - 1, map.size.x - 1, map.size.y - 1});
+
+		for (const auto &doorPair : doorHolder.doors)
+		{
+			const glm::ivec2 pos = doorPair.first;
+			const Door &door = doorPair.second;
+			if (door.orientation != Door::Orientation::Horizontal) { continue; }
+			if (pos.x < viewRectInt.x || pos.x >= viewRectInt.z
+				|| pos.y < viewRectInt.y || pos.y >= viewRectInt.w)
+			{
+				continue;
+			}
+
+			RenderEntry entry = {};
+			entry.kind = RenderEntry::Kind::Door;
+			entry.sortY = (float)pos.y + 1.0f;
+			entry.door = &door;
+			entry.doorPos = pos;
+			renderEntries.push_back(entry);
+		}
+	};
+
+	addDoorRenderEntries();
+
+	std::sort(renderEntries.begin(), renderEntries.end(),
+		[](const RenderEntry &a, const RenderEntry &b)
+		{
+			return a.sortY < b.sortY;
+		});
+
+	auto renderHorizontalDoor = [&](glm::ivec2 pos, const Door &door)
+	{
+		glm::vec4 rect = {
+			(float)pos.x,
+			(float)pos.y - 1.0f,
+			2.0f,
+			2.0f
+		};
+		gl2d::Texture &sprite = door.open
+			? assetsManager.doorOpenedHorizontal
+			: assetsManager.doorClosedHorizontal;
+		if (!sprite.isValid()) { return; }
+		renderer.renderRectangle(rect, sprite, Colors_White);
+		renderer.renderRectangleOutline(rect, Colors_Green, 0.03f);
+	};
+
+	for (auto &entry : renderEntries)
+	{
+		switch (entry.kind)
+		{
+			case RenderEntry::Kind::Entity:
+				entry.entity->render(renderer, particlePostProcessRenderer);
+				break;
+			case RenderEntry::Kind::Summon:
+				entry.summon->render(renderer, particlePostProcessRenderer);
+				break;
+			case RenderEntry::Kind::Player:
+				player.render(renderer, assetsManager, currentWand, fireDirection);
+				break;
+			case RenderEntry::Kind::Door:
+				if (entry.door)
+				{
+					renderHorizontalDoor(entry.doorPos, *entry.door);
+				}
+				break;
+		}
+	}
 
 	auto renderStatusIcons = [&](glm::vec4 aabb, const StatusEffects &effects)
 	{

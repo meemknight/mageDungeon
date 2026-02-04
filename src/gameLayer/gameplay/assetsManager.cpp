@@ -200,6 +200,9 @@ void AssetsManager::loadAllAssets()
 	s = coin.texture.GetSize();
 	coin.atlas = gl2d::TextureAtlasPadding(6, 1, s.x, s.y);
 
+	doorClosedHorizontal.loadFromFileWithPixelPadding(RESOURCES_PATH "map/doorClosedHorizontal.png", 32);
+	doorOpenedHorizontal.loadFromFileWithPixelPadding(RESOURCES_PATH "map/doorOpenedHorizontal.png", 32);
+
 	PaletteEffect palette;
 	palette.loadPalette();
 	bool hasPalette = palette.hasPalette();
