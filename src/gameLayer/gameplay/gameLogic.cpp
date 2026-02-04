@@ -56,7 +56,7 @@ bool GameLogic::init()
 
 	std::vector<FloorConnection> connections;
 
-	floorGenerator.generateDungeonFloor(140, 140, map, 1234, connections, true, floorInfo);
+	floorGenerator.generateDungeonFloor(140, 140, map, 12345, connections, true, floorInfo);
 
 	floorGenerator.clear();
 
@@ -379,6 +379,16 @@ bool GameLogic::update(float deltaTime,
 			else if (droppedItems.items[interactIndex].type == DroppedItemType::Coin)
 			{
 				droppedItems.takeCoin(interactIndex, particleSystem, rng);
+			}
+			else if (droppedItems.items[interactIndex].type == DroppedItemType::MagicStone)
+			{
+				int stoneElement = Elements::NoneElement;
+				int stoneUses = 1;
+				if (droppedItems.takeMagicStone(interactIndex, particleSystem, rng,
+					stoneElement, stoneUses))
+				{
+					stoneInventory.push_back({stoneElement, stoneUses});
+				}
 			}
 			else
 			{
@@ -1149,6 +1159,8 @@ bool GameLogic::update(float deltaTime,
 		float barHeight = PIXEL_SIZE * 6.0f * cameraZoom;
 		float x = renderer.windowW - padding - barWidth;
 		float y = padding;
+		float outlineWidth = PIXEL_SIZE * cameraZoom;
+		if (outlineWidth < 1.0f) { outlineWidth = 1.0f; }
 
 		glm::vec4 barRect = {x, y, barWidth, barHeight};
 		renderer.renderRectangle(barRect, {0.15f, 0.05f, 0.05f, 0.85f});
@@ -1166,14 +1178,15 @@ bool GameLogic::update(float deltaTime,
 		// Shield -> spell healing -> life (rightmost) so damage peels from the left.
 		if (shieldWidth > 0.0f)
 		{
-			renderer.renderRectangle({cursor, y, shieldWidth, barHeight},
-				{0.65f, 0.65f, 0.7f, 0.9f});
+			glm::vec4 shieldRect = {cursor, y, shieldWidth, barHeight};
+			renderer.renderRectangle(shieldRect, {0.65f, 0.65f, 0.7f, 0.9f});
+			renderer.renderRectangleOutline(shieldRect, {0.35f, 0.35f, 0.38f, 0.95f}, outlineWidth);
 			cursor += shieldWidth;
 		}
 		if (spellWidth > 0.0f)
 		{
 			renderer.renderRectangle({cursor, y, spellWidth, barHeight},
-				{0.7f, 0.08f, 0.08f, 0.9f});
+				{0.72f, 0.1f, 0.24f, 0.9f});
 			cursor += spellWidth;
 		}
 		if (lifeWidth > 0.0f)
@@ -1181,7 +1194,7 @@ bool GameLogic::update(float deltaTime,
 			renderer.renderRectangle({cursor, y, lifeWidth, barHeight},
 				{0.9f, 0.1f, 0.1f, 0.9f});
 		}
-		renderer.renderRectangleOutline(barRect, {0.4f, 0.1f, 0.1f, 0.9f}, PIXEL_SIZE * cameraZoom);
+		renderer.renderRectangleOutline(barRect, {0.4f, 0.1f, 0.1f, 0.9f}, outlineWidth);
 
 		//char lifeText[32] = {};
 		//snprintf(lifeText, sizeof(lifeText), "HP %d/%d", (int)std::ceil(lifeDisplay), (int)player.maxLife);

@@ -168,10 +168,14 @@ struct StandbyProjectileEntry
 	std::unique_ptr<Projectile> projectile;
 	ParticleEmissionSettings particleEmmision;
 	ParticleEmissionSettings customEmission;
+	ParticleEmissionSettings secondaryParticleEmmision;
+	ParticleEmissionSettings customSecondaryEmission;
 	float particleTimer = 0.0f;
+	float secondaryParticleTimer = 0.0f;
 	float timeLeft = 0.0f;
 	float throwVelocity = 10.0f;
 	bool hasCustomEmission = false;
+	bool hasSecondaryEmission = false;
 	bool initialized = false;
 };
 
@@ -197,7 +201,8 @@ struct StandbyProjectileSystem
 
 	void addProjectileAsPtr(std::unique_ptr<Projectile> projectile,
 		float customLifetime = -1.0f, float customThrowVelocity = 10.0f,
-		const ParticleEmissionSettings *customEmission = nullptr);
+		const ParticleEmissionSettings *customEmission = nullptr,
+		const ParticleEmissionSettings *secondaryEmission = nullptr);
 	void update(float deltaTime, Map &map, ProjectileHolder &projectileHolder,
 		std::ranlux24_base &rng, Player &player, EntityHolder &entityHolder,
 		glm::vec2 aimDir, bool aimActive);
@@ -251,6 +256,35 @@ struct BasicMagicMissle: public CloneableProjectile<BasicMagicMissle>
 
 };
 
+// Piercing bolt that hits up to 4 targets with falloff damage.
+struct PiercingBoltProjectile: public CloneableProjectile<PiercingBoltProjectile>
+{
+	// **configuration variables**
+	HitStats primaryHitStats;
+	HitStats secondHitStats;
+	HitStats pierceHitStats;
+	float statusAmount = 5.0f;
+	int maxHits = 4;
+	float triangleEmitInterval = 0.03f;
+	float trailEmitInterval = 0.02f;
+
+	// **state variables**
+	bool firstTime = true;
+	float triangleTimer = 0.0f;
+	float trailTimer = 0.0f;
+	std::vector<Entity *> hitEntities;
+	ParticleSettings triangleParticle;
+	ParticleSettings trailParticle;
+	ParticleSettings hitParticle;
+
+	PiercingBoltProjectile();
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng, EntityHolder &entityHolder) override;
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+		ParticlePostProcessRenderer &particlePostProcessRenderer) override;
+	void onDestroy(std::ranlux24_base &rng) override;
+};
+
 
 struct TrapProjectile: public CloneableProjectile<TrapProjectile>
 {
@@ -258,6 +292,12 @@ struct TrapProjectile: public CloneableProjectile<TrapProjectile>
 	HitStats hitStats;
 	float trapRadious = 1.5f;
 	float statusAmount = 5.0f;
+	// Visual tuning for trap variants (bigger/denser rings).
+	float particleSizeScale = 1.0f;
+	float particleCountScale = 1.0f;
+	float ringStepScale = 1.0f;
+	float ringEmitIntervalScale = 1.0f;
+	float orbitEmitIntervalScale = 1.0f;
 	constexpr static float activateRadiousMultiplier = 0.8f;
 
 	// **state variables**
@@ -510,6 +550,30 @@ struct BoulderProjectile: public CloneableProjectile<BoulderProjectile>
 	ParticleSettings trailParticle;
 
 	BoulderProjectile();
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		std::ranlux24_base &rng, EntityHolder &entityHolder) override;
+	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager, ParticlePostProcessRenderer &particlePostProcessRenderer) override;
+	void onDestroy(std::ranlux24_base &rng) override;
+};
+
+// Homing boulder with purple-tinted particles.
+struct HomingBoulderProjectile: public CloneableProjectile<HomingBoulderProjectile>
+{
+	// **configuration variables**
+	HitStats hitStats;
+	float trailInterval = 0.05f;
+	float homingRange = 8.0f;
+	float homingTurnRate = 5.0f;
+
+	// **state variables**
+	bool firstTime = true;
+	float trailTimer = 0.0f;
+	float travelSpeed = 0.0f;
+	ParticleSettings bigParticle;
+	ParticleSettings trailParticle;
+
+	HomingBoulderProjectile();
+	void setupParticles();
 	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
 		std::ranlux24_base &rng, EntityHolder &entityHolder) override;
 	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager, ParticlePostProcessRenderer &particlePostProcessRenderer) override;

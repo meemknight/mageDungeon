@@ -49,7 +49,8 @@ bool basicProjectileHitEntitiesLogic(PhysicalEntity &physics,
 }
 
 void StandbyProjectileSystem::addProjectileAsPtr(std::unique_ptr<Projectile> projectile,
-	float customLifetime, float customThrowVelocity, const ParticleEmissionSettings *customEmission)
+	float customLifetime, float customThrowVelocity, const ParticleEmissionSettings *customEmission,
+	const ParticleEmissionSettings *secondaryEmission)
 {
 	if (!projectile)
 	{
@@ -89,6 +90,11 @@ void StandbyProjectileSystem::addProjectileAsPtr(std::unique_ptr<Projectile> pro
 	if (customEmission)
 	{
 		entry.customEmission = *customEmission;
+	}
+	entry.hasSecondaryEmission = secondaryEmission != nullptr;
+	if (secondaryEmission)
+	{
+		entry.customSecondaryEmission = *secondaryEmission;
 	}
 	entry.initialized = false;
 
@@ -207,6 +213,17 @@ void StandbyProjectileSystem::update(float deltaTime, Map &map, ProjectileHolder
 			{
 				entry.particleEmmision = getBasicMagicMissleParticleEmision(entry.projectile->element, sizeBias);
 			}
+			if (entry.hasSecondaryEmission)
+			{
+				entry.secondaryParticleEmmision = entry.customSecondaryEmission;
+				entry.secondaryParticleEmmision.sustain.createApearence.size *= sizeBias;
+				entry.secondaryParticleEmmision.sustain.endApearence.size *= sizeBias;
+				entry.secondaryParticleEmmision.release.createApearence.size *= sizeBias;
+				entry.secondaryParticleEmmision.release.endApearence.size *= sizeBias;
+				entry.secondaryParticleEmmision.create.createApearence.size *= sizeBias;
+				entry.secondaryParticleEmmision.create.endApearence.size *= sizeBias;
+				entry.secondaryParticleTimer = getRandomFloat(rng, 0.0f, entry.secondaryParticleEmmision.emitTimer);
+			}
 			entry.particleTimer = getRandomFloat(rng, 0.0f, entry.particleEmmision.emitTimer);
 			entry.initialized = true;
 		}
@@ -216,6 +233,16 @@ void StandbyProjectileSystem::update(float deltaTime, Map &map, ProjectileHolder
 		{
 			entry.particleTimer += entry.particleEmmision.emitTimer;
 			entry.projectile->particleSystem.emitParticles(entry.particleEmmision.sustain, ringPos, rng, ringPos);
+		}
+
+		if (entry.hasSecondaryEmission)
+		{
+			entry.secondaryParticleTimer -= deltaTime;
+			while (entry.secondaryParticleTimer <= 0.0f)
+			{
+				entry.secondaryParticleTimer += entry.secondaryParticleEmmision.emitTimer;
+				entry.projectile->particleSystem.emitParticles(entry.secondaryParticleEmmision.sustain, ringPos, rng, ringPos);
+			}
 		}
 
 		entry.projectile->particleSystem.update(deltaTime);
@@ -369,6 +396,210 @@ void BasicMagicMissle::render(gl2d::Renderer2D &renderer, AssetsManager &assetMa
 }
 
 void BasicMagicMissle::onDestroy(std::ranlux24_base &rng)
+{
+}
+
+PiercingBoltProjectile::PiercingBoltProjectile()
+{
+	primaryHitStats.damage = 12.0f;
+	primaryHitStats.pushBack = 5.2f;
+
+	secondHitStats.damage = 8.0f;
+	secondHitStats.pushBack = 4.6f;
+	
+	pierceHitStats.damage = 5.0f;
+	pierceHitStats.pushBack = 4.2f;
+
+	element = Elements::Ice;
+	timeAlieve = 6.0f;
+	physics.transform.size = {PIXEL_SIZE * 8.0f, PIXEL_SIZE * 8.0f};
+	physics.transform.isCircleCollider = true;
+	particleSystem.maxCount = 120;
+}
+
+bool PiercingBoltProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+	std::ranlux24_base &rng, EntityHolder &entityHolder)
+{
+	if (firstTime)
+	{
+		firstTime = false;
+		hitEntities.clear();
+		hitEntities.reserve(maxHits);
+
+		glm::vec4 startColor = elementToSecondaryColor(element); startColor.a = 0.8f;
+		glm::vec4 endColor = elementToColor(element); endColor.a = 0.6f;
+
+		ParticleSettings baseParticle;
+		if (element == Elements::Fire)
+		{
+			baseParticle = getSparkBurstParticle(startColor, endColor);
+		}
+		else if (element == Elements::Water)
+		{
+			baseParticle = getArcaneTrailParticle(startColor, endColor);
+		}
+		else if (element == Elements::Earth)
+		{
+			baseParticle = getSmallSquareParticle(startColor, endColor);
+		}
+		else
+		{
+			baseParticle = getFrostShardParticle(startColor, endColor);
+		}
+
+		triangleParticle = baseParticle;
+		triangleParticle.onCreateCount = 1;
+		triangleParticle.particleLifeTime = {0.16f, 0.24f};
+		triangleParticle.velocityX = {0.0f, 0.0f};
+		triangleParticle.velocityY = {0.0f, 0.0f};
+		triangleParticle.dragX = {0.0f, 0.0f};
+		triangleParticle.dragY = {0.0f, 0.0f};
+		triangleParticle.rotation = {0.0f, 0.0f};
+		triangleParticle.rotationSpeed = {0.0f, 0.0f};
+		triangleParticle.positionX = {0.0f, 0.0f};
+		triangleParticle.positionY = {0.0f, 0.0f};
+		triangleParticle.createApearence.size = glm::vec2{2.2f, 3.2f} * PIXEL_SIZE;
+		triangleParticle.endApearence.size = glm::vec2{1.4f, 2.4f} * PIXEL_SIZE;
+		triangleParticle.folowParent = true;
+
+		trailParticle = baseParticle;
+		trailParticle.onCreateCount = 1;
+		trailParticle.particleLifeTime = {0.2f, 0.35f};
+		trailParticle.velocityX *= 0.35f;
+		trailParticle.velocityY *= 0.35f;
+		trailParticle.dragX *= 0.6f;
+		trailParticle.dragY *= 0.6f;
+		trailParticle.createApearence.size *= 0.6f;
+		trailParticle.endApearence.size *= 0.6f;
+		trailParticle.folowParent = false;
+
+		hitParticle = baseParticle;
+		hitParticle.onCreateCount = 5;
+		hitParticle.particleLifeTime = {0.14f, 0.22f};
+		hitParticle.velocityX *= 0.6f;
+		hitParticle.velocityY *= 0.6f;
+		hitParticle.createApearence.size *= 0.8f;
+		hitParticle.endApearence.size *= 0.7f;
+		hitParticle.folowParent = false;
+
+		triangleTimer = getRandomFloat(rng, 0.0f, triangleEmitInterval);
+		trailTimer = getRandomFloat(rng, 0.0f, trailEmitInterval);
+	}
+
+	glm::vec2 moveDir = physics.velocity;
+	float moveLen = glm::length(moveDir);
+	if (moveLen <= 0.0001f)
+	{
+		moveDir = {1.0f, 0.0f};
+	}
+	else
+	{
+		moveDir /= moveLen;
+	}
+	glm::vec2 right = {-moveDir.y, moveDir.x};
+
+	auto emitTriangle = [&](glm::vec2 pos)
+	{
+		float tipOffset = PIXEL_SIZE * 4.2f;
+		float baseOffset = PIXEL_SIZE * 2.0f;
+		float baseWidth = PIXEL_SIZE * 3.0f;
+		particleSystem.emitParticles(triangleParticle, pos + moveDir * tipOffset, rng, pos);
+		particleSystem.emitParticles(triangleParticle, pos - moveDir * baseOffset + right * baseWidth, rng, pos);
+		particleSystem.emitParticles(triangleParticle, pos - moveDir * baseOffset - right * baseWidth, rng, pos);
+	};
+
+	triangleTimer -= deltaTime;
+	while (triangleTimer <= 0.0f)
+	{
+		triangleTimer += triangleEmitInterval;
+		emitTriangle(physics.getPos());
+	}
+
+	trailTimer -= deltaTime;
+	while (trailTimer <= 0.0f)
+	{
+		trailTimer += trailEmitInterval;
+		particleSystem.emitParticles(trailParticle, physics.getPos(), rng, physics.getPos());
+	}
+
+	auto alreadyHit = [&](Entity *target)
+	{
+		for (auto *hit : hitEntities)
+		{
+			if (hit == target)
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
+	auto applyHit = [&](Entity &target, const HitStats &hitStats)
+	{
+		glm::vec2 pushBack = {};
+		glm::vec2 hitDir = physics.velocity;
+		if (glm::length(hitDir) <= 0.0001f)
+		{
+			hitDir = target.physics.getPos() - physics.getPos();
+		}
+		target.life.computeHit(hitStats, element, target.element, hitDir, pushBack);
+		if (hitStats.damage > 0.0f)
+		{
+			target.onDamaged(hitStats.damage);
+		}
+		target.physics.velocity += pushBack;
+		if (statusAmount > 0.0f)
+		{
+			addStatusEffectFromElement(target.statusEffects, target.statusImmunities, element, statusAmount);
+		}
+		glm::vec2 damagePos = target.physics.getPos();
+		damagePos.y -= target.physics.transform.size.y * 0.6f;
+		getDamageViewerSystem().addDamage(hitStats.damage, damagePos);
+		mainParticleSystem.emitParticles(hitParticle, target.physics.getPos(), rng, target.physics.getPos());
+	};
+
+	for (auto &e : entityHolder.entities)
+	{
+		if (e->dying) continue; // skip dying entities
+		if ((int)hitEntities.size() >= maxHits)
+		{
+			break;
+		}
+		if (alreadyHit(e.get())) { continue; }
+		if (physics.transform.intersectTransform(e->physics.transform))
+		{
+			const HitStats &stats = hitEntities.empty()
+				? primaryHitStats
+				: (hitEntities.size() == 1 ? secondHitStats : pierceHitStats);
+			applyHit(*e, stats);
+			hitEntities.push_back(e.get());
+		}
+	}
+
+	if ((int)hitEntities.size() >= maxHits)
+	{
+		particleSystem.emitParticles(hitParticle, physics.getPos(), rng, physics.getPos());
+		return false;
+	}
+
+	if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+	{
+		particleSystem.emitParticles(hitParticle, physics.getPos(), rng, physics.getPos());
+		return false;
+	}
+
+	particleSystem.update(deltaTime);
+	return true;
+}
+
+void PiercingBoltProjectile::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+	ParticlePostProcessRenderer &particlePostProcessRenderer)
+{
+	particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+	physics.renderCollider(renderer);
+}
+
+void PiercingBoltProjectile::onDestroy(std::ranlux24_base &rng)
 {
 }
 
@@ -1005,6 +1236,23 @@ bool TrapProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParti
 		orbitParticle = buildTrapOrbitParticle(element, trapRadious);
 		burstParticle = buildTrapBurstParticle(element);
 
+		auto scaleTrapParticle = [&](ParticleSettings &p)
+		{
+			if (particleCountScale != 1.0f)
+			{
+				int count = (int)std::round((float)p.onCreateCount * particleCountScale);
+				p.onCreateCount = (short)std::max(1, count);
+			}
+			if (particleSizeScale != 1.0f)
+			{
+				p.createApearence.size *= particleSizeScale;
+				p.endApearence.size *= particleSizeScale;
+			}
+		};
+		scaleTrapParticle(ringParticle);
+		scaleTrapParticle(orbitParticle);
+		scaleTrapParticle(burstParticle);
+
 		ringRotation = getRandomFloat(rng, 0.0f, 6.2831853f);
 		ringSpinSpeed = getRandomFloat(rng, 0.6f, 1.2f);
 		if (getRandomChance(rng, 0.5f)) { ringSpinSpeed *= -1.0f; }
@@ -1033,6 +1281,10 @@ bool TrapProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParti
 			orbitEmitInterval = 0.36f;
 			ringStep = 0.34f;
 		}
+
+		ringEmitInterval = std::max(0.04f, ringEmitInterval * ringEmitIntervalScale);
+		orbitEmitInterval = std::max(0.06f, orbitEmitInterval * orbitEmitIntervalScale);
+		ringStep = std::max(0.08f, ringStep * ringStepScale);
 
 		particleTimer = getRandomFloat(rng, 0.0f, ringEmitInterval);
 		orbitTimer = getRandomFloat(rng, 0.0f, orbitEmitInterval);
@@ -1263,7 +1515,7 @@ void EarthThornBoltProjectile::onDestroy(std::ranlux24_base &rng)
 
 EarthWaterThornBoltProjectile::EarthWaterThornBoltProjectile()
 {
-	hitStats.damage = 30.0f;
+	hitStats.damage = 24.0f;
 	hitStats.pushBack = 3.0f;
 	element = Elements::Earth;
 	timeAlieve = 6.0f;
@@ -1482,7 +1734,9 @@ FastMagicBoltProjectile::FastMagicBoltProjectile()
 	hitStats.pushBack = 4.0f;
 	element = Elements::Fire;
 	timeAlieve = 3.5f;
-	physics.transform.size = {PIXEL_SIZE * 6.5f, PIXEL_SIZE * 6.5f};
+	float radiusBoost = 0.1f;
+	float size = PIXEL_SIZE * 6.5f + radiusBoost * 2.0f;
+	physics.transform.size = {size, size};
 	physics.transform.isCircleCollider = true;
 	particleSystem.maxCount = 120;
 }
@@ -1749,6 +2003,162 @@ void BoulderProjectile::onDestroy(std::ranlux24_base &rng)
 	burstParticle.endApearence.size = {0.1f, 0.28f};
 	burstParticle.velocityX = {-0.6f, 0.6f};
 	burstParticle.velocityY = {-0.6f, 0.6f};
+	particleSystem.emitParticles(burstParticle, physics.getPos(), rng, physics.getPos());
+}
+
+HomingBoulderProjectile::HomingBoulderProjectile()
+{
+	hitStats.damage = 10.0f;
+	hitStats.pushBack = 8.0f;
+	element = Elements::NoneElement;
+	physics.transform.size = {PIXEL_SIZE * 12.0f, PIXEL_SIZE * 12.0f};
+	physics.transform.isCircleCollider = true;
+	particleSystem.maxCount = 120;
+}
+
+void HomingBoulderProjectile::setupParticles()
+{
+	auto &assets = getAssetManager();
+	glm::vec4 startColor = {0.55f, 0.55f, 0.55f, 0.9f};
+	glm::vec4 endColor = {0.3f, 0.3f, 0.3f, 0.9f};
+	glm::vec4 accent = {0.75f, 0.35f, 0.95f, 1.0f};
+	const float tint = 0.35f;
+	startColor = startColor * (1.0f - tint) + accent * tint;
+	endColor = endColor * (1.0f - tint) + accent * tint;
+	startColor.a = 0.9f;
+	endColor.a = 0.9f;
+
+	bigParticle = getSmallSquareParticle(startColor, endColor);
+	bigParticle.onCreateCount = 1;
+	bigParticle.folowParent = true;
+	bigParticle.particleLifeTime = {timeAlieve + 0.2f, timeAlieve + 0.2f};
+	bigParticle.createApearence.size = {0.7f, 0.85f};
+	bigParticle.endApearence.size = {0.7f, 0.85f};
+	bigParticle.velocityX = {0.0f, 0.0f};
+	bigParticle.velocityY = {0.0f, 0.0f};
+	bigParticle.texture = assets.particleCircle;
+
+	trailParticle = getSmallSquareParticle(startColor, endColor);
+	trailParticle.onCreateCount = 1;
+	trailParticle.folowParent = false;
+	trailParticle.particleLifeTime = {0.25f, 0.45f};
+	trailParticle.createApearence.size = {0.12f, 0.2f};
+	trailParticle.endApearence.size = {0.05f, 0.12f};
+	trailParticle.velocityX = {0.0f, 0.0f};
+	trailParticle.velocityY = {0.0f, 0.0f};
+	trailParticle.texture = assets.particleCircle;
+}
+
+bool HomingBoulderProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+	std::ranlux24_base &rng, EntityHolder &entityHolder)
+{
+	(void)mainParticleSystem;
+	auto safeNormalize = [](glm::vec2 v)
+	{
+		float len = glm::length(v);
+		if (len <= 0.00001f) { return glm::vec2(0.0f); }
+		return v / len;
+	};
+
+	if (firstTime)
+	{
+		firstTime = false;
+		travelSpeed = glm::length(physics.velocity);
+		if (travelSpeed <= 0.00001f) { travelSpeed = 6.0f; }
+		setupParticles();
+		particleSystem.emitParticles(bigParticle, physics.getPos(), rng, physics.getPos());
+	}
+
+	glm::vec2 toTarget = {};
+	float bestDist2 = homingRange * homingRange;
+	bool hasTarget = false;
+	for (auto &e : entityHolder.entities)
+	{
+		if (e->dying) continue; // skip dying entities
+		glm::vec2 diff = e->physics.getPos() - physics.getPos();
+		float dist2 = glm::dot(diff, diff);
+		if (dist2 < bestDist2)
+		{
+			bestDist2 = dist2;
+			toTarget = diff;
+			hasTarget = true;
+		}
+	}
+
+	if (hasTarget)
+	{
+		glm::vec2 desiredDir = safeNormalize(toTarget);
+		float currentSpeed = glm::length(physics.velocity);
+		float speed = currentSpeed > 0.00001f ? currentSpeed : travelSpeed;
+		glm::vec2 currentDir = currentSpeed > 0.00001f ? (physics.velocity / currentSpeed) : desiredDir;
+		float turn = glm::clamp(homingTurnRate * deltaTime, 0.0f, 1.0f);
+		glm::vec2 newDir = safeNormalize(glm::mix(currentDir, desiredDir, turn));
+		if (glm::length(newDir) > 0.00001f)
+		{
+			physics.velocity = newDir * speed;
+		}
+	}
+
+	trailTimer -= deltaTime;
+	if (trailTimer <= 0.0f)
+	{
+		trailTimer += trailInterval;
+		particleSystem.emitParticles(trailParticle, physics.getPos(), rng, physics.getPos());
+	}
+
+	if (basicProjectileHitEntitiesLogic(physics, physics.velocity,
+		element, entityHolder, hitStats))
+	{
+		return false;
+	}
+
+	if (!basicPhysicsAndCollisionsCheck(deltaTime, map))
+	{
+		return false;
+	}
+
+	particleSystem.update(deltaTime);
+	return true;
+}
+
+void HomingBoulderProjectile::render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
+	ParticlePostProcessRenderer &particlePostProcessRenderer)
+{
+	glm::vec4 aabb = physics.getAABB();
+	renderer.renderRectangle(aabb, {0.6f, 0.6f, 0.6f, 1.0f});
+	particleSystem.render(renderer, particlePostProcessRenderer, physics.getPos());
+}
+
+void HomingBoulderProjectile::onDestroy(std::ranlux24_base &rng)
+{
+	for (auto &p : particleSystem.particles)
+	{
+		if (p.durationRemaining > 0.4f)
+		{
+			p.durationRemaining = 0.2f;
+			p.durationTotal = 0.2f;
+		}
+	}
+
+	auto &assets = getAssetManager();
+	glm::vec4 startColor = {0.55f, 0.55f, 0.55f, 0.9f};
+	glm::vec4 endColor = {0.3f, 0.3f, 0.3f, 0.9f};
+	glm::vec4 accent = {0.75f, 0.35f, 0.95f, 1.0f};
+	const float tint = 0.35f;
+	startColor = startColor * (1.0f - tint) + accent * tint;
+	endColor = endColor * (1.0f - tint) + accent * tint;
+	startColor.a = 0.9f;
+	endColor.a = 0.9f;
+
+	auto burstParticle = getSmallSquareParticle(startColor, endColor);
+	burstParticle.onCreateCount = 6;
+	burstParticle.folowParent = false;
+	burstParticle.particleLifeTime = {0.25f, 0.35f};
+	burstParticle.createApearence.size = {0.3f, 0.45f};
+	burstParticle.endApearence.size = {0.1f, 0.28f};
+	burstParticle.velocityX = {-0.6f, 0.6f};
+	burstParticle.velocityY = {-0.6f, 0.6f};
+	burstParticle.texture = assets.particleCircle;
 	particleSystem.emitParticles(burstParticle, physics.getPos(), rng, physics.getPos());
 }
 

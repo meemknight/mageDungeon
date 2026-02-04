@@ -19,7 +19,7 @@ struct Player
 	StatusImmunities statusImmunities;
 	float statusSpeedMultiplier = 1.0f;
 	float life = 10.f;
-	float maxLife = 100.0f;
+	float maxLife = 10.0f;
 	// Spell healing is a small reserve that takes damage before life.
 	float spellHealing = 0.0f;
 	float maxSpellHealing = 3.0f;
@@ -40,11 +40,14 @@ struct Player
 		shield = 0.0f;
 	}
 
-	// Adds spell healing up to its cap.
+	// Adds spell healing up to its cap and missing life.
 	void addSpellHealing(float amount)
 	{
 		if (amount <= 0.0f) { return; }
-		spellHealing = std::min(maxSpellHealing, spellHealing + amount);
+		float missingLife = maxLife - life;
+		if (missingLife <= 0.0f) { return; }
+		float cap = std::min(maxSpellHealing, missingLife);
+		spellHealing = std::min(cap, spellHealing + amount);
 	}
 
 	// Applies regular healing and pushes spell healing out if needed.

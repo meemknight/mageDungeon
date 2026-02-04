@@ -2,6 +2,7 @@
 #include <gameplay/assetsManager.h>
 #include <gameplay/inputPrompts.h>
 #include <gameplay/particleSystem.h>
+#include <gameplay/elements.h>
 #include <particles/particleCreator.h>
 #include <randomStuff.h>
 #include <algorithm>
@@ -18,6 +19,7 @@ namespace
 	constexpr int coinFrameCount = 6;
 	constexpr float coinFrameTime = 0.08f;
 	constexpr float itemParticleInterval = 0.6f;
+	constexpr int magicStoneDropOdds = 8; // 1 in N chance for chests to drop a magic stone.
 
 	int findClosestWandIndex(const std::vector<DroppedItem> &items,
 		glm::vec2 playerPos, float maxDist2)
@@ -174,6 +176,18 @@ void DroppedItemSystem::spawnCoin(glm::vec2 pos, std::ranlux24_base &rng)
 	items.push_back(item);
 }
 
+void DroppedItemSystem::spawnMagicStone(glm::vec2 pos, int element, int uses, std::ranlux24_base &rng)
+{
+	DroppedItem item;
+	item.type = DroppedItemType::MagicStone;
+	item.pos = pos;
+	item.stoneElement = element;
+	item.stoneUses = uses;
+	item.hoverTimer = getRandomFloat(rng, 0.0f, 6.2831f);
+	item.particleTimer = getRandomFloat(rng, 0.0f, itemParticleInterval);
+	items.push_back(item);
+}
+
 int DroppedItemSystem::findClosestInteractableIndex(glm::vec2 playerPos, float maxDist2) const
 {
 	int bestIndex = -1;
@@ -196,6 +210,10 @@ int DroppedItemSystem::findClosestInteractableIndex(glm::vec2 playerPos, float m
 			canInteract = true;
 		}
 		else if (item.type == DroppedItemType::Coin)
+		{
+			canInteract = true;
+		}
+		else if (item.type == DroppedItemType::MagicStone)
 		{
 			canInteract = true;
 		}
@@ -253,6 +271,13 @@ void DroppedItemSystem::update(float deltaTime, ParticleSystem &particleSystem, 
 				emitDropParticles(particleSystem, rng, item.pos,
 					coinStart, coinEnd, 2, 0.7f, 0.6f, 0.7f);
 			}
+			else if (item.type == DroppedItemType::MagicStone)
+			{
+				auto stoneStart = elementToSecondaryColor(item.stoneElement); stoneStart.a = 0.65f;
+				auto stoneEnd = elementToColor(item.stoneElement); stoneEnd.a = 0.0f;
+				emitDropParticles(particleSystem, rng, item.pos,
+					stoneStart, stoneEnd, 2, 0.7f, 0.6f, 0.7f);
+			}
 		}
 		i++;
 	}
@@ -272,6 +297,8 @@ void DroppedItemSystem::render(gl2d::Renderer2D &renderer, AssetsManager &assets
 	const float hearthShadowSize = PIXEL_SIZE * 8.0f;
 	const float coinSize = PIXEL_SIZE * 16.0f;
 	const float coinShadowSize = PIXEL_SIZE * 8.0f;
+	const float stoneSize = PIXEL_SIZE * 16.0f;
+	const float stoneShadowSize = PIXEL_SIZE * 8.0f;
 	const float pickupRadius = PIXEL_SIZE * 16.0f;
 	const float promptSize = PIXEL_SIZE * 12.0f;
 	const float promptAlpha = 0.72f;
@@ -386,6 +413,31 @@ void DroppedItemSystem::render(gl2d::Renderer2D &renderer, AssetsManager &assets
 					pickupPrompt, promptPos, promptSize, promptAlpha);
 			}
 		}
+		else if (item.type == DroppedItemType::MagicStone)
+		{
+			float hover = std::sin(item.hoverTimer * hoverSpeed) * hoverHeight;
+			glm::vec2 basePos = item.pos;
+			glm::vec2 drawPos = {basePos.x, basePos.y - hover};
+
+			glm::vec4 shadowRect = {basePos.x - stoneShadowSize * 0.5f, basePos.y - stoneShadowSize * 0.5f,
+				stoneShadowSize, stoneShadowSize};
+			renderer.renderRectangle(shadowRect, assetsManager.particleCircle,
+				{0.0f, 0.0f, 0.0f, 0.45f});
+
+			glm::vec4 stoneRect = {drawPos.x - stoneSize * 0.5f, drawPos.y - stoneSize * 0.5f,
+				stoneSize, stoneSize};
+			renderer.renderRectangle(stoneRect, assetsManager.elements.texture, {1, 1, 1, 1},
+				{stoneSize * 0.5f, stoneSize * 0.5f}, 0.0f,
+				assetsManager.elements.atlas.get(item.stoneElement, 0));
+
+			if (i == promptIndex)
+			{
+				float promptOffset = stoneSize * 0.65f + promptSize * 0.5f;
+				glm::vec2 promptPos = {drawPos.x, drawPos.y - promptOffset};
+				renderPrompt(renderer, assetsManager, usesController,
+					pickupPrompt, promptPos, promptSize, promptAlpha);
+			}
+		}
 	}
 }
 
@@ -415,7 +467,18 @@ bool DroppedItemSystem::openChest(int itemIndex, std::ranlux24_base &rng, Partic
 	emitDropParticles(particleSystem, rng, item.pos,
 		chestStart, chestEnd, 18, 1.1f, 1.3f, 0.8f);
 
-	if (getRandomInt(rng, 0, 1) == 0)
+	bool dropStone = getRandomInt(rng, 0, magicStoneDropOdds - 1) == 0;
+	if (dropStone)
+	{
+		int stoneElement = getRandomInt(rng, Elements::Fire, Elements::Ice);
+		int stoneUses = 2;
+		spawnMagicStone(item.pos, stoneElement, stoneUses, rng);
+		auto stoneStart = elementToSecondaryColor(stoneElement); stoneStart.a = 1.0f;
+		auto stoneEnd = elementToColor(stoneElement); stoneEnd.a = 0.0f;
+		emitDropParticles(particleSystem, rng, item.pos,
+			stoneStart, stoneEnd, 8, 1.0f, 1.0f, 0.9f);
+	}
+	else if (getRandomInt(rng, 0, 1) == 0)
 	{
 		spawnHearth(item.pos, rng);
 		emitDropParticles(particleSystem, rng, item.pos,
@@ -463,6 +526,28 @@ bool DroppedItemSystem::takeCoin(int itemIndex, ParticleSystem &particleSystem, 
 	const glm::vec4 coinEnd = {0.8f, 0.6f, 0.1f, 0.0f};
 	emitPickupParticles(particleSystem, rng, items[itemIndex].pos,
 		coinStart, coinEnd, 20);
+	items[itemIndex] = items.back();
+	items.pop_back();
+	return true;
+}
+
+bool DroppedItemSystem::takeMagicStone(int itemIndex, ParticleSystem &particleSystem, std::ranlux24_base &rng,
+	int &outElement, int &outUses)
+{
+	if (itemIndex < 0 || itemIndex >= (int)items.size())
+	{
+		return false;
+	}
+	if (items[itemIndex].type != DroppedItemType::MagicStone)
+	{
+		return false;
+	}
+	outElement = items[itemIndex].stoneElement;
+	outUses = items[itemIndex].stoneUses;
+	auto stoneStart = elementToSecondaryColor(outElement); stoneStart.a = 1.0f;
+	auto stoneEnd = elementToColor(outElement); stoneEnd.a = 0.0f;
+	emitPickupParticles(particleSystem, rng, items[itemIndex].pos,
+		stoneStart, stoneEnd, 20);
 	items[itemIndex] = items.back();
 	items.pop_back();
 	return true;

@@ -77,6 +77,7 @@ struct AssetsManager
 
 
 	gl2d::Texture upCircle;
+	gl2d::Texture particleCross;
 	gl2d::Texture downCircle;
 	gl2d::Texture leftCircle;
 	gl2d::Texture rightCircle;

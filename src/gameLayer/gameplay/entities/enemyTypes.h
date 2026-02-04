@@ -23,7 +23,7 @@ namespace EnemyTypes
 		enemy.behavior.meleeRange = 1.5f;
 		enemy.behavior.shootRange = 8.0f;
 		enemy.behavior.shootCooldown = 2.0f;
-		enemy.behavior.projectileSpeed = 4.0f;
+		enemy.behavior.projectileSpeed = 4.7725f;
 		enemy.behavior.spreadAngle = 30.0f;
 		enemy.behavior.projectileDamage = damage;
 		enemy.behavior.sideProjectileDamage = 1.0f;
@@ -53,10 +53,12 @@ namespace EnemyTypes
 		{
 			setupEnemy(*this, getAssetManager().templarOriginal, 48);
 			setupMele(*this, 22.0f);
+			behavior.shootPatterns = ShootPattern_Single;
+			behavior.shootCooldown = 0.5f;
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
-			behavior.specialShootChance = 0.18f;
+			behavior.specialShootChance = 0.33f;
 			contactDamage = 2.0f;
-			renderOffsetY = PIXEL_SIZE * 10.0f;
+			renderOffsetY = PIXEL_SIZE * 14.0f;
 		}
 	};
 
@@ -66,11 +68,13 @@ namespace EnemyTypes
 		{
 			setupEnemy(*this, getAssetManager().earthTemplar, 48);
 			setupMele(*this, 22.0f);
+			behavior.shootPatterns = ShootPattern_Single;
+			behavior.shootCooldown = 0.5f;
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
-			behavior.specialShootChance = 0.18f;
+			behavior.specialShootChance = 0.33f;
 			contactDamage = 2.0f;
 			element = Elements::Earth;
-			renderOffsetY = PIXEL_SIZE * 10.0f;
+			renderOffsetY = PIXEL_SIZE * 14.0f;
 		}
 	};
 
@@ -80,11 +84,13 @@ namespace EnemyTypes
 		{
 			setupEnemy(*this, getAssetManager().fireTemplar, 48);
 			setupMele(*this, 22.0f);
+			behavior.shootPatterns = ShootPattern_Single;
+			behavior.shootCooldown = 0.5f;
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
-			behavior.specialShootChance = 0.18f;
+			behavior.specialShootChance = 0.33f;
 			contactDamage = 2.0f;
 			element = Elements::Fire;
-			renderOffsetY = PIXEL_SIZE * 10.0f;
+			renderOffsetY = PIXEL_SIZE * 14.0f;
 		}
 	};
 
@@ -94,11 +100,13 @@ namespace EnemyTypes
 		{
 			setupEnemy(*this, getAssetManager().iceTemplar, 48);
 			setupMele(*this, 22.0f);
+			behavior.shootPatterns = ShootPattern_Single;
+			behavior.shootCooldown = 0.5f;
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
-			behavior.specialShootChance = 0.18f;
+			behavior.specialShootChance = 0.33f;
 			contactDamage = 2.0f;
 			element = Elements::Ice;
-			renderOffsetY = PIXEL_SIZE * 10.0f;
+			renderOffsetY = PIXEL_SIZE * 14.0f;
 		}
 	};
 
@@ -108,11 +116,13 @@ namespace EnemyTypes
 		{
 			setupEnemy(*this, getAssetManager().waterTemplar, 48);
 			setupMele(*this, 22.0f);
+			behavior.shootPatterns = ShootPattern_Single;
+			behavior.shootCooldown = 0.5f;
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
-			behavior.specialShootChance = 0.18f;
+			behavior.specialShootChance = 0.33f;
 			contactDamage = 2.0f;
 			element = Elements::Water;
-			renderOffsetY = PIXEL_SIZE * 10.0f;
+			renderOffsetY = PIXEL_SIZE * 14.0f;
 		}
 	};
 
@@ -179,7 +189,7 @@ namespace EnemyTypes
 			behavior.speed = 2.6f;
 			behavior.shootRange = 10.0f;
 			behavior.shootCooldown = 1.7f;
-			behavior.projectileSpeed = 4.6f;
+			behavior.projectileSpeed = 5.29f;
 			behavior.stopChaseRange = 5.0f;
 			behavior.hoverMeleeEnabled = true;
 			behavior.hoverMeleeRange = 6.0f;

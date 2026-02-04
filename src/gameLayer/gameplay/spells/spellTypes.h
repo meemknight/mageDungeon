@@ -100,7 +100,7 @@ namespace SpellTypes
 		hitStats.damage = 0.2;
 
 		ret.element = element;
-		ret.maxFireCount = 100;
+		ret.maxFireCount = 171;
 		ret.elementsPerCast = 3;
 		ret.triggerDelay = 0.03;
 		// Small animated particles for dragon breath bursts.
@@ -156,11 +156,15 @@ namespace SpellTypes
 		};
 
 		ret.projectile = std::make_unique<BasicMagicMissle>(hitStats, 1.2f);
-		ret.projectile->timeAlieve = 0.25;
+		ret.projectile->timeAlieve = 0.25f;
 		ret.driftAngleDegrees = 35.f;
-		if (element == Elements::Ice || element == Elements::Fire)
+		if (auto missle = dynamic_cast<BasicMagicMissle *>(ret.projectile.get()))
 		{
-			if (auto missle = dynamic_cast<BasicMagicMissle *>(ret.projectile.get()))
+			if (element == Elements::Water || element == Elements::Earth)
+			{
+				missle->statusAmount = 0.0f;
+			}
+			if (element == Elements::Ice || element == Elements::Fire)
 			{
 				missle->hasCustomEmission = true;
 				missle->customEmission = buildDragonBreathEmission(element);
@@ -168,6 +172,27 @@ namespace SpellTypes
 		}
 
 		return ret;
+	}
+
+	inline BasicMagicMissleSpell getBigDragonBreathSpell(int element)
+	{
+		auto ret = getBasicBurstSpell(element);
+		ret.maxFireCount = 270;
+		if (ret.projectile)
+		{
+			ret.projectile->timeAlieve = 2.0f;
+		}
+		return ret;
+	}
+
+	inline BasicMagicMissleSpell getBigIceDragonsBreathSpell()
+	{
+		return getBigDragonBreathSpell(Elements::Ice);
+	}
+
+	inline BasicMagicMissleSpell getBigWaterDragonsBreathSpell()
+	{
+		return getBigDragonBreathSpell(Elements::Water);
 	}
 
 	inline BasicMagicMissleSpell getTrapSpell(int element)
@@ -196,6 +221,45 @@ namespace SpellTypes
 		ret.projectile->element = element;
 		
 		return ret;
+	}
+
+	// Big trap: larger radius with heavier particle ring.
+	inline BasicMagicMissleSpell getBigTrapSpell(int element, float damage)
+	{
+		BasicMagicMissleSpell ret;
+
+		HitStats hitStats;
+		hitStats.damage = damage;
+
+		ret.element = element;
+		ret.throwVelocity = 0;
+		auto trap = std::make_unique<TrapProjectile>(hitStats);
+		trap->element = element;
+		trap->trapRadious = 1.8f;
+		trap->particleSizeScale = 1.35f;
+		trap->particleCountScale = 2.4f;
+		trap->ringStepScale = 0.7f;
+		trap->ringEmitIntervalScale = 0.7f;
+		trap->orbitEmitIntervalScale = 0.75f;
+		trap->particleSystem.maxCount = 240;
+		ret.projectile = std::move(trap);
+
+		return ret;
+	}
+
+	inline BasicMagicMissleSpell getBigFireTrapSpell()
+	{
+		return getBigTrapSpell(Elements::Fire, 14.0f);
+	}
+
+	inline BasicMagicMissleSpell getBigIceTrapSpell()
+	{
+		return getBigTrapSpell(Elements::Ice, 14.0f);
+	}
+
+	inline BasicMagicMissleSpell getBigWaterTrapSpell()
+	{
+		return getBigTrapSpell(Elements::Water, 28.0f);
 	}
 
 	inline BasicMagicMissleSpell getHomingMissleSpell(int element)
@@ -239,22 +303,22 @@ namespace SpellTypes
 		return ret;
 	}
 
-	inline BasicMagicMissleSpell getMeteoriteSpell()
+	inline BasicMagicMissleSpell getMeteoriteSpell(int element)
 	{
 		BasicMagicMissleSpell ret;
-		ret.element = Elements::Fire;
+		ret.element = element;
 		ret.maxFireCount = 1;
 		ret.triggerDelay = 0.1f;
 		ret.projectile = std::make_unique<MeteoriteProjectile>();
-		ret.projectile->element = Elements::Fire;
+		ret.projectile->element = element;
 		ret.throwVelocity = 9.0f;
 		return ret;
 	}
 
-	inline MeteoriteShowerSpell getMeteoriteShowerSpell()
+	inline MeteoriteShowerSpell getMeteoriteShowerSpell(int element)
 	{
 		MeteoriteShowerSpell ret;
-		ret.element = Elements::Fire;
+		ret.element = element;
 		ret.maxFireCount = 10;
 		ret.triggerDelay = 0.22f;
 		ret.impactDelay = 0.35f;
@@ -262,6 +326,13 @@ namespace SpellTypes
 		ret.explosionDamage = 7.0f;
 		ret.explosionBurn = 2.0f;
 		ret.spawnAttempts = 16;
+		return ret;
+	}
+
+	inline MeteoriteShowerSpell getMeteoriteApocalipseSpell()
+	{
+		auto ret = getMeteoriteShowerSpell(Elements::Fire);
+		ret.maxFireCount = 20;
 		return ret;
 	}
 
@@ -287,7 +358,6 @@ namespace SpellTypes
 		ret.projectile->element = Elements::Fire;
 		ret.shotCount = 5;
 		ret.throwVelocity = 9.0f;
-		ret.spreadDegrees = 28.0f;
 		return ret;
 	}
 
@@ -425,6 +495,54 @@ namespace SpellTypes
 		ret.standbyEmission.release.folowParent = true;
 		ret.standbyEmission.create = ret.standbyEmission.sustain;
 		ret.standbyEmission.create.folowParent = true;
+		return ret;
+	}
+
+	inline StandbyProjectilesSpell getFastBoltStandbySpell(int element)
+	{
+		StandbyProjectilesSpell ret;
+		ret.element = element;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		auto projectile = std::make_unique<FastMagicBoltProjectile>();
+		projectile->element = element;
+		ret.projectile = std::move(projectile);
+		ret.standbyCount = 3;
+		ret.throwVelocity = 6.5f;
+		ret.standbyLifetime = 14.0f;
+
+		glm::vec4 startColor = elementToSecondaryColor(element); startColor.a = 0.35f;
+		glm::vec4 endColor = elementToColor(element); endColor.a = 0.2f;
+		ret.hasStandbyEmission = true;
+		ret.standbyEmission.sustain = getBasicMagicMissleParticle(startColor, endColor);
+		ret.standbyEmission.release = getBasicMagicMissleParticle(startColor, endColor);
+		ret.standbyEmission.release.particleLifeTime *= 1.6f;
+		ret.standbyEmission.emitTimer = 0.02f;
+		ret.standbyEmission.sustain.onCreateCount = 1;
+		ret.standbyEmission.sustain.createApearence.size *= 0.55f;
+		ret.standbyEmission.sustain.endApearence.size *= 0.55f;
+		ret.standbyEmission.sustain.folowParent = true;
+		ret.standbyEmission.release.folowParent = true;
+		ret.standbyEmission.create = ret.standbyEmission.sustain;
+		ret.standbyEmission.create.folowParent = true;
+
+		ret.hasSecondaryEmission = true;
+		ret.secondaryEmission.sustain = getBasicMagicMissleParticle(startColor, endColor);
+		ret.secondaryEmission.release = getBasicMagicMissleParticle(startColor, endColor);
+		ret.secondaryEmission.release.particleLifeTime *= 1.6f;
+		ret.secondaryEmission.emitTimer = 0.02f;
+		ret.secondaryEmission.sustain.onCreateCount = 1;
+		ret.secondaryEmission.sustain.createApearence.size *= 0.5f;
+		ret.secondaryEmission.sustain.endApearence.size *= 0.5f;
+		ret.secondaryEmission.sustain.animationType = ParticleSettings::ANIMATION_TYPES::animationAtom;
+		ret.secondaryEmission.sustain.animationSpeed = {9.0f, 14.0f};
+		ret.secondaryEmission.sustain.animationScaleX = {PIXEL_SIZE * 2.6f, PIXEL_SIZE * 4.2f};
+		ret.secondaryEmission.sustain.animationScaleY = {PIXEL_SIZE * 2.6f, PIXEL_SIZE * 4.2f};
+		ret.secondaryEmission.sustain.animationPhase = {0.0f, 6.2831853f};
+		ret.secondaryEmission.sustain.folowParent = true;
+		ret.secondaryEmission.release.folowParent = true;
+		ret.secondaryEmission.create = ret.secondaryEmission.sustain;
+		ret.secondaryEmission.create.folowParent = true;
 		return ret;
 	}
 
@@ -641,6 +759,14 @@ namespace SpellTypes
 		ret.offsetJitter = 0.1f;
 		ret.spawnAttempts = 12;
 		ret.particleBurstCount = 3.0f;
+		ret.thornDamage = 1.0f;
+		return ret;
+	}
+
+	inline EarthTrapSpell getBigEarthTrapSpell()
+	{
+		auto ret = getEarthTrapSpell();
+		ret.thornDamage = 2.0f;
 		return ret;
 	}
 
@@ -653,6 +779,34 @@ namespace SpellTypes
 		ret.projectile = std::make_unique<EarthWaterThornBoltProjectile>();
 		ret.projectile->element = Elements::Earth;
 		ret.throwVelocity = 7.5f;
+		return ret;
+	}
+
+	inline HealingSpell getHealingSpell()
+	{
+		HealingSpell ret;
+		ret.element = Elements::Water;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.totalHealing = 3.0f;
+		ret.healDuration = 2.0f;
+		ret.continuousUpdateTimer = ret.healDuration;
+		ret.particleInterval = 0.04f;
+		ret.particleRadius = 0.5f;
+		return ret;
+	}
+
+	inline ShieldSpell getShieldSpell()
+	{
+		ShieldSpell ret;
+		ret.element = Elements::Water;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.totalShield = 2.0f;
+		ret.shieldDuration = 2.0f;
+		ret.continuousUpdateTimer = ret.shieldDuration;
+		ret.particleInterval = 0.05f;
+		ret.particleRadius = 0.5f;
 		return ret;
 	}
 
@@ -677,6 +831,18 @@ namespace SpellTypes
 		ret.projectile = std::make_unique<FastMagicBoltProjectile>();
 		ret.projectile->element = element;
 		ret.throwVelocity = 6.5f;
+		return ret;
+	}
+
+	inline BasicMagicMissleSpell getPiercingBoltSpell(int element)
+	{
+		BasicMagicMissleSpell ret;
+		ret.element = element;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		ret.projectile = std::make_unique<PiercingBoltProjectile>();
+		ret.projectile->element = element;
+		ret.throwVelocity = 10.0f;
 		return ret;
 	}
 
@@ -742,13 +908,14 @@ namespace SpellTypes
 		ret.element = element;
 		ret.maxFireCount = 1;
 		ret.triggerDelay = 0.15f;
-		ret.range = 2.0f;
-		ret.beamWidth = 0.22f;
+		ret.range = 2.4f;
+		ret.beamWidth = 0.08f;
 		ret.minDamage = 0.2f;
 		ret.maxDamage = 1.6f;
 		ret.statusAmount = 5.0f;
-		ret.particleStartOffset = 0.35f;
-		ret.continuousUpdateTimer = 7.0f;
+		ret.particleStartOffset = 0.55f;
+		ret.particleSpawnCount = 6;
+		ret.continuousUpdateTimer = 9.0f;
 		return ret;
 	}
 
@@ -760,6 +927,45 @@ namespace SpellTypes
 	inline WaterSiphonSpell getFireSwordSpell()
 	{
 		return getSwordSpell(Elements::Fire);
+	}
+
+	inline HomingBouldersSpell getHomingBouldersSpell()
+	{
+		HomingBouldersSpell ret;
+		ret.element = Elements::NoneElement;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.1f;
+		auto projectile = std::make_unique<HomingBoulderProjectile>();
+		projectile->element = Elements::NoneElement;
+		projectile->hitStats.damage = 8.0f;
+		ret.projectile = std::move(projectile);
+		ret.shotCount = 4;
+		ret.throwVelocity = 9.0f;
+		return ret;
+	}
+
+	inline TsunamiSpell getTsunamiSpell(int element)
+	{
+		TsunamiSpell ret;
+		ret.element = element;
+		ret.maxFireCount = 3;
+		ret.triggerDelay = 0.18f;
+		ret.bulletsPerWave = 16;
+		ret.throwVelocity = 8.0f;
+		ret.totalDamage = 70.0f;
+		if (element == Elements::Fire)
+		{
+			ret.pushBack = 0.0f;
+			ret.statusAmount = 3.0f;
+		}
+		else
+		{
+			ret.pushBack = 20.8f;
+			ret.statusAmount = 0.0f;
+		}
+		ret.projectileSizeScale = 0.7f;
+		ret.waveParticleCount = 6;
+		return ret;
 	}
 
 		enum Spells
@@ -776,6 +982,8 @@ namespace SpellTypes
 		iceStandbySimple,
 		waterHomingStandby,
 		iceStandby,
+		fastWaterStandby,
+		fastIceStandby,
 		meteoritesStandby,
 		summonWaterSlime,
 		summonFireSlime,
@@ -784,10 +992,18 @@ namespace SpellTypes
 		thornWall,
 		wildGrowth,
 		earthWaterThorn,
-			iceBolt,
-			dragonsBreath,
-			iceTrap,
+		earthWaterHealing,
+		earthWaterShield,
+		iceBolt,
+		dragonsBreath,
+		waterDragonsBreath,
+		earthDragonsBreath,
+		iceTrap,
 		fireTrap,
+		bigFireTrap,
+		bigIceTrap,
+		bigWaterTrap,
+		bigEarthTrap,
 		waterTrap,
 		earthTrap,
 		fireHomingMissle,
@@ -802,17 +1018,29 @@ namespace SpellTypes
 		iceWall,
 		boulder,
 		waterSiphon,
+		waterTsunami,
+		fireTsunami,
+		homingBoulders,
 		iceSword,
 		fireSword,
 		earthRicochet,
 		earthRicochetIce,
 			earthRicochetWater,
 			bigIceBlock,
-			iceDragonsBreath,
+		iceDragonsBreath,
+		bigIceDragonsBreath,
+		bigWaterDragonsBreath,
 		meteorite,
+		iceMeteorite,
 		meteoriteShower,
+		iceMeteoriteShower,
+		meteoriteApocalipse,
 		inferno,
 		homingMeteorites,
+		piercingIceBolt,
+		piercingFireBolt,
+		piercingWaterBolt,
+		piercingEarthBolt,
 
 		SPELLS_COUNT
 		};

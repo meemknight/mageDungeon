@@ -123,7 +123,6 @@ struct HomingMeteoriteVolleySpell: public Spell
 	std::unique_ptr<Projectile> projectile;
 	int shotCount = 5;
 	float throwVelocity = 10.0f;
-	float spreadDegrees = 28.0f;
 
 	// **state variables**
 	// (none)
@@ -135,6 +134,7 @@ struct HomingMeteoriteVolleySpell: public Spell
 		(void)deltaTime;
 		(void)map;
 		(void)mainParticleSystem;
+		(void)rng;
 		(void)entityHolder;
 
 		glm::vec2 aim = currentAimDir;
@@ -162,16 +162,143 @@ struct HomingMeteoriteVolleySpell: public Spell
 			projectileHolder.addProjectileAsPtr(std::move(pptr), player.physics.getPos());
 		};
 
-		spawnProjectile(aim);
-		for (int i = 1; i < shotCount; i++)
+		float baseAngle = std::atan2(aim.y, aim.x);
+		float step = 6.2831853f / (float)(shotCount > 0 ? shotCount : 1);
+		for (int i = 0; i < shotCount; i++)
 		{
-			float driftRad = glm::radians(getRandomFloat(rng, -spreadDegrees, spreadDegrees));
-			float c = std::cos(driftRad);
-			float s = std::sin(driftRad);
-			glm::vec2 dir = {aim.x * c - aim.y * s, aim.x * s + aim.y * c};
+			float angle = baseAngle + step * (float)i;
+			glm::vec2 dir = {std::cos(angle), std::sin(angle)};
 			spawnProjectile(dir);
 		}
 
+		return true;
+	}
+};
+
+// Fires 4 homing boulders around the aim direction.
+struct HomingBouldersSpell: public Spell
+{
+	// **configuration variables**
+	std::unique_ptr<Projectile> projectile;
+	int shotCount = 4;
+	float throwVelocity = 9.0f;
+
+	// **state variables**
+	// (none)
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		(void)deltaTime;
+		(void)map;
+		(void)mainParticleSystem;
+		(void)entityHolder;
+		(void)rng;
+
+		glm::vec2 aim = currentAimDir;
+		float len = glm::length(aim);
+		if (len <= 0.0001f)
+		{
+			len = glm::length(createAimDir);
+			if (len <= 0.0001f)
+			{
+				aim = {1.0f, 0.0f};
+				len = 1.0f;
+			}
+			else
+			{
+				aim = createAimDir;
+			}
+		}
+		aim /= len;
+
+		float baseAngle = std::atan2(aim.y, aim.x);
+		float step = 6.2831853f / (float)shotCount;
+		for (int i = 0; i < shotCount; i++)
+		{
+			float angle = baseAngle + step * (float)i;
+			glm::vec2 dir = {std::cos(angle), std::sin(angle)};
+			auto pptr = projectile->clone();
+			pptr->element = element;
+			pptr->physics.velocity = dir * throwVelocity;
+			projectileHolder.addProjectileAsPtr(std::move(pptr), player.physics.getPos());
+		}
+
+		return true;
+	}
+};
+
+// Fires radial waves of small bolts around the player.
+struct TsunamiSpell: public Spell
+{
+	// **configuration variables**
+	int bulletsPerWave = 16;
+	float throwVelocity = 8.0f;
+	float totalDamage = 70.0f;
+	float pushBack = 10.4f;
+	float statusAmount = 0.0f;
+	float projectileSizeScale = 0.7f;
+	int waveParticleCount = 6;
+
+	// **state variables**
+	bool initialized = false;
+	std::unique_ptr<Projectile> projectile;
+	ParticleSettings waveParticle;
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		(void)deltaTime;
+		(void)map;
+		(void)entityHolder;
+		(void)currentAimDir;
+
+		if (!initialized)
+		{
+			initialized = true;
+			int totalProjectiles = std::max(1, bulletsPerWave * std::max(1, maxFireCount));
+			HitStats hitStats;
+			hitStats.damage = totalDamage / (float)totalProjectiles;
+			hitStats.pushBack = pushBack;
+
+			auto bolt = std::make_unique<BasicMagicMissle>(hitStats, 0.7f);
+			bolt->element = element;
+			bolt->timeAlieve = 3.0f;
+			bolt->physics.transform.size *= projectileSizeScale;
+			if (auto missle = dynamic_cast<BasicMagicMissle *>(bolt.get()))
+			{
+				missle->statusAmount = statusAmount;
+			}
+			projectile = std::move(bolt);
+
+			glm::vec4 startColor = elementToSecondaryColor(element); startColor.a = 0.55f;
+			glm::vec4 endColor = elementToColor(element); endColor.a = 0.35f;
+			waveParticle = getOrbitParticle(startColor, endColor);
+			waveParticle.onCreateCount = waveParticleCount;
+			waveParticle.particleLifeTime = {0.6f, 0.95f};
+			waveParticle.animationScaleX = {PIXEL_SIZE * 4.5f, PIXEL_SIZE * 9.0f};
+			waveParticle.animationScaleY = {PIXEL_SIZE * 4.5f, PIXEL_SIZE * 9.0f};
+			waveParticle.folowParent = false;
+		}
+
+		glm::vec2 origin = player.physics.getPos();
+		const float twoPi = 6.2831853f;
+		float baseAngle = getRandomFloat(rng, 0.0f, twoPi);
+		float angleStep = twoPi / (float)std::max(1, bulletsPerWave);
+		for (int i = 0; i < bulletsPerWave; i++)
+		{
+			float angle = baseAngle + angleStep * (float)i + getRandomFloat(rng, -0.03f, 0.03f);
+			glm::vec2 dir = {std::cos(angle), std::sin(angle)};
+
+			auto pptr = projectile->clone();
+			pptr->element = element;
+			pptr->physics.velocity = dir * throwVelocity;
+			projectileHolder.addProjectileAsPtr(std::move(pptr), origin);
+		}
+
+		mainParticleSystem.emitParticles(waveParticle, origin, rng, origin);
 		return true;
 	}
 };
@@ -186,6 +313,8 @@ struct StandbyProjectilesSpell: public Spell
 	float throwVelocity = 10.0f;
 	bool hasStandbyEmission = false;
 	ParticleEmissionSettings standbyEmission;
+	bool hasSecondaryEmission = false;
+	ParticleEmissionSettings secondaryEmission;
 
 	// **state variables**
 	// (none)
@@ -200,7 +329,8 @@ struct StandbyProjectilesSpell: public Spell
 			auto pptr = projectile->clone();
 			pptr->element = element;
 			standbySystem.addProjectileAsPtr(std::move(pptr), standbyLifetime,
-				throwVelocity, hasStandbyEmission ? &standbyEmission : nullptr);
+				throwVelocity, hasStandbyEmission ? &standbyEmission : nullptr,
+				hasSecondaryEmission ? &secondaryEmission : nullptr);
 		}
 
 		return true;
@@ -239,7 +369,8 @@ struct DualStandbyProjectilesSpell: public Spell
 				auto pptr = primaryProjectile->clone();
 				pptr->element = element;
 				standbySystem.addProjectileAsPtr(std::move(pptr), primaryStandbyLifetime,
-					primaryThrowVelocity, hasPrimaryEmission ? &primaryEmission : nullptr);
+					primaryThrowVelocity, hasPrimaryEmission ? &primaryEmission : nullptr,
+					nullptr);
 			}
 		}
 		if (secondaryProjectile)
@@ -249,7 +380,8 @@ struct DualStandbyProjectilesSpell: public Spell
 				auto pptr = secondaryProjectile->clone();
 				pptr->element = element;
 				standbySystem.addProjectileAsPtr(std::move(pptr), secondaryStandbyLifetime,
-					secondaryThrowVelocity, hasSecondaryEmission ? &secondaryEmission : nullptr);
+					secondaryThrowVelocity, hasSecondaryEmission ? &secondaryEmission : nullptr,
+					nullptr);
 			}
 		}
 
@@ -911,6 +1043,7 @@ struct EarthTrapSpell: public Spell
 	float offsetJitter = 0.12f;
 	int spawnAttempts = 10;
 	float particleBurstCount = 3.0f;
+	float thornDamage = 1.0f;
 
 	// **state variables**
 	// (none)
@@ -980,11 +1113,167 @@ struct EarthTrapSpell: public Spell
 
 				auto thorn = std::make_unique<ThornProjectile>();
 				thorn->element = Elements::Earth;
+				thorn->hitStats.damage = thornDamage;
 				projectileHolder.addProjectileDeferredAsPtr(std::move(thorn), spawnPos);
 				mainParticleSystem.emitParticles(burst, spawnPos, rng, spawnPos);
 				placedTiles.push_back(spawnTile);
 				spawned = true;
 			}
+		}
+
+		return true;
+	}
+};
+
+// Gradually adds spell healing with soft green particles.
+struct HealingSpell: public Spell
+{
+	// **configuration variables**
+	float totalHealing = 3.0f;
+	float healDuration = 2.0f;
+	float particleInterval = 0.04f;
+	float particleRadius = 0.5f;
+	float particleJitter = 0.15f;
+
+	// **state variables**
+	bool initialized = false;
+	float healRemaining = 0.0f;
+	float particleTimer = 0.0f;
+	ParticleSettings healParticle;
+
+	HealingSpell()
+	{
+		continuousUpdate = true;
+		continuousUpdateTimer = healDuration;
+	}
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		(void)map;
+		(void)projectileHolder;
+		(void)entityHolder;
+		(void)currentAimDir;
+
+		if (!initialized)
+		{
+			initialized = true;
+			healRemaining = totalHealing;
+			continuousUpdateTimer = healDuration;
+
+			glm::vec4 startColor = {0.35f, 0.95f, 0.45f, 0.8f};
+			glm::vec4 endColor = {0.18f, 0.6f, 0.25f, 0.3f};
+			healParticle = getSmallSquareParticle(startColor, endColor);
+			healParticle.onCreateCount = 1;
+			healParticle.particleLifeTime = {0.25f, 0.45f};
+			healParticle.velocityX = glm::vec2{-6.0f, 6.0f} * PIXEL_SIZE;
+			healParticle.velocityY = glm::vec2{-10.0f, -4.0f} * PIXEL_SIZE;
+			healParticle.createApearence.size = glm::vec2{2.0f, 3.0f} * PIXEL_SIZE * 2.f;
+			healParticle.endApearence.size = glm::vec2{1.0f, 2.0f} * PIXEL_SIZE * 2.f;
+			healParticle.animationType = ParticleSettings::ANIMATION_TYPES::animationBob;
+			healParticle.animationSpeed = {6.0f, 10.0f};
+			healParticle.animationScaleY = {PIXEL_SIZE * 1.5f, PIXEL_SIZE * 2.6f};
+			healParticle.animationPhase = {0.0f, 6.2831853f};
+			healParticle.texture = getAssetManager().particleCross;
+			healParticle.folowParent = false;
+		}
+
+		float healRate = healDuration > 0.0001f ? (totalHealing / healDuration) : totalHealing;
+		float addAmount = std::min(healRemaining, healRate * deltaTime);
+		if (addAmount > 0.0f)
+		{
+			player.addSpellHealing(addAmount);
+			healRemaining -= addAmount;
+		}
+
+		particleTimer -= deltaTime;
+		while (particleTimer <= 0.0f)
+		{
+			particleTimer += particleInterval;
+			float angle = getRandomFloat(rng, 0.0f, 6.2831853f);
+			float radius = getRandomFloat(rng, 0.0f, particleRadius);
+			glm::vec2 offset = glm::vec2(std::cos(angle), std::sin(angle)) * radius;
+			offset.x += getRandomFloat(rng, -particleJitter, particleJitter);
+			offset.y += getRandomFloat(rng, -particleJitter, particleJitter);
+			glm::vec2 spawnPos = player.physics.getPos() + offset + glm::vec2(0.0f, -0.25f);
+			mainParticleSystem.emitParticles(healParticle, spawnPos, rng, player.physics.getPos());
+		}
+
+		return true;
+	}
+};
+
+// Gradually adds shield with soft blue particles.
+struct ShieldSpell: public Spell
+{
+	// **configuration variables**
+	float totalShield = 2.0f;
+	float shieldDuration = 2.0f;
+	float particleInterval = 0.05f;
+	float particleRadius = 0.5f;
+	float particleJitter = 0.12f;
+
+	// **state variables**
+	bool initialized = false;
+	float elapsed = 0.0f;
+	float particleTimer = 0.0f;
+	ParticleSettings shieldParticle;
+
+	ShieldSpell()
+	{
+		continuousUpdate = true;
+		continuousUpdateTimer = shieldDuration;
+	}
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		(void)map;
+		(void)projectileHolder;
+		(void)entityHolder;
+		(void)currentAimDir;
+
+		if (!initialized)
+		{
+			initialized = true;
+			elapsed = 0.0f;
+			continuousUpdateTimer = shieldDuration;
+
+			glm::vec4 startColor = {0.85f, 0.9f, 0.95f, 0.8f};
+			glm::vec4 endColor = {0.55f, 0.6f, 0.65f, 0.3f};
+			shieldParticle = getSmallSquareParticle(startColor, endColor);
+			shieldParticle.onCreateCount = 1;
+			shieldParticle.particleLifeTime = {0.3f, 0.55f};
+			shieldParticle.velocityX = {0.0f, 0.0f};
+			shieldParticle.velocityY = {0.0f, 0.0f};
+			shieldParticle.createApearence.size = glm::vec2{2.0f, 3.0f} * PIXEL_SIZE;
+			shieldParticle.endApearence.size = glm::vec2{1.0f, 2.0f} * PIXEL_SIZE;
+			shieldParticle.animationType = ParticleSettings::ANIMATION_TYPES::animationCircle;
+			shieldParticle.animationSpeed = {9.0f, 13.0f};
+			shieldParticle.animationScaleX = {PIXEL_SIZE * 2.0f, PIXEL_SIZE * 3.2f};
+			shieldParticle.animationScaleY = {PIXEL_SIZE * 2.0f, PIXEL_SIZE * 3.2f};
+			shieldParticle.animationPhase = {0.0f, 6.2831853f};
+			shieldParticle.texture = getAssetManager().particleCircle;
+			shieldParticle.folowParent = true;
+		}
+
+		elapsed = std::min(shieldDuration, elapsed + deltaTime);
+		float alpha = shieldDuration > 0.0001f ? (elapsed / shieldDuration) : 1.0f;
+		player.addShield(totalShield * alpha);
+
+		particleTimer -= deltaTime;
+		while (particleTimer <= 0.0f)
+		{
+			particleTimer += particleInterval;
+			float angle = getRandomFloat(rng, 0.0f, 6.2831853f);
+			float radius = getRandomFloat(rng, 0.0f, particleRadius);
+			glm::vec2 offset = glm::vec2(std::cos(angle), std::sin(angle)) * radius;
+			offset.x += getRandomFloat(rng, -particleJitter, particleJitter);
+			offset.y += getRandomFloat(rng, -particleJitter, particleJitter);
+			glm::vec2 spawnPos = player.physics.getPos();
+			mainParticleSystem.emitParticles(shieldParticle, spawnPos, rng, player.physics.getPos());
 		}
 
 		return true;
@@ -1036,7 +1325,7 @@ struct MeteoriteShowerSpell: public Spell
 
 		glm::vec2 spawnPos = playerPos;
 		bool found = false;
-		if (getRandomChance(rng, 0.4f))
+		if (getRandomChance(rng, 0.3f))
 		{
 			std::vector<glm::vec2> candidates;
 			candidates.reserve(entityHolder.entities.size());
@@ -1101,7 +1390,7 @@ struct MeteoriteShowerSpell: public Spell
 		}
 
 		auto meteor = std::make_unique<MeteoriteImpactProjectile>();
-		meteor->element = Elements::Fire;
+		meteor->element = element;
 		meteor->impactDelay = impactDelay;
 		meteor->explosionDamage = explosionDamage;
 		meteor->explosionBurn = explosionBurn;
@@ -1312,6 +1601,7 @@ struct WaterSiphonSpell: public Spell
 	float maxDamage = 0.8f;
 	float rampDuration = 0.5f;
 	float particleStartOffset = 0.0f;
+	int particleSpawnCount = 10;
 	float statusAmount = 0.0f;
 
 	// **state variables**
@@ -1429,7 +1719,7 @@ struct WaterSiphonSpell: public Spell
 			particle.endApearence.color2.a *= 0.3f;
 
 			glm::vec2 perp = {-aimDir.y, aimDir.x};
-			int spawnCount = 10;
+			int spawnCount = particleSpawnCount > 0 ? particleSpawnCount : 1;
 			for (int i = 0; i < spawnCount; i++)
 			{
 			float alongStart = std::min(currentRange, particleStartOffset);

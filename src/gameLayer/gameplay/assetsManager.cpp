@@ -239,6 +239,7 @@ void AssetsManager::loadAllAssets()
 	leftCircle.loadFromFile(RESOURCES_PATH "ui/leftCircle.png");
 	rightCircle.loadFromFile(RESOURCES_PATH "ui/rightCircle.png");
 
+
 	// palette the inventory book texture so it matches the UI palette
 	loadPalettedTexture(book, RESOURCES_PATH "ui/book.png");
 
@@ -363,6 +364,7 @@ void AssetsManager::loadAllAssets()
 	}
 
 	particleCircle.loadFromFile(RESOURCES_PATH "circle.png");
+	particleCross.loadFromFile(RESOURCES_PATH "cross.png");
 	particleSmoke.loadFromFile(RESOURCES_PATH "smoke.png");
 	target.loadFromFile(RESOURCES_PATH "target.png");
 	thorn.loadFromFile(RESOURCES_PATH "thorn.png");

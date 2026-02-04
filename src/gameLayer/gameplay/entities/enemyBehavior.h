@@ -31,7 +31,7 @@ struct EnemyBehavior
 	// Movement configuration
 	float speed = 2.2f;
 	float chaseAcquireRange = 13.0f;      // start chasing if within this distance
-	float summonAggroRange = 5.0f;        // switch to summon target if very close
+	float summonAggroRange = 5.0f;        // minimum range to prefer summons
 	float forgetAfterNoLOS = 2.0f;        // seconds with no LOS before forgetting
 	float repathInterval = 0.25f;         // how often to rebuild A* path
 	bool seeThroughWalls = false;         // ignore LOS checks
@@ -54,7 +54,7 @@ struct EnemyBehavior
 	float meleeRange = 1.5f;              // prefer melee attack if closer than this
 	float shootRange = 10.0f;             // can shoot if within this range
 	float shootCooldown = 1.5f;           // time between shots
-	float projectileSpeed = 4.0f;         // speed of fired projectiles
+	float projectileSpeed = 4.6f;         // speed of fired projectiles
 	float spreadAngle = 30.0f;            // degrees for spread patterns
 	float projectileDamage = 1.0f;
 	float sideProjectileDamage = 1.0f;    // used by heavy volley
@@ -88,8 +88,8 @@ struct EnemyBehavior
 	// Orbit movement (close-range circling) configuration
 	bool orbitEnabled = false;            // circle target when in range
 	float orbitRange = 5.0f;              // start orbiting within this distance
-	float orbitDirectionChangeMin = 0.8f; // min seconds before direction change
-	float orbitDirectionChangeMax = 1.6f; // max seconds before direction change
+	float orbitDirectionChangeMin = 1.0f; // min seconds before direction change
+	float orbitDirectionChangeMax = 2.0f; // max seconds before direction change
 	float orbitRadialChangeMin = 0.35f;   // min seconds before radial tweak
 	float orbitRadialChangeMax = 0.9f;    // max seconds before radial tweak
 	float orbitRadialStrength = 0.45f;    // radial push/pull amount

@@ -3,6 +3,40 @@
 #include "gameplay/projectiles/projectiles.h"
 #include <cmath>
 
+// Looser LOS check to allow shots past tight wall corners.
+static bool HasLooseLineOfSightTiles(Map &map, glm::ivec2 from, glm::ivec2 to)
+{
+	if (HasLineOfSightTiles(map, from, to))
+	{
+		return true;
+	}
+
+	static const glm::ivec2 offsets[8] = {
+		{1, 0}, {-1, 0}, {0, 1}, {0, -1},
+		{1, 1}, {1, -1}, {-1, 1}, {-1, -1}
+	};
+
+	for (const auto &off : offsets)
+	{
+		glm::ivec2 f = from + off;
+		if (!IsBlockedTileLineOfSight(map, f.x, f.y) && HasLineOfSightTiles(map, f, to))
+		{
+			return true;
+		}
+	}
+
+	for (const auto &off : offsets)
+	{
+		glm::ivec2 t = to + off;
+		if (!IsBlockedTileLineOfSight(map, t.x, t.y) && HasLineOfSightTiles(map, from, t))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &rng,
 	glm::vec2 enemyPos, glm::vec2 playerPos, SummonHolder &summons)
 {
@@ -64,7 +98,7 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		if (!summon->canBeTargeted()) { continue; }
 		glm::vec2 summonPos = summon->physics.getPos();
 		if (!seeThroughWalls &&
-			!HasLineOfSightTiles(map, WorldToTile(enemyPos), WorldToTile(summonPos)))
+			!HasLooseLineOfSightTiles(map, WorldToTile(enemyPos), WorldToTile(summonPos)))
 		{
 			continue;
 		}
@@ -104,7 +138,8 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 
 	const float closeRange = meleeRange + closeTargetExtraRange;
 	const float closeRange2 = closeRange * closeRange;
-	const float summonAggroRange2 = summonAggroRange * summonAggroRange;
+	const float summonTargetRange = std::max(summonAggroRange, chaseAcquireRange);
+	const float summonTargetRange2 = summonTargetRange * summonTargetRange;
 	const bool playerClose = playerDist2 <= closeRange2;
 	const bool summonClose = bestSummon && bestSummonDist2 <= closeRange2;
 
@@ -147,7 +182,7 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		}
 		else
 		{
-			if (bestSummon && bestSummonDist2 <= summonAggroRange2 &&
+			if (bestSummon && bestSummonDist2 <= summonTargetRange2 &&
 				bestSummonDist2 + targetSwitchMargin < playerDist2)
 			{
 				desiredIsSummon = true;
@@ -156,7 +191,7 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 				desiredSummonDist2 = bestSummonDist2;
 				switched = !targetIsSummon || targetSummon != bestSummon;
 			}
-			else if (targetIsSummon && currentSummonDist2 > summonAggroRange2)
+			else if (targetIsSummon && currentSummonDist2 > summonTargetRange2)
 			{
 				desiredIsSummon = false;
 				desiredSummon = nullptr;
@@ -197,7 +232,7 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 	// LOS-based aggro/forget
 	const bool hasLOS = seeThroughWalls
 		? true
-		: HasLineOfSightTiles(map, WorldToTile(enemyPos), targetTile);
+		: HasLooseLineOfSightTiles(map, WorldToTile(enemyPos), targetTile);
 
 	const bool withinAggro = (dist2 <= chaseAcquireRange * chaseAcquireRange);
 	const bool canSeeTarget = seeThroughWalls ? withinAggro : (hasLOS && withinAggro);
@@ -401,10 +436,12 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		}
 	}
 
-	// Orbit movement when close to the target
+	// Orbit movement when close to the target (used for keep-distance strafing)
 	bool orbiting = false;
-	if (!hoverMeleeActive && !dashActive && orbitEnabled && chasing && canSeeTarget &&
-		distanceToTarget <= orbitRange)
+	const bool allowOrbit = orbitEnabled || (stopChaseRange > 0.0f);
+	const float orbitDistance = orbitEnabled ? orbitRange : stopChaseRange;
+	if (!hoverMeleeActive && !dashActive && allowOrbit && chasing && canSeeTarget &&
+		distanceToTarget <= orbitDistance)
 	{
 		orbiting = true;
 		if (!orbitActive)
