@@ -55,6 +55,7 @@ namespace platform
 #include <gl2d/gl2d.h>
 
 gl2d::Renderer2D &getRenderer();
+bool renderColliders();
 
 struct SpellPreviewContext;
 void setSpellPreviewContext(SpellPreviewContext *context);

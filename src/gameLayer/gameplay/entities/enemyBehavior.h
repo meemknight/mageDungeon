@@ -66,6 +66,13 @@ struct EnemyBehavior
 	float crossShotOrbitRadius = PIXEL_SIZE * 13.0f; // distance from center
 	float crossShotOrbitSpeed = 3.6f;     // radians per second
 
+	// Ranged pause-and-shoot configuration
+	float shootHoldChance = 0.08f;        // chance per roll to pause and shoot
+	float shootHoldCheckMin = 0.8f;       // min seconds between rolls
+	float shootHoldCheckMax = 1.3f;       // max seconds between rolls
+	float shootHoldDurationMin = 1.0f;    // min pause duration
+	float shootHoldDurationMax = 2.0f;    // max pause duration
+
 	// Hover melee (flying swoop) configuration
 	bool hoverMeleeEnabled = false;       // enable curved melee swoop
 	float hoverMeleeRange = 5.0f;         // trigger range for swoop
@@ -116,6 +123,11 @@ struct EnemyBehavior
 	glm::vec2 burstDir = glm::vec2(1.0f, 0.0f);
 	float burstDamage = 1.0f;
 	bool useSpecialShot = false;
+
+	// Ranged pause-and-shoot state
+	bool shootHoldActive = false;
+	float shootHoldTimer = 0.0f;
+	float shootHoldCheckTimer = 0.0f;
 
 	// Hover melee state
 	bool hoverMeleeActive = false;
@@ -191,6 +203,9 @@ struct EnemyBehavior
 		burstDir = glm::vec2(1.0f, 0.0f);
 		burstDamage = 1.0f;
 		useSpecialShot = false;
+		shootHoldActive = false;
+		shootHoldTimer = 0.0f;
+		shootHoldCheckTimer = 0.0f;
 		hoverMeleeActive = false;
 			hoverMeleeTimer = 0.0f;
 			hoverMeleeActiveDuration = 0.0f;

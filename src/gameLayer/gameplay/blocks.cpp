@@ -45,6 +45,7 @@ BlockSettings blockSettings[]
 	BlockSettings{}.setTileSet(TileSets::exit).setAtlasPos({0,0}), //exit
 	BlockSettings{}.setTileSet(TileSets::wallDecorations).setAtlasPos({0,0}).setRandomAtlasOffsets({15,0}), //wall decorations
 
+	BlockSettings{}, //spike trap
 	
 };
 

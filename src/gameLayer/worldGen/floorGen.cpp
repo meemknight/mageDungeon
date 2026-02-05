@@ -3517,6 +3517,184 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 	placeWallDecorations();
 	placeWoodDecorations();
 
+	auto isDoorTooClose = [&](int roomIndex, glm::ivec2 pos, int minDist)
+	{
+		if (roomIndex < 0 || roomIndex >= (int)outInfo.rooms.size()) { return false; }
+		for (auto d : outInfo.rooms[roomIndex].doorPositions)
+		{
+			for (int dy = 0; dy <= 1; dy++)
+			{
+				for (int dx = 0; dx <= 1; dx++)
+				{
+					int dist = std::abs(pos.x - (d.x + dx)) + std::abs(pos.y - (d.y + dy));
+					if (dist < minDist)
+					{
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	};
+
+	// Place spike traps on the second layer with simple patterns.
+	auto placeSpikeTraps = [&]()
+	{
+		auto isDoorTooCloseLocal = [&](int roomIndex, glm::ivec2 pos, int minDist)
+		{
+			if (roomIndex < 0 || roomIndex >= (int)outInfo.rooms.size()) { return false; }
+			for (auto d : outInfo.rooms[roomIndex].doorPositions)
+			{
+				for (int dy = 0; dy <= 1; dy++)
+				{
+					for (int dx = 0; dx <= 1; dx++)
+					{
+						int dist = std::abs(pos.x - (d.x + dx)) + std::abs(pos.y - (d.y + dy));
+						if (dist < minDist)
+						{
+							return true;
+						}
+					}
+				}
+			}
+			return false;
+		};
+
+		auto canPlaceSpike = [&](int roomIndex, int x, int y)
+		{
+			const Rect &room = rooms[roomIndex];
+			if (x <= room.x || x >= room.x2() - 1 || y <= room.y || y >= room.y2() - 1)
+			{
+				return false;
+			}
+			if (isDoorTooCloseLocal(roomIndex, {x, y}, 2)) { return false; }
+			if (isDoorTileForRoom(roomIndex, x, y)) { return false; }
+				auto &base = map.firstLayer.getBlockUnsafe(x, y);
+				if (isWall(base.type) || base.type == Blocks::none) { return false; }
+				auto &over = map.secondLayer.getBlockUnsafe(x, y);
+			if (over.type != Blocks::none) { return false; }
+			if (map.isCollidableAtPosSafe(x, y)) { return false; }
+			int belowY = y + 1;
+			if (belowY < 0 || belowY >= sizeY) { return false; }
+			if (map.isCollidableAtPosSafe(x, belowY)) { return false; }
+			return true;
+		};
+
+		auto placeSpike = [&](int x, int y)
+		{
+			map.secondLayer.getBlockUnsafe(x, y).type = Blocks::spikeTrap;
+		};
+
+		auto tryPlaceLine = [&](int roomIndex, glm::ivec2 start, int length, bool horizontal)
+		{
+			for (int i = 0; i < length; i++)
+			{
+				int x = start.x + (horizontal ? i : 0);
+				int y = start.y + (horizontal ? 0 : i);
+				if (!canPlaceSpike(roomIndex, x, y)) { return false; }
+			}
+			for (int i = 0; i < length; i++)
+			{
+				int x = start.x + (horizontal ? i : 0);
+				int y = start.y + (horizontal ? 0 : i);
+				placeSpike(x, y);
+			}
+			return true;
+		};
+
+		auto tryPlaceRectOutline = [&](int roomIndex, glm::ivec2 start, int w, int h)
+		{
+			for (int dx = 0; dx < w; dx++)
+			{
+				int x = start.x + dx;
+				int yTop = start.y;
+				int yBottom = start.y + h - 1;
+				if (!canPlaceSpike(roomIndex, x, yTop) || !canPlaceSpike(roomIndex, x, yBottom))
+				{
+					return false;
+				}
+			}
+			for (int dy = 1; dy < h - 1; dy++)
+			{
+				int y = start.y + dy;
+				int xLeft = start.x;
+				int xRight = start.x + w - 1;
+				if (!canPlaceSpike(roomIndex, xLeft, y) || !canPlaceSpike(roomIndex, xRight, y))
+				{
+					return false;
+				}
+			}
+			for (int dx = 0; dx < w; dx++)
+			{
+				int x = start.x + dx;
+				placeSpike(x, start.y);
+				placeSpike(x, start.y + h - 1);
+			}
+			for (int dy = 1; dy < h - 1; dy++)
+			{
+				int y = start.y + dy;
+				placeSpike(start.x, y);
+				placeSpike(start.x + w - 1, y);
+			}
+			return true;
+		};
+
+		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
+		{
+			const Rect &room = rooms[roomIndex];
+			auto &outRoom = outInfo.rooms[roomIndex];
+			if (outRoom.isSpawnRoom || outRoom.isExitRoom || outRoom.isEmptyRoom)
+			{
+				continue;
+			}
+			int area = room.w * room.h;
+			bool isSmallRoom = !room.isBigRoom && area <= 220;
+			float chance = 0.24f;
+			if (isSmallRoom) { chance *= 0.35f; }
+			if (!getRandomChance(rng, chance)) { continue; }
+			int patterns = room.isBigRoom ? 2 : 1;
+			if (isSmallRoom) { patterns = 1; }
+			int attempts = 8;
+			int minX = room.x + 2;
+			int maxX = room.x2() - 3;
+			int minY = room.y + 2;
+			int maxY = room.y2() - 3;
+			if (minX > maxX || minY > maxY) { continue; }
+			for (int p = 0; p < patterns; p++)
+			{
+				bool placed = false;
+				for (int attempt = 0; attempt < attempts && !placed; attempt++)
+				{
+					int pattern = getRandomInt(rng, 0, 2);
+					if (pattern == 0)
+					{
+						int length = getRandomInt(rng, 3, 6);
+						int x = getRandomInt(rng, minX, std::max(minX, maxX - length + 1));
+						int y = getRandomInt(rng, minY, maxY);
+						placed = tryPlaceLine(roomIndex, {x, y}, length, true);
+					}
+					else if (pattern == 1)
+					{
+						int length = getRandomInt(rng, 3, 6);
+						int x = getRandomInt(rng, minX, maxX);
+						int y = getRandomInt(rng, minY, std::max(minY, maxY - length + 1));
+						placed = tryPlaceLine(roomIndex, {x, y}, length, false);
+					}
+					else
+					{
+						int w = getRandomInt(rng, 3, 6);
+						int h = getRandomInt(rng, 3, 6);
+						int x = getRandomInt(rng, minX, std::max(minX, maxX - w + 1));
+						int y = getRandomInt(rng, minY, std::max(minY, maxY - h + 1));
+						placed = tryPlaceRectOutline(roomIndex, {x, y}, w, h);
+					}
+				}
+			}
+		}
+	};
+
+	placeSpikeTraps();
+
 	// Flags rooms that end up without cover so they can stay empty.
 	auto roomHasCover = [&](int roomIndex)
 	{
@@ -3575,26 +3753,6 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 			|| type == Blocks::floorBigTileTopRight
 			|| type == Blocks::floorBigTileBottomLeft
 			|| type == Blocks::floorBigTileBottomRight;
-	};
-
-	auto isDoorTooClose = [&](int roomIndex, glm::ivec2 pos, int minDist)
-	{
-		if (roomIndex < 0 || roomIndex >= (int)outInfo.rooms.size()) { return false; }
-		for (auto d : outInfo.rooms[roomIndex].doorPositions)
-		{
-			for (int dy = 0; dy <= 1; dy++)
-			{
-				for (int dx = 0; dx <= 1; dx++)
-				{
-					int dist = std::abs(pos.x - (d.x + dx)) + std::abs(pos.y - (d.y + dy));
-					if (dist < minDist)
-					{
-						return true;
-					}
-				}
-			}
-		}
-		return false;
 	};
 
 	auto pickSpawnPosition = [&](int roomIndex, const Rect &room) -> std::optional<glm::ivec2>
@@ -3686,7 +3844,8 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 			if (over.type != Blocks::none && (isBlockColidable(over.type)
 				|| over.type == Blocks::woodenDecorations
 				|| over.type == Blocks::wallDecorations
-				|| over.type == Blocks::exit))
+				|| over.type == Blocks::exit
+				|| over.type == Blocks::spikeTrap))
 			{
 				continue;
 			}
@@ -3716,7 +3875,8 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 			&& (centerOver.type == Blocks::none || (!isBlockColidable(centerOver.type)
 			&& centerOver.type != Blocks::woodenDecorations
 			&& centerOver.type != Blocks::wallDecorations
-			&& centerOver.type != Blocks::exit))
+			&& centerOver.type != Blocks::exit
+			&& centerOver.type != Blocks::spikeTrap))
 			&& canSpawnOnTile(room, centerTile.type))
 		{
 			return candidate;
@@ -3733,7 +3893,8 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 				if (over.type != Blocks::none && (isBlockColidable(over.type)
 					|| over.type == Blocks::woodenDecorations
 					|| over.type == Blocks::wallDecorations
-					|| over.type == Blocks::exit))
+					|| over.type == Blocks::exit
+					|| over.type == Blocks::spikeTrap))
 				{
 					continue;
 				}
@@ -4384,6 +4545,111 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 				outRoom.enemySpawnPositions.push_back(spawnPos);
 				outInfo.enemySpawnPositions.push_back(spawnPos);
 			}
+		}
+	}
+
+	// Ensure each room has enough spawn slots for items/enemies.
+	{
+		const int minSpawnSlots = 7;
+		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
+		{
+			const Rect &room = rooms[roomIndex];
+			auto &outRoom = outInfo.rooms[roomIndex];
+			if (outRoom.isEmptyRoom) { continue; }
+			int desired = minSpawnSlots;
+			if (room.isBigRoom || room.isCaveMaze) { desired += 3; }
+			if ((int)outRoom.enemySpawnPositions.size() >= desired) { continue; }
+
+			std::vector<glm::ivec2> used;
+			used.reserve(outRoom.enemySpawnPositions.size());
+			for (auto &pos : outRoom.enemySpawnPositions)
+			{
+				used.push_back({(int)pos.x, (int)pos.y});
+			}
+
+			auto isUsed = [&](glm::ivec2 pos)
+			{
+				for (auto &u : used)
+				{
+					if (u.x == pos.x && u.y == pos.y) { return true; }
+				}
+				return false;
+			};
+
+			std::vector<glm::ivec2> candidates;
+			int minX = room.x + 1;
+			int maxX = room.x2() - 2;
+			int minY = room.y + 1;
+			int maxY = room.y2() - 2;
+			if (minX > maxX || minY > maxY) { continue; }
+			for (int y = minY; y <= maxY; y++)
+			{
+				for (int x = minX; x <= maxX; x++)
+				{
+					glm::ivec2 pos = {x, y};
+					if (isUsed(pos)) { continue; }
+					if (isDoorTooClose(roomIndex, pos, cosmetics.doorSpawnMinDist)) { continue; }
+					auto &tile = map.firstLayer.getBlockUnsafe(x, y);
+					if (!canSpawnOnTile(room, tile.type)) { continue; }
+					if (isWall(tile.type) || tile.type == Blocks::none) { continue; }
+					auto &over = map.secondLayer.getBlockUnsafe(x, y);
+					if (over.type != Blocks::none && (isBlockColidable(over.type)
+						|| over.type == Blocks::woodenDecorations
+						|| over.type == Blocks::wallDecorations
+						|| over.type == Blocks::exit
+						|| over.type == Blocks::spikeTrap))
+					{
+						continue;
+					}
+					candidates.push_back(pos);
+				}
+			}
+
+			while ((int)outRoom.enemySpawnPositions.size() < desired && !candidates.empty())
+			{
+				int index = getRandomInt(rng, 0, (int)candidates.size() - 1);
+				glm::ivec2 pos = candidates[index];
+				candidates[index] = candidates.back();
+				candidates.pop_back();
+				outRoom.enemySpawnPositions.push_back({pos.x + 0.5f, pos.y + 0.5f});
+				outInfo.enemySpawnPositions.push_back({pos.x + 0.5f, pos.y + 0.5f});
+				used.push_back(pos);
+			}
+		}
+	}
+
+	// Final room flags for size and cover after all generation passes.
+	{
+		const int smallRoomAreaThreshold = 240;
+		const float lowCoverThreshold = 0.05f;
+		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
+		{
+			const Rect &room = rooms[roomIndex];
+			auto &outRoom = outInfo.rooms[roomIndex];
+			int area = room.w * room.h;
+			outRoom.isSmallRoom = !room.isBigRoom && area <= smallRoomAreaThreshold;
+
+			int coverCount = 0;
+			int total = 0;
+			for (int y = room.y + 1; y < room.y2() - 1; y++)
+			{
+				for (int x = room.x + 1; x < room.x2() - 1; x++)
+				{
+					total++;
+					auto &base = map.firstLayer.getBlockUnsafe(x, y);
+					auto &over = map.secondLayer.getBlockUnsafe(x, y);
+					bool hasCover = isWall(base.type) || base.type == Blocks::none;
+					if (over.type != Blocks::none && (isBlockColidable(over.type)
+						|| over.type == Blocks::woodenDecorations
+						|| over.type == Blocks::wallDecorations))
+					{
+						hasCover = true;
+					}
+					if (hasCover) { coverCount++; }
+				}
+			}
+			float ratio = total > 0 ? (float)coverCount / (float)total : 1.0f;
+			outRoom.isLowCoverRoom = ratio < lowCoverThreshold;
 		}
 	}
 

@@ -11,6 +11,13 @@ struct TileSet
 	gl2d::TextureAtlasPadding atlas;
 };
 
+struct TileSetNoPadding
+{
+	gl2d::Texture texture;
+	gl2d::TextureAtlas atlas;
+};
+
+
 //button prompt textures grouped by device type
 struct ButtonSprites
 {
@@ -94,8 +101,8 @@ struct AssetsManager
 	gl2d::Texture doorClosedVertical;
 	gl2d::Texture doorOpenedVertical;
 
+	TileSetNoPadding spikeTrap;
 	
-
 
 	void loadAllAssets();
 	gl2d::Texture &getWandIcon(int index);

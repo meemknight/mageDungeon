@@ -96,6 +96,8 @@ struct Entity
 	StatusEffects statusEffects;
 	StatusImmunities statusImmunities;
 	float statusSpeedMultiplier = 1.0f;
+	// Flying enemies ignore ground hazards like spike traps.
+	bool isFlying = false;
 
 	EntityLifeThings life;
 	// Damage applied to the player on contact.

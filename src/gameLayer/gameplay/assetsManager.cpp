@@ -206,6 +206,9 @@ void AssetsManager::loadAllAssets()
 	s = coin.texture.GetSize();
 	coin.atlas = gl2d::TextureAtlasPadding(6, 1, s.x, s.y);
 
+	spikeTrap.texture.loadFromFile(RESOURCES_PATH "map/spikeTrap.png");
+	spikeTrap.atlas = gl2d::TextureAtlas(8, 1);
+
 	doorClosedHorizontal.loadFromFile(RESOURCES_PATH "map/doorClosedHorizontal.png");
 	doorOpenedHorizontal.loadFromFile(RESOURCES_PATH "map/doorOpenedHorizontal.png");
 	doorClosedVertical.loadFromFile(RESOURCES_PATH "map/doorClosedVertical.png");

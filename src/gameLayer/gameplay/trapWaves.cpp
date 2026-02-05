@@ -200,10 +200,33 @@ TrapWavePlan buildTrapRoomWavePlan(const FloorRoom &room, int difficulty,
 	{
 		baseCount = std::max(1, baseCount - 1);
 	}
+
+	bool isSmallRoom = room.isSmallRoom;
+	bool isLowCover = room.isLowCoverRoom;
+	if (isSmallRoom && isLowCover)
+	{
+		baseCount = 1;
+	}
+	else if (isSmallRoom || isLowCover)
+	{
+		baseCount = std::max(1, baseCount - 1);
+	}
+	if (isSmallRoom)
+	{
+		baseCount = std::min(baseCount, 3);
+	}
 	baseCount = std::max(baseCount, getMinimumWaveCount(difficulty, roomTier));
 	baseCount = std::max(1, baseCount);
 
 	int waveCount = pickWaveCount(roomTier, rng);
+	if (isSmallRoom && isLowCover)
+	{
+		waveCount = 1;
+	}
+	else if (isSmallRoom || isLowCover)
+	{
+		waveCount = std::min(waveCount, 2);
+	}
 	DifficultyPools pools = getDifficultyPools(difficulty);
 
 	plan.waves.reserve(waveCount);
@@ -215,11 +238,19 @@ TrapWavePlan buildTrapRoomWavePlan(const FloorRoom &room, int difficulty,
 			waveCountLocal = std::max(2, baseCount - 1);
 		}
 		waveCountLocal = std::max(1, waveCountLocal);
+		if (isSmallRoom)
+		{
+			waveCountLocal = std::min(waveCountLocal, 3);
+		}
 
 		float eliteChance = pools.eliteChanceSmall;
 		if (roomTier == 1) { eliteChance = pools.eliteChanceMedium; }
 		if (roomTier == 2) { eliteChance = pools.eliteChanceLarge; }
 		eliteChance += 0.12f * waveIndex;
+		if (isSmallRoom || isLowCover)
+		{
+			eliteChance *= 0.65f;
+		}
 
 		int eliteCount = 0;
 		if (!pools.elite.empty() && getRandomChance(rng, eliteChance))

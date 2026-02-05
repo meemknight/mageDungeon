@@ -4,6 +4,7 @@
 #include <gameplay/statusEffects.h>
 #include <gameplay/assetsManager.h>
 #include <gameplay/aStar.h>
+#include <gameLayer.h>
 #include <gameplay/player.h>
 #include <gameplay/summons.h>
 #include <algorithm>
@@ -2230,6 +2231,7 @@ void MeteoriteProjectile::explodeDamage(Map &map, EntityHolder &entityHolder)
 	explosionStats.pushBack = explosionPush;
 	applyExplosionDamage(map, entityHolder, physics.getPos(),
 		explosionRadius, explosionStats, element, explosionBurn, false);
+	triggerSpikeTrapsInRadius(physics.getPos(), explosionRadius);
 }
 
 bool MeteoriteProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
@@ -2436,6 +2438,7 @@ void HomingMeteoriteProjectile::explodeDamage(Map &map, EntityHolder &entityHold
 	explosionStats.pushBack = explosionPush;
 	applyExplosionDamage(map, entityHolder, physics.getPos(),
 		explosionRadius, explosionStats, element, explosionBurn, false);
+	triggerSpikeTrapsInRadius(physics.getPos(), explosionRadius);
 }
 
 bool HomingMeteoriteProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
@@ -2641,6 +2644,7 @@ void MeteoriteImpactProjectile::explodeDamage(Map &map, EntityHolder &entityHold
 	explosionStats.pushBack = explosionPush;
 	applyExplosionDamage(map, entityHolder, physics.getPos(),
 		explosionRadius, explosionStats, element, explosionBurn, false);
+	triggerSpikeTrapsInRadius(physics.getPos(), explosionRadius);
 }
 
 bool MeteoriteImpactProjectile::update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
@@ -2944,10 +2948,17 @@ bool ElementWallProjectile::update(float deltaTime, Map &map, ParticleSystem &ma
 			{
 				hitDir = e->physics.getPos() - physics.getPos();
 			}
+			float statusAmount = 0.0f;
+			if (element == Elements::Fire) { statusAmount = 1.0f; }
+			else if (element == Elements::Ice) { statusAmount = 2.0f; }
 			e->life.computeHit(hitStats, element, e->element, {hitDir}, pushBack);
 			if (hitStats.damage > 0.0f)
 			{
 				e->onDamaged(hitStats.damage);
+			}
+			if (statusAmount > 0.0f)
+			{
+				addStatusEffectFromElement(e->statusEffects, e->statusImmunities, element, statusAmount);
 			}
 			e->physics.velocity += pushBack;
 			glm::vec2 damagePos = e->physics.getPos();
@@ -2987,7 +2998,10 @@ void ElementWallProjectile::render(gl2d::Renderer2D &renderer, AssetsManager &as
 		glm::vec2 center = physics.getPos() + axis * along;
 		glm::vec4 rect = {center.x - segmentLength * 0.5f, center.y - wallThickness * 0.5f,
 			segmentLength, wallThickness};
-		renderer.renderRectangleOutline(rect, Colors_Blue, 0.02f);
+		if (renderColliders())
+		{
+			renderer.renderRectangleOutline(rect, Colors_Blue, 0.02f);
+		}
 	}
 }
 

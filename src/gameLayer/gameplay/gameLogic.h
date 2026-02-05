@@ -66,6 +66,44 @@ struct BreakableDecorationSystem
 	}
 };
 
+struct TrapSpikeElement
+{
+	glm::ivec2 pos = {};
+	// Closed -> OpeningDelay -> Opening -> Open -> Closing
+	enum class State : unsigned char
+	{
+		Closed,
+		OpeningDelay,
+		Opening,
+		Open,
+		Closing
+	};
+	State state = State::Closed;
+	float stateTimer = 0.0f;
+	float damageCooldown = 0.0f;
+	bool queuedOpen = false;
+};
+
+struct SpikeTrapSettings
+{
+	static constexpr float OpenDelaySeconds = 0.8f;
+	static constexpr float OpenAnimSeconds = 0.2f;
+	static constexpr float OpenHoldSeconds = 4.0f;
+	static constexpr float CloseAnimSeconds = 0.2f;
+	static constexpr float DamageCooldownSeconds = 1.0f;
+};
+
+struct TrapSpikeSystem
+{
+	// Trap spike placements copied from the map for custom rendering.
+	std::vector<TrapSpikeElement> spikes;
+
+	void clear()
+	{
+		spikes.clear();
+	}
+};
+
 struct GameLogic
 {
 	Map map;
@@ -84,6 +122,7 @@ struct GameLogic
 	int trapDifficulty = 0;
 	bool forceTrapDifficulty = false;
 	BreakableDecorationSystem breakableDecorations;
+	TrapSpikeSystem trapSpikes;
 	Wand wands[2];
 	bool hasWand[2] = {};
 	int activeWandIndex = 0;
@@ -120,7 +159,7 @@ struct GameLogic
 
 	float zoom = 100;
 	// World seed used for procedural floor generation.
-	int worldSeed = 819242882;
+	int worldSeed = 12345;
 	int currentFloorIndex = 0;
 	bool keepFloorOnClose = false;
 	// Free camera debug mode decouples camera from player.

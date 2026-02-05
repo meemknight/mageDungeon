@@ -98,6 +98,23 @@ static void emitDecorationBreakParticles(ParticleSystem &system,
 	system.emitParticles(chips, pos, rng, pos);
 }
 
+static void emitSpikeTrapTriggerParticles(ParticleSystem &system,
+	std::ranlux24_base &rng, glm::vec2 pos)
+{
+	glm::vec4 startColor = {1.0f, 0.35f, 0.15f, 0.9f};
+	glm::vec4 endColor = {0.85f, 0.15f, 0.05f, 0.5f};
+	ParticleSettings sparks = getSmallSquareParticle(startColor, endColor);
+	sparks.onCreateCount = 8;
+	sparks.particleLifeTime = {0.2f, 0.4f};
+	sparks.velocityX = glm::vec2{-25.0f, 25.0f} * PIXEL_SIZE;
+	sparks.velocityY = glm::vec2{-18.0f, -4.0f} * PIXEL_SIZE;
+	sparks.dragX = glm::vec2{-80.0f, -140.0f} * PIXEL_SIZE;
+	sparks.dragY = glm::vec2{-80.0f, -140.0f} * PIXEL_SIZE;
+	sparks.positionX = glm::vec2{-3.0f, 3.0f} * PIXEL_SIZE;
+	sparks.positionY = glm::vec2{-3.0f, 3.0f} * PIXEL_SIZE;
+	system.emitParticles(sparks, pos, rng, pos);
+}
+
 // Breakable decorations are small map markers that can be destroyed on contact.
 int breakDecorationsAtCollider(const Transform2D &collider)
 {
@@ -161,6 +178,46 @@ int breakDecorationsInRadius(Map *map, glm::vec2 center, float radius, bool useL
 	}
 
 	return broken;
+}
+
+int triggerSpikeTrapsInRadius(glm::vec2 center, float radius)
+{
+	if (spellPreviewContext) { return 0; }
+	if (radius <= 0.0f) { return 0; }
+	auto &spikes = game.trapSpikes.spikes;
+	if (spikes.empty()) { return 0; }
+
+	float radius2 = radius * radius;
+	int triggered = 0;
+	for (auto &spike : spikes)
+	{
+		glm::vec2 pos = {spike.pos.x + 0.5f, spike.pos.y + 0.5f};
+		glm::vec2 diff = pos - center;
+		if (glm::dot(diff, diff) > radius2) { continue; }
+
+		if (spike.state == TrapSpikeElement::State::Closed)
+		{
+			spike.state = TrapSpikeElement::State::OpeningDelay;
+			spike.stateTimer = SpikeTrapSettings::OpenDelaySeconds;
+			spike.queuedOpen = false;
+			emitSpikeTrapTriggerParticles(game.particleSystem, game.rng, pos);
+		}
+		else if (spike.state == TrapSpikeElement::State::OpeningDelay)
+		{
+			spike.stateTimer = SpikeTrapSettings::OpenDelaySeconds;
+		}
+		else if (spike.state == TrapSpikeElement::State::Open)
+		{
+			spike.stateTimer = SpikeTrapSettings::OpenHoldSeconds;
+		}
+		else if (spike.state == TrapSpikeElement::State::Closing)
+		{
+			spike.queuedOpen = true;
+		}
+		triggered++;
+	}
+
+	return triggered;
 }
 
 void setSpellPreviewContext(SpellPreviewContext *context)

@@ -208,6 +208,7 @@ namespace EnemyTypes
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
 			behavior.specialShootChance = 0.45f;
 			contactDamage = 2.0f;
+			isFlying = true;
 			hoverEnabled = true;
 			hoverHeight = PIXEL_SIZE * 2.0f;
 			hoverSpeed = 2.3f;

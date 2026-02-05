@@ -41,6 +41,8 @@ namespace Blocks
 		woodenDecorations,
 		exit,
 		wallDecorations,
+		
+		spikeTrap,
 
 		BLOCKS_COUNT
 

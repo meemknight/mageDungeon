@@ -19,6 +19,7 @@ struct Player;
 // Breakable decoration helpers (defined in gameLayer.cpp).
 int breakDecorationsAtCollider(const Transform2D &collider);
 int breakDecorationsInRadius(Map *map, glm::vec2 center, float radius, bool useLineOfSight);
+int triggerSpikeTrapsInRadius(glm::vec2 center, float radius);
 
 struct Projectile
 {

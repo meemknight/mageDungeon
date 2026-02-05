@@ -277,8 +277,52 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		patrolDirTimer = 0.0f;
 	}
 
+	// Random pause to stand still and shoot when we have a clean ranged target.
+	if (shootHoldActive)
+	{
+		if (!chasing || !canSeeTarget || targetIsSummon ||
+			distanceToTarget > shootRange || distanceToTarget <= (meleeRange + 0.2f))
+		{
+			shootHoldActive = false;
+			shootHoldTimer = 0.0f;
+		}
+		else
+		{
+			shootHoldTimer -= deltaTime;
+			if (shootHoldTimer <= 0.0f)
+			{
+				shootHoldActive = false;
+				shootHoldTimer = 0.0f;
+			}
+		}
+	}
+
+	if (!shootHoldActive)
+	{
+		const bool canHoldShoot = chasing && canSeeTarget && !targetIsSummon &&
+			distanceToTarget <= shootRange && distanceToTarget > (meleeRange + 0.2f) &&
+			(shootPatterns != ShootPattern_None || specialShootPatterns != ShootPattern_None);
+		if (canHoldShoot)
+		{
+			shootHoldCheckTimer -= deltaTime;
+			if (shootHoldCheckTimer <= 0.0f)
+			{
+				shootHoldCheckTimer = getRandomFloat(rng, shootHoldCheckMin, shootHoldCheckMax);
+				if (getRandomChance(rng, shootHoldChance))
+				{
+					shootHoldActive = true;
+					shootHoldTimer = getRandomFloat(rng, shootHoldDurationMin, shootHoldDurationMax);
+				}
+			}
+		}
+		else
+		{
+			shootHoldCheckTimer = 0.0f;
+		}
+	}
+
 	// Trigger a dash strike when close and in LOS
-	if (!dashActive && !hoverMeleeActive && dashEnabled && chasing && canSeeTarget &&
+	if (!dashActive && !hoverMeleeActive && !shootHoldActive && dashEnabled && chasing && canSeeTarget &&
 		distanceToTarget <= dashRange && dashCooldownTimer <= 0.0f)
 	{
 		float chance = dashChance * deltaTime;
@@ -296,7 +340,7 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 	}
 
 	// Trigger a hover melee swoop when close and in LOS
-	if (!hoverMeleeActive && !dashActive && hoverMeleeEnabled && chasing && canSeeTarget &&
+	if (!hoverMeleeActive && !dashActive && !shootHoldActive && hoverMeleeEnabled && chasing && canSeeTarget &&
 		distanceToTarget <= hoverMeleeRange && hoverMeleeCooldownTimer <= 0.0f)
 	{
 		float chance = hoverMeleeChance * deltaTime;
@@ -545,10 +589,15 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		}
 	}
 
+	if (shootHoldActive)
+	{
+		moveDir = glm::vec2(0.0f);
+	}
+
 	// Determine if we should melee or shoot
 	if (!firingBurstShot && chasing && canSeeTarget && !hoverMeleeActive && !dashActive)
 	{
-		if (distanceToTarget <= meleeRange)
+		if (!shootHoldActive && distanceToTarget <= meleeRange)
 		{
 			// Close range - prefer melee
 			wantsToMelee = true;

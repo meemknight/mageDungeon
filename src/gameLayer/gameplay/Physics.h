@@ -3,6 +3,8 @@
 #include <glm/vec4.hpp>
 #include <gameplay/map.h>
 
+bool renderColliders();
+
 //from raylib
 bool checkCollisionPointRec(glm::vec2 point, glm::vec4 rec);
 
@@ -90,6 +92,7 @@ struct Transform2D
 
 	void renderCollider(gl2d::Renderer2D &renderer)
 	{
+		if (!renderColliders()) { return; }
 		if (isCircleCollider)
 		{
 			renderer.renderCircleOutline(pos, size.x / 2, Colors_Blue, 0.02);

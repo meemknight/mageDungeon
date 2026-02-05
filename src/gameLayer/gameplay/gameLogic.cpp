@@ -38,6 +38,12 @@ static const int tutorialFloorSizeY = 100;
 static const int dungeonFloorSizeX = 100;
 static const int dungeonFloorSizeY = 100;
 static const int maxCombatFloors = 4;
+static bool renderCollidersFlag = false;
+
+bool renderColliders()
+{
+	return renderCollidersFlag;
+}
 
 namespace
 {
@@ -219,6 +225,19 @@ bool GameLogic::init()
 	extractBreakableDecorations(map.firstLayer);
 	extractBreakableDecorations(map.secondLayer);
 
+	trapSpikes.clear();
+	for (int y = 0; y < map.secondLayer.size.y; y++)
+	{
+		for (int x = 0; x < map.secondLayer.size.x; x++)
+		{
+			auto &tile = map.secondLayer.getBlockUnsafe(x, y);
+			if (tile.type == Blocks::spikeTrap)
+			{
+				trapSpikes.spikes.push_back({{x, y}});
+			}
+		}
+	}
+
 	placeDoorCollisionBlocks();
 
 	// Pick trap rooms (spawn/exit rooms are excluded).
@@ -336,7 +355,9 @@ bool GameLogic::init()
 		}
 	}
 
-	wands[0] = getRandomWand(0, rng);
+	//wands[0] = getRandomWand(0, rng); //starter wand
+	wands[0] = getRandomWand(1, rng); //temporary give tier 1 wand to the player
+
 	hasWand[0] = true;
 	hasWand[1] = false;
 	activeWandIndex = 0;
@@ -391,6 +412,11 @@ bool GameLogic::init()
 				return false;
 			}
 			if (floorInfo.exitPos && glm::distance(pos, *floorInfo.exitPos) < 0.4f)
+			{
+				return false;
+			}
+			auto &over = map.secondLayer.getBlockUnsafe(tile.x, tile.y);
+			if (over.type == Blocks::spikeTrap)
 			{
 				return false;
 			}
@@ -470,6 +496,31 @@ bool GameLogic::init()
 			return pos;
 		};
 
+		auto isDropSpotFree = [&](glm::vec2 pos)
+		{
+			for (const auto &item : droppedItems.items)
+			{
+				if (glm::distance(item.pos, pos) < 0.5f)
+				{
+					return false;
+				}
+			}
+			return true;
+		};
+		auto popFreeSpawn = [&](glm::vec2 &outPos)
+		{
+			while (!spawnPositions.empty())
+			{
+				glm::vec2 pos = popSpawn(rng);
+				if (isDropSpotFree(pos))
+				{
+					outPos = pos;
+					return true;
+				}
+			}
+			return false;
+		};
+
 		int wandSpawnCount = 0;
 		if (currentFloorIndex > 0)
 		{
@@ -479,7 +530,8 @@ bool GameLogic::init()
 		}
 		for (int i = 0; i < wandSpawnCount; i++)
 		{
-			glm::vec2 pos = popSpawn(rng);
+			glm::vec2 pos = {};
+			if (!popFreeSpawn(pos)) { break; }
 			int tier = getFloorWandTier(currentFloorIndex);
 			droppedItems.spawnWand(pos, getRandomWand(tier, rng), rng);
 		}
@@ -492,20 +544,10 @@ bool GameLogic::init()
 			int minChestSpawns = std::min(2, maxChestSpawns);
 			chestSpawnCount = maxChestSpawns > 0 ? getRandomInt(rng, minChestSpawns, maxChestSpawns) : 0;
 		}
-		auto isDropSpotFree = [&](glm::vec2 pos)
-		{
-			for (const auto &item : droppedItems.items)
-			{
-				if (glm::distance(item.pos, pos) < 0.5f)
-				{
-					return false;
-				}
-			}
-			return true;
-		};
 		for (int i = 0; i < chestSpawnCount; i++)
 		{
-			glm::vec2 pos = popSpawn(rng);
+			glm::vec2 pos = {};
+			if (!popFreeSpawn(pos)) { break; }
 			if (getRandomChance(rng, chestWandChance))
 			{
 				int tier = getFloorWandTier(currentFloorIndex);
@@ -599,10 +641,6 @@ bool GameLogic::init()
 		{
 			for (const auto &item : droppedItems.items)
 			{
-				if (item.type != DroppedItemType::Wand && item.type != DroppedItemType::Chest)
-				{
-					continue;
-				}
 				glm::vec2 diff = item.pos - pos;
 				if (glm::dot(diff, diff) <= itemBlockDist2)
 				{
@@ -643,6 +681,15 @@ bool GameLogic::init()
 					if (floorInfo.exitPos && glm::distance(pos, *floorInfo.exitPos) < 0.4f)
 					{
 						continue;
+					}
+					glm::ivec2 tile = WorldToTile(pos);
+					if (tile.x >= 0 && tile.y >= 0 && tile.x < map.size.x && tile.y < map.size.y)
+					{
+						auto &over = map.secondLayer.getBlockUnsafe(tile.x, tile.y);
+						if (over.type == Blocks::spikeTrap)
+						{
+							continue;
+						}
 					}
 					if (isItemBlocking(pos))
 					{
@@ -908,6 +955,10 @@ bool GameLogic::update(float deltaTime,
 
 	#pragma region imgui
 	//ImGui::ShowDemoWindow();
+	if (input.buttons[platform::Button::F8].pressed)
+	{
+		renderCollidersFlag = !renderCollidersFlag;
+	}
 	if (input.buttons[platform::Button::F9].pressed)
 	{
 		freeCameraMode = !freeCameraMode;
@@ -933,6 +984,7 @@ bool GameLogic::update(float deltaTime,
 	{
 		ImGui::Text("World Seed: %d", worldSeed);
 		ImGui::Text("Floor: %d / %d", currentFloorIndex, maxCombatFloors);
+		ImGui::Checkbox("Render Colliders", &renderCollidersFlag);
 		ImGui::Checkbox("Force Trap Difficulty", &forceTrapDifficulty);
 		ImGui::SliderInt("Trap Difficulty", &trapDifficulty, 0, 3);
 		if (ImGui::Button("Reset World (New Seed)"))
@@ -1519,7 +1571,76 @@ bool GameLogic::update(float deltaTime,
 		gameFbo.bind();
 	}
 
-	map.renderMap(renderer, assetsManager);
+	map.firstLayer.renderMap(renderer, assetsManager);
+
+	// Render spike traps after the floor.
+	if (!trapSpikes.spikes.empty())
+	{
+		auto viewRect = renderer.getViewRect();
+		glm::ivec4 viewRectInt = {};
+		viewRectInt.x = int(viewRect.x) - 1;
+		viewRectInt.y = int(viewRect.y) - 2;
+		viewRectInt.z = int(viewRect.z + 1.5f) + 2;
+		viewRectInt.w = int(viewRect.w + 2.5f) + 2;
+		viewRectInt.z += viewRect.x;
+		viewRectInt.w += viewRect.y;
+		viewRectInt = glm::clamp(viewRectInt, {0, 0, 0, 0},
+			{map.size.x - 1, map.size.y - 1, map.size.x - 1, map.size.y - 1});
+		auto &spikeSet = assetsManager.spikeTrap;
+		for (const auto &spike : trapSpikes.spikes)
+		{
+			if (spike.pos.x < viewRectInt.x || spike.pos.x >= viewRectInt.z
+				|| spike.pos.y < viewRectInt.y || spike.pos.y >= viewRectInt.w)
+			{
+				continue;
+			}
+			int frameX = 0;
+			switch (spike.state)
+			{
+				case TrapSpikeElement::State::Closed:
+				case TrapSpikeElement::State::OpeningDelay:
+					frameX = 0;
+					break;
+				case TrapSpikeElement::State::Opening:
+				{
+					float progress = 1.0f - (spike.stateTimer / SpikeTrapSettings::OpenAnimSeconds);
+					int step = std::min(2, (int)(progress * 3.0f));
+					frameX = 1 + std::max(0, step);
+				} break;
+				case TrapSpikeElement::State::Open:
+					frameX = 4;
+					break;
+				case TrapSpikeElement::State::Closing:
+				{
+					float progress = 1.0f - (spike.stateTimer / SpikeTrapSettings::CloseAnimSeconds);
+					int step = std::min(2, (int)(progress * 3.0f));
+					frameX = 5 + std::max(0, step);
+				} break;
+			}
+			if (spikeSet.texture.isValid())
+			{
+				glm::vec4 rect = {
+					(float)spike.pos.x,
+					(float)spike.pos.y - 1.0f,
+					1.0f,
+					2.0f
+				};
+				renderer.renderRectangle(rect, spikeSet.texture, Colors_White, {}, 0,
+					spikeSet.atlas.get(frameX, 0));
+			}
+			if (renderColliders())
+			{
+				glm::vec2 center = {
+					spike.pos.x + 0.5f,
+					spike.pos.y + 0.5f
+				};
+				renderer.renderCircleOutline(center, 0.45f, {1.0f, 0.35f, 0.2f, 0.55f},
+					PIXEL_SIZE * 0.6f, 16);
+			}
+		}
+	}
+
+	map.secondLayer.renderMap(renderer, assetsManager);
 
 	map.renderWallShadows(renderer, assetsManager);
 
@@ -1537,7 +1658,138 @@ bool GameLogic::update(float deltaTime,
 		for (auto &entity : entityHolder.entities)
 		{
 			if (entity->dying) { continue; }
+			if (entity->isFlying) { continue; }
 			breakDecorationsAtCollider(entity->physics.transform);
+		}
+	}
+
+	// Spike trap behavior and damage.
+	if (!trapSpikes.spikes.empty())
+	{
+		auto emitSpikeTriggerParticles = [&](glm::vec2 pos)
+		{
+			glm::vec4 startColor = {1.0f, 0.35f, 0.15f, 0.9f};
+			glm::vec4 endColor = {0.85f, 0.15f, 0.05f, 0.5f};
+			ParticleSettings sparks = getSmallSquareParticle(startColor, endColor);
+			sparks.onCreateCount = 8;
+			sparks.particleLifeTime = {0.2f, 0.4f};
+			sparks.velocityX = glm::vec2{-25.0f, 25.0f} * PIXEL_SIZE;
+			sparks.velocityY = glm::vec2{-18.0f, -4.0f} * PIXEL_SIZE;
+			sparks.dragX = glm::vec2{-80.0f, -140.0f} * PIXEL_SIZE;
+			sparks.dragY = glm::vec2{-80.0f, -140.0f} * PIXEL_SIZE;
+			sparks.positionX = glm::vec2{-3.0f, 3.0f} * PIXEL_SIZE;
+			sparks.positionY = glm::vec2{-3.0f, 3.0f} * PIXEL_SIZE;
+			particleSystem.emitParticles(sparks, pos, rng, pos);
+		};
+
+		auto isOnSpike = [&](const glm::vec4 &aabb, const glm::ivec2 &tile)
+		{
+			glm::vec4 spikeRect = {(float)tile.x, (float)tile.y, 1.0f, 1.0f};
+			return checkCollisionRecs(aabb, spikeRect);
+		};
+
+		for (auto &spike : trapSpikes.spikes)
+		{
+			spike.damageCooldown = std::max(0.0f, spike.damageCooldown - simDelta);
+			glm::vec4 playerAabb = player.physics.getAABB();
+			bool playerOn = isOnSpike(playerAabb, spike.pos);
+			if (playerOn)
+			{
+				if (spike.state == TrapSpikeElement::State::Closed)
+				{
+					spike.state = TrapSpikeElement::State::OpeningDelay;
+					spike.stateTimer = SpikeTrapSettings::OpenDelaySeconds;
+					spike.queuedOpen = false;
+					emitSpikeTriggerParticles({spike.pos.x + 0.5f, spike.pos.y + 0.5f});
+				}
+				else if (spike.state == TrapSpikeElement::State::Open)
+				{
+					spike.stateTimer = SpikeTrapSettings::OpenHoldSeconds;
+				}
+				else if (spike.state == TrapSpikeElement::State::Closing)
+				{
+					spike.queuedOpen = true;
+				}
+			}
+
+			switch (spike.state)
+			{
+				case TrapSpikeElement::State::Closed:
+					break;
+				case TrapSpikeElement::State::OpeningDelay:
+					spike.stateTimer -= simDelta;
+					if (spike.stateTimer <= 0.0f)
+					{
+						spike.state = TrapSpikeElement::State::Opening;
+						spike.stateTimer = SpikeTrapSettings::OpenAnimSeconds;
+					}
+					break;
+				case TrapSpikeElement::State::Opening:
+					spike.stateTimer -= simDelta;
+					if (spike.stateTimer <= 0.0f)
+					{
+						spike.state = TrapSpikeElement::State::Open;
+						spike.stateTimer = SpikeTrapSettings::OpenHoldSeconds;
+					}
+					break;
+				case TrapSpikeElement::State::Open:
+					spike.stateTimer -= simDelta;
+					if (spike.stateTimer <= 0.0f)
+					{
+						spike.state = TrapSpikeElement::State::Closing;
+						spike.stateTimer = SpikeTrapSettings::CloseAnimSeconds;
+					}
+					break;
+				case TrapSpikeElement::State::Closing:
+					spike.stateTimer -= simDelta;
+					if (spike.stateTimer <= 0.0f)
+					{
+						if (spike.queuedOpen)
+						{
+							spike.state = TrapSpikeElement::State::OpeningDelay;
+							spike.stateTimer = SpikeTrapSettings::OpenDelaySeconds;
+							spike.queuedOpen = false;
+							emitSpikeTriggerParticles({spike.pos.x + 0.5f, spike.pos.y + 0.5f});
+						}
+						else
+						{
+							spike.state = TrapSpikeElement::State::Closed;
+						}
+					}
+					break;
+			}
+
+			if (spike.state == TrapSpikeElement::State::Open && spike.damageCooldown <= 0.0f)
+			{
+				bool didDamage = false;
+				if (playerOn)
+				{
+					player.applyDamage(1.0f);
+					didDamage = true;
+					glm::vec2 damagePos = player.physics.getPos();
+					damagePos.y -= player.physics.transform.size.y * 0.6f;
+					getDamageViewerSystem().addDamage(1.0f, damagePos);
+				}
+				HitStats hitStats = {};
+				hitStats.damage = 1.0f;
+				for (auto &entity : entityHolder.entities)
+				{
+					if (entity->dying) { continue; }
+					if (entity->isFlying) { continue; }
+					if (!isOnSpike(entity->physics.getAABB(), spike.pos)) { continue; }
+					glm::vec2 push = {};
+					entity->life.computeHit(hitStats, Elements::NoneElement, entity->element, {}, push);
+					entity->onDamaged(hitStats.damage);
+					didDamage = true;
+					glm::vec2 damagePos = entity->physics.getPos();
+					damagePos.y -= entity->physics.transform.size.y * 0.6f;
+					getDamageViewerSystem().addDamage(1.0f, damagePos);
+				}
+				if (didDamage)
+				{
+					spike.damageCooldown = SpikeTrapSettings::DamageCooldownSeconds;
+				}
+			}
 		}
 	}
 
@@ -1730,12 +1982,11 @@ bool GameLogic::update(float deltaTime,
 		particleSystem.emitParticles(burst, pos, rng, pos);
 	};
 
-	auto isChestBlocking = [&](glm::vec2 pos, float radius)
+	auto isItemBlocking = [&](glm::vec2 pos, float radius)
 	{
 		float radius2 = radius * radius;
 		for (const auto &item : droppedItems.items)
 		{
-			if (item.type != DroppedItemType::Chest) { continue; }
 			glm::vec2 diff = item.pos - pos;
 			if (glm::dot(diff, diff) <= radius2)
 			{
@@ -1751,7 +2002,17 @@ bool GameLogic::update(float deltaTime,
 		positions.reserve(room.enemySpawnPositions.size());
 		for (const auto &pos : room.enemySpawnPositions)
 		{
-			if (!isChestBlocking(pos, 0.5f))
+			glm::ivec2 tile = WorldToTile(pos);
+			if (tile.x < 0 || tile.y < 0 || tile.x >= map.size.x || tile.y >= map.size.y)
+			{
+				continue;
+			}
+			auto &over = map.secondLayer.getBlockUnsafe(tile.x, tile.y);
+			if (over.type == Blocks::spikeTrap)
+			{
+				continue;
+			}
+			if (!isItemBlocking(pos, 0.5f))
 			{
 				positions.push_back(pos);
 			}
@@ -1794,7 +2055,7 @@ bool GameLogic::update(float deltaTime,
 
 	auto isTrapSpawnOccupied = [&](glm::vec2 spawnPos)
 	{
-		if (isChestBlocking(spawnPos, 0.5f))
+		if (isItemBlocking(spawnPos, 0.5f))
 		{
 			return true;
 		}
@@ -2332,7 +2593,10 @@ bool GameLogic::update(float deltaTime,
 			: assetsManager.doorClosedHorizontal;
 		if (!sprite.isValid()) { return; }
 		renderer.renderRectangle(rect, sprite, Colors_White);
-		renderer.renderRectangleOutline(rect, Colors_Green, 0.03f);
+		if (renderColliders())
+		{
+			renderer.renderRectangleOutline(rect, Colors_Green, 0.03f);
+		}
 	};
 
 	auto hashPosition = [](int x, int y)
@@ -2392,9 +2656,12 @@ bool GameLogic::update(float deltaTime,
 		}
 	}
 
-	for (auto &rect : doorTriggerRects)
+	if (renderColliders())
 	{
-		renderer.renderRectangleOutline(rect, Colors_Blue, 0.02f);
+		for (auto &rect : doorTriggerRects)
+		{
+			renderer.renderRectangleOutline(rect, Colors_Blue, 0.02f);
+		}
 	}
 
 	auto renderStatusIcons = [&](glm::vec4 aabb, const StatusEffects &effects)

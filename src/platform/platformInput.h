@@ -29,6 +29,7 @@ namespace platform
 			Tab,
 			LeftShift,
 			LeftAlt,
+			F8,
 			F9,
 			F10,
 			BUTTONS_COUNT, //

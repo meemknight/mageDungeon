@@ -165,6 +165,8 @@ bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParti
 		hitAnimationTimer = animationFrameDuration * (float)animationFrameCount;
 		hitAnimationBaseY = 6 + facingDirection;
 		animator.setAnimation(hitAnimationBaseY);
+		animator.timer = animationFrameDuration;
+		lastAnimationFrame = 0;
 		animator.flipX = facingFlipX;
 		attackAnimationEnded = false;
 	}
