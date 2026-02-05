@@ -19,6 +19,7 @@
 #include <gameplay/statusEffects.h>
 
 #include <gameplay/elements.h>
+#include <gameplay/worldTextSystem.h>
 #include <gameplay/spellRecepieWindow.h>
 
 #include <worldGen/floorGen.h>
@@ -67,8 +68,8 @@ bool GameLogic::init()
 		worldSeed = getRandomInt(std::ranlux24_base{std::random_device()()}, 1, 2000000000);
 	}
 
-	floorGenerator.generateDungeonFloor(140, 140, map, worldSeed, connections, true, floorInfo, doorHolder);
-	//floorGenerator.generateTutorialFloor(140, 140, map, floorInfo, doorHolder);
+	//floorGenerator.generateDungeonFloor(140, 140, map, worldSeed, connections, true, floorInfo, doorHolder);
+	floorGenerator.generateTutorialFloor(140, 140, map, floorInfo, doorHolder);
 
 
 	floorGenerator.clear();
@@ -2115,7 +2116,8 @@ bool GameLogic::update(float deltaTime,
 		particlePostProcessRenderer.finalRender(renderer);
 	}
 
-	map.renderMapAfterEntities(renderer, assetsManager, &doorHolder);
+	static WorldTextSystem mapTextSystem;
+	map.renderMapAfterEntities(renderer, assetsManager, &doorHolder, &mapTextSystem, usesController);
 	damageViewerSystem.render(renderer, assetsManager.font);
 
 #pragma endregion

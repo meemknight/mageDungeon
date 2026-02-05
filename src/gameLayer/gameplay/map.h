@@ -7,6 +7,7 @@
 #include <functional>
 
 struct DoorHolder;
+struct WorldTextSystem;
 
 // Hash helper for using glm::vec2 in unordered containers.
 struct Vec2Hash
@@ -49,7 +50,8 @@ struct MapLayer
 
 	//for rendering tall walls and stuff
 	void renderMapAfterEntities(gl2d::Renderer2D &renderer,
-		AssetsManager &assetManager, const DoorHolder *doorHolder = nullptr);
+		AssetsManager &assetManager, const DoorHolder *doorHolder = nullptr,
+		WorldTextSystem *textSystem = nullptr, bool usesController = false);
 };
 
 struct Map
@@ -96,6 +98,7 @@ struct Map
 
 	//for rendering tall walls and stuff
 	void renderMapAfterEntities(gl2d::Renderer2D &renderer,
-		AssetsManager &assetManager, const DoorHolder *doorHolder = nullptr);
+		AssetsManager &assetManager, const DoorHolder *doorHolder = nullptr,
+		WorldTextSystem *textSystem = nullptr, bool usesController = false);
 
 };

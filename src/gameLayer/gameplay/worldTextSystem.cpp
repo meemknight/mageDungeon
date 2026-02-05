@@ -2,6 +2,7 @@
 #include <gameplay/assetsManager.h>
 #include <gameplay/Physics.h>
 #include <algorithm>
+#include <imgui.h>
 
 namespace
 {
@@ -82,7 +83,11 @@ namespace
 WorldTextSystem::WorldTextSystem()
 {
 	defaultTextSize = PIXEL_SIZE * 10.0f;
+	iconScale = 2.0f;
+	tokenPaddingScale = 0.3f;
 	setPrompt("shoot_button", {"", "Right", "RT"});
+	setPrompt("select_spell", {"", "Left", "RT"});
+	setPrompt("up_spell", {"", "Mouse", "Right_Stick"});
 }
 
 int WorldTextSystem::addText(const std::string &text, glm::vec2 pos,
@@ -185,6 +190,7 @@ void WorldTextSystem::render(gl2d::Renderer2D &renderer, const AssetsManager &as
 		float width = 0.0f;
 	};
 
+	float hoverTime = (float)ImGui::GetTime();
 	for (const auto &entry : entries)
 	{
 		if (entry.tokens.empty()) { continue; }
@@ -297,7 +303,10 @@ void WorldTextSystem::render(gl2d::Renderer2D &renderer, const AssetsManager &as
 			{
 				if (token.texture)
 				{
+					float hover = std::sin(hoverTime * 3.5f) * (PIXEL_SIZE * 1.2f);
 					float iconY = cursorY + lineHeight * 0.5f - iconSize * 0.5f;
+					iconY -= size * 0.25f;
+					iconY += hover;
 					glm::vec4 rect = {cursorX, iconY, iconSize, iconSize};
 					renderer.renderRectangle(rect, *token.texture, {1, 1, 1, entry.color.a});
 				}

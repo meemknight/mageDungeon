@@ -1,4 +1,5 @@
 #include "floorGen.h"
+#include <string>
 
 void FloorGenerator::init()
 {
@@ -25,6 +26,102 @@ void FloorGenerator::init()
 
 void FloorGenerator::generateTutorialFloor(int sizeX, int sizeY, Map &map, FloorInfo &outInfo, DoorHolder &doorHolder)
 {
+	map.create(sizeX, sizeY);
+	outInfo = {};
+	doorHolder.clear();
+
+	for (int y = 0; y < sizeY; y++)
+	{
+		for (int x = 0; x < sizeX; x++)
+		{
+			map.firstLayer.getBlockUnsafe(x, y).type = Blocks::dungeonWall;
+			map.secondLayer.getBlockUnsafe(x, y).type = Blocks::none;
+		}
+	}
+
+	int gap = 4;
+	int roomW = 14;
+	int roomH = 14;
+	int totalW = roomW * 3 + gap * 2;
+	if (totalW > sizeX - 4)
+	{
+		roomW = std::max(6, (sizeX - 4 - gap * 2) / 3);
+		totalW = roomW * 3 + gap * 2;
+	}
+	roomH = std::min(roomH, sizeY - 6);
+	if (roomH < 6) { roomH = std::max(5, sizeY - 4); }
+
+	int startX = std::clamp((sizeX - totalW) / 2, 1, std::max(1, sizeX - totalW - 1));
+	int startY = std::clamp((sizeY - roomH) / 2, 1, std::max(1, sizeY - roomH - 1));
+	int corridorY = std::clamp(startY + roomH / 2 - 1, 1, sizeY - 3);
+
+	outInfo.rooms.clear();
+	outInfo.rooms.reserve(3);
+
+	for (int i = 0; i < 3; i++)
+	{
+		int x0 = startX + i * (roomW + gap);
+		int y0 = startY;
+
+		FloorRoom room = {};
+		room.pos = {x0, y0};
+		room.size = {roomW, roomH};
+		room.isSpawnRoom = (i == 0);
+		room.isExitRoom = (i == 2);
+		room.isTutorialRoom = true;
+		outInfo.rooms.push_back(room);
+
+		for (int y = y0; y < y0 + roomH; y++)
+		{
+			for (int x = x0; x < x0 + roomW; x++)
+			{
+				if (x <= 0 || y <= 0 || x >= sizeX - 1 || y >= sizeY - 1) { continue; }
+				map.firstLayer.getBlockUnsafe(x, y).type = Blocks::floor1;
+			}
+		}
+
+		glm::vec2 annotationPos = {
+			x0 + roomW * 0.5f,
+			y0 + roomH * 0.5f - 3
+		};
+		std::string annotationText = "tutorial_room_" + std::to_string(i + 1);
+		if (i == 0) { annotationText = "Shoot {shoot_button}"; }
+		if (i == 1) { annotationText = "Press {select_spell} than {up_spell}\nto load a better spell"; }
+		if (i == 2) { annotationText = "Good luck!"; }
+		map.textAnnotations[annotationPos] = annotationText;
+	}
+
+	for (int i = 0; i < 2; i++)
+	{
+		const auto &leftRoom = outInfo.rooms[i];
+		const auto &rightRoom = outInfo.rooms[i + 1];
+		int xStart = leftRoom.pos.x + leftRoom.size.x;
+		int xEnd = rightRoom.pos.x;
+		for (int x = xStart; x < xEnd; x++)
+		{
+			for (int dy = 0; dy <= 1; dy++)
+			{
+				int y = corridorY + dy;
+				if (x <= 0 || y <= 0 || x >= sizeX - 1 || y >= sizeY - 1) { continue; }
+				map.firstLayer.getBlockUnsafe(x, y).type = Blocks::floor1;
+			}
+		}
+	}
+
+	outInfo.spawnRoomIndex = 0;
+	if (!outInfo.rooms.empty())
+	{
+		glm::ivec2 startCenter = outInfo.rooms.front().center();
+		outInfo.playerSpawnPos = {startCenter.x + 0.5f, startCenter.y + 0.5f};
+	}
+
+	outInfo.exitRoomIndex = 2;
+	if (outInfo.rooms.size() >= 3)
+	{
+		glm::ivec2 exitCenter = outInfo.rooms.back().center();
+		map.secondLayer.getBlockUnsafe(exitCenter.x, exitCenter.y).type = Blocks::exit;
+		outInfo.exitPos = {exitCenter.x + 0.5f, exitCenter.y + 0.5f};
+	}
 }
 
 void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int seed, const std::vector<FloorConnection> &connections, bool createASpawnRoom, FloorInfo &outInfo, DoorHolder &doorHolder)

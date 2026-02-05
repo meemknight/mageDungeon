@@ -38,6 +38,7 @@ struct FloorRoom
 	bool isBigRoom = false;
 	bool isEmptyRoom = false;
 	bool isExitRoom = false;
+	bool isTutorialRoom = false;
 
 	glm::ivec2 center() const { return {pos.x + size.x / 2, pos.y + size.y / 2}; }
 	int area() const { return size.x * size.y; }

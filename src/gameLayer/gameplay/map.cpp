@@ -3,6 +3,7 @@
 #include <imguiTools.h>
 #include <gameplay/doors.h>
 #include <gameplay/Physics.h>
+#include <gameplay/worldTextSystem.h>
 
 static constexpr float DOOR_VERTICAL_Y_OFFSET = PIXEL_SIZE * -1.0f;
 static constexpr float DOOR_VERTICAL_HEIGHT = 4.0f;
@@ -245,7 +246,7 @@ void Map::renderWallShadows(gl2d::Renderer2D &renderer, AssetsManager &assetMana
 }
 
 void Map::renderMapAfterEntities(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
-	const DoorHolder *doorHolder)
+	const DoorHolder *doorHolder, WorldTextSystem *textSystem, bool usesController)
 {
 
 	firstLayer.renderMapAfterEntities(renderer, assetManager, doorHolder);
@@ -254,8 +255,8 @@ void Map::renderMapAfterEntities(gl2d::Renderer2D &renderer, AssetsManager &asse
 	if (!textAnnotations.empty())
 	{
 		auto viewRect = renderer.getViewRect();
-		float textSize = PIXEL_SIZE * 10.0f;
-		float padding = 1.0f;
+		float textSize = PIXEL_SIZE * 12.0f;
+		float padding = 3.0f;
 		float left = viewRect.x - padding;
 		float right = viewRect.x + viewRect.z + padding;
 		float top = viewRect.y - padding;
@@ -263,15 +264,32 @@ void Map::renderMapAfterEntities(gl2d::Renderer2D &renderer, AssetsManager &asse
 		gl2d::Color4f textColor = {1.0f, 1.0f, 1.0f, 1.0f};
 		gl2d::Color4f shadowColor = {0.1f, 0.1f, 0.1f, 1.0f};
 
-		for (const auto &entry : textAnnotations)
+		if (textSystem)
 		{
-			const glm::vec2 &pos = entry.first;
-			if (pos.x < left || pos.x > right || pos.y < top || pos.y > bottom)
+			textSystem->clear();
+			for (const auto &entry : textAnnotations)
 			{
-				continue;
+				const glm::vec2 &pos = entry.first;
+				if (pos.x < left || pos.x > right || pos.y < top || pos.y > bottom)
+				{
+					continue;
+				}
+				textSystem->addText(entry.second, pos, textColor, textSize, 4, 3, true);
 			}
-			renderer.renderText(pos, entry.second.c_str(), assetManager.font,
-				textColor, textSize, 4, 3, true, shadowColor);
+			textSystem->render(renderer, assetManager, usesController);
+		}
+		else
+		{
+			for (const auto &entry : textAnnotations)
+			{
+				const glm::vec2 &pos = entry.first;
+				if (pos.x < left || pos.x > right || pos.y < top || pos.y > bottom)
+				{
+					continue;
+				}
+				renderer.renderText(pos, entry.second.c_str(), assetManager.font,
+					textColor, textSize, 4, 3, true, shadowColor);
+			}
 		}
 	}
 
@@ -844,9 +862,11 @@ void MapLayer::renderMap(gl2d::Renderer2D &renderer,
 }
 
 void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
-	AssetsManager &assetManager, const DoorHolder *doorHolder)
+	AssetsManager &assetManager, const DoorHolder *doorHolder,
+	WorldTextSystem *textSystem, bool usesController)
 {
-
+	(void)textSystem;
+	(void)usesController;
 
 
 

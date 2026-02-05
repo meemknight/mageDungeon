@@ -360,6 +360,7 @@ void AssetsManager::loadAllAssets()
 			loadButtonTexture(buttonSprites.keyboard, "Q", keyboardDir + "Q_Key_Light.png");
 			loadButtonTexture(buttonSprites.keyboard, "E", keyboardDir + "E_Key_Light.png");
 			loadButtonTexture(buttonSprites.keyboard, "Tab", keyboardDir + "Tab_Key_Light.png");
+			loadButtonTexture(buttonSprites.keyboard, "Arrow_Up", keyboardDir + "Arrow_Up_Key_Light.png");
 
 			loadButtonTexture(buttonSprites.mouse, "Left", keyboardDir + "Mouse_Left_Key_Light.png");
 			loadButtonTexture(buttonSprites.mouse, "Right", keyboardDir + "Mouse_Right_Key_Light.png");
