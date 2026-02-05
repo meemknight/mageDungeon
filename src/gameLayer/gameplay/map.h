@@ -2,8 +2,30 @@
 #include <gameplay/blocks.h>
 #include <vector>
 #include <gameplay/assetsManager.h>
+#include <unordered_map>
+#include <string>
+#include <functional>
 
 struct DoorHolder;
+
+// Hash helper for using glm::vec2 in unordered containers.
+struct Vec2Hash
+{
+	std::size_t operator()(const glm::vec2 &value) const
+	{
+		std::size_t hx = std::hash<float>{}(value.x);
+		std::size_t hy = std::hash<float>{}(value.y);
+		return hx ^ (hy + 0x9e3779b9 + (hx << 6) + (hx >> 2));
+	}
+};
+
+struct Vec2Equal
+{
+	bool operator()(const glm::vec2 &a, const glm::vec2 &b) const
+	{
+		return a.x == b.x && a.y == b.y;
+	}
+};
 
 
 struct MapLayer
@@ -39,6 +61,7 @@ struct Map
 	MapLayer firstLayer;
 	MapLayer secondLayer;
 	glm::ivec2 size = {};
+	std::unordered_map<glm::vec2, std::string, Vec2Hash, Vec2Equal> textAnnotations; // world-space text notes
 
 	
 	bool isCollidableAtPosSafe(int x, int y)

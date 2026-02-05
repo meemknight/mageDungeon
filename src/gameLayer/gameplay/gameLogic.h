@@ -18,6 +18,7 @@
 #include <gameplay/droppedItems.h>
 #include <gameplay/spellbookPage.h>
 #include "spellSelectionInputLogic.h"
+#include <gameplay/trapWaves.h>
 
 //this is an instance of the game.
 //This shouldn't load things like textures, those should be load outside
@@ -32,6 +33,26 @@ struct WandStoneSlot
 {
 	bool hasStone = false;
 	MagicStone stone = {};
+};
+
+struct TrapRoomSpawn
+{
+	TrapWaveSpawn spawn = {};
+	float timer = 0.0f;
+	bool effectStarted = false;
+};
+
+struct TrapRoomState
+{
+	// Trap rooms lock doors until cleared once.
+	bool isTrap = false;
+	bool triggered = false;
+	bool cleared = false;
+	bool rewardGranted = false;
+	std::vector<glm::ivec2> doorAnchors;
+	std::vector<std::vector<TrapWaveSpawn>> wavePlan;
+	int currentWaveIndex = -1;
+	std::vector<TrapRoomSpawn> pendingSpawns;
 };
 
 struct BreakableDecorationSystem
@@ -59,6 +80,8 @@ struct GameLogic
 	DamageViewerSystem damageViewerSystem;
 	FloorInfo floorInfo;
 	DoorHolder doorHolder;
+	std::vector<TrapRoomState> trapRooms;
+	int trapDifficulty = 0;
 	BreakableDecorationSystem breakableDecorations;
 	Wand wands[2];
 	bool hasWand[2] = {};
@@ -96,7 +119,7 @@ struct GameLogic
 
 	float zoom = 100;
 	// World seed used for procedural floor generation.
-	int worldSeed = 1234;
+	int worldSeed = 12345;
 	// Free camera debug mode decouples camera from player.
 	bool freeCameraMode = false;
 	glm::vec2 freeCameraPosition = {};

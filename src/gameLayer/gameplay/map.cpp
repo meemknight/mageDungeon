@@ -25,11 +25,10 @@ static int pickAtlasOffset(unsigned int h, int maxOffset, unsigned int salt)
 
 void Map::create(int sizeX, int sizeY)
 {
-	*this = {};
-
 	firstLayer.create(sizeX, sizeY);
 	secondLayer.create(sizeX, sizeY);
 	size = {sizeX,sizeY};
+	textAnnotations.clear();
 
 	//for (int x = 0; x < size.x; x++)
 	//	for (int y = 0; y < size.y; y++)
@@ -251,6 +250,30 @@ void Map::renderMapAfterEntities(gl2d::Renderer2D &renderer, AssetsManager &asse
 
 	firstLayer.renderMapAfterEntities(renderer, assetManager, doorHolder);
 	secondLayer.renderMapAfterEntities(renderer, assetManager, nullptr);
+
+	if (!textAnnotations.empty())
+	{
+		auto viewRect = renderer.getViewRect();
+		float textSize = PIXEL_SIZE * 10.0f;
+		float padding = 1.0f;
+		float left = viewRect.x - padding;
+		float right = viewRect.x + viewRect.z + padding;
+		float top = viewRect.y - padding;
+		float bottom = viewRect.y + viewRect.w + padding;
+		gl2d::Color4f textColor = {1.0f, 1.0f, 1.0f, 1.0f};
+		gl2d::Color4f shadowColor = {0.1f, 0.1f, 0.1f, 1.0f};
+
+		for (const auto &entry : textAnnotations)
+		{
+			const glm::vec2 &pos = entry.first;
+			if (pos.x < left || pos.x > right || pos.y < top || pos.y > bottom)
+			{
+				continue;
+			}
+			renderer.renderText(pos, entry.second.c_str(), assetManager.font,
+				textColor, textSize, 4, 3, true, shadowColor);
+		}
+	}
 
 }
 

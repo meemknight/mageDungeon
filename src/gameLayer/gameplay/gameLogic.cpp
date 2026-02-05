@@ -23,6 +23,13 @@
 
 #include <worldGen/floorGen.h>
 
+// Temporary: disable legacy random enemy spawning system.
+static const bool disableRandomEnemySpawns = true;
+static const float trapRoomChance = 0.80f;
+static const float trapRoomTriggerMargin = 1.5f;
+static const float trapRoomSpawnDelaySeconds = 1.3f;
+static const float trapRoomSpawnStaggerSeconds = 0.3f;
+
 namespace
 {
 	// Spawns a random enemy from the basic roster.
@@ -61,6 +68,8 @@ bool GameLogic::init()
 	}
 
 	floorGenerator.generateDungeonFloor(140, 140, map, worldSeed, connections, true, floorInfo, doorHolder);
+	//floorGenerator.generateTutorialFloor(140, 140, map, floorInfo, doorHolder);
+
 
 	floorGenerator.clear();
 
@@ -131,6 +140,114 @@ bool GameLogic::init()
 	extractBreakableDecorations(map.secondLayer);
 
 	placeDoorCollisionBlocks();
+
+	// Pick trap rooms (spawn/exit rooms are excluded).
+	trapRooms.clear();
+	trapRooms.resize(floorInfo.rooms.size());
+	std::vector<int> eligibleTrapRooms;
+	int spawnRoomIndex = floorInfo.spawnRoomIndex.value_or(-1);
+	int exitRoomIndex = floorInfo.exitRoomIndex.value_or(-1);
+	int trapCount = 0;
+	for (size_t i = 0; i < floorInfo.rooms.size(); i++)
+	{
+		const auto &room = floorInfo.rooms[i];
+		if (room.isSpawnRoom || room.isExitRoom || room.isEmptyRoom)
+		{
+			continue;
+		}
+		if ((int)i == spawnRoomIndex || (int)i == exitRoomIndex)
+		{
+			continue;
+		}
+		if (room.enemySpawnPositions.empty() || room.doorPositions.empty())
+		{
+			continue;
+		}
+		eligibleTrapRooms.push_back((int)i);
+		float roll = getRandomFloat(rng, 0.0f, 1.0f);
+		if (roll < trapRoomChance)
+		{
+			trapRooms[i].isTrap = true;
+			trapCount++;
+		}
+	}
+	if (trapCount == 0 && !eligibleTrapRooms.empty())
+	{
+		int pick = getRandomInt(rng, 0, (int)eligibleTrapRooms.size() - 1);
+		trapRooms[eligibleTrapRooms[pick]].isTrap = true;
+	}
+
+	auto addTrapDoorAnchor = [&](TrapRoomState &state, glm::ivec2 anchor)
+	{
+		for (const auto &existing : state.doorAnchors)
+		{
+			if (existing.x == anchor.x && existing.y == anchor.y)
+			{
+				return;
+			}
+		}
+		state.doorAnchors.push_back(anchor);
+	};
+
+	for (size_t i = 0; i < floorInfo.rooms.size(); i++)
+	{
+		auto &state = trapRooms[i];
+		state.doorAnchors.clear();
+		const auto &room = floorInfo.rooms[i];
+		int left = room.pos.x;
+		int top = room.pos.y;
+		int right = room.pos.x + room.size.x - 1;
+		int bottom = room.pos.y + room.size.y - 1;
+		for (const auto &doorPair : doorHolder.doors)
+		{
+			glm::ivec2 anchor = doorPair.first;
+			const auto &door = doorPair.second;
+			if (door.orientation == Door::Orientation::Horizontal)
+			{
+				if (anchor.y != top && anchor.y != bottom) { continue; }
+				if (anchor.x < left || anchor.x > right - 1) { continue; }
+				addTrapDoorAnchor(state, anchor);
+			}
+			else
+			{
+				if (anchor.x != left && anchor.x != right) { continue; }
+				if (anchor.y < top + 1 || anchor.y > bottom) { continue; }
+				addTrapDoorAnchor(state, anchor);
+			}
+		}
+	}
+
+	int validTrapCount = 0;
+	for (size_t i = 0; i < trapRooms.size(); i++)
+	{
+		auto &state = trapRooms[i];
+		if (state.isTrap && state.doorAnchors.empty())
+		{
+			state.isTrap = false;
+			continue;
+		}
+		if (state.isTrap)
+		{
+			validTrapCount++;
+		}
+	}
+	if (validTrapCount == 0 && !eligibleTrapRooms.empty())
+	{
+		std::vector<int> anchoredRooms;
+		anchoredRooms.reserve(eligibleTrapRooms.size());
+		for (int index : eligibleTrapRooms)
+		{
+			if (!trapRooms[index].doorAnchors.empty())
+			{
+				anchoredRooms.push_back(index);
+			}
+		}
+		if (!anchoredRooms.empty())
+		{
+			int pick = getRandomInt(rng, 0, (int)anchoredRooms.size() - 1);
+			trapRooms[anchoredRooms[pick]].isTrap = true;
+		}
+	}
 
 	wands[0] = getRandomWand(0, rng);
 	hasWand[0] = true;
@@ -216,8 +333,8 @@ bool GameLogic::init()
 			droppedItems.spawnWand(pos, getRandomWand(tier, rng), rng);
 		}
 
-		int maxChestSpawns = std::min(40, (int)spawnPositions.size());
-		int minChestSpawns = std::min(16, maxChestSpawns);
+		int maxChestSpawns = std::min(20, (int)spawnPositions.size());
+		int minChestSpawns = std::min(8, maxChestSpawns);
 		int chestSpawnCount = maxChestSpawns > 0 ? getRandomInt(rng, minChestSpawns, maxChestSpawns) : 0;
 		for (int i = 0; i < chestSpawnCount; i++)
 		{
@@ -227,6 +344,7 @@ bool GameLogic::init()
 	}
 
 	// spawn enemies, avoid wand/chest pickup spots
+	if (!disableRandomEnemySpawns)
 	{
 		const float itemBlockRadius = PIXEL_SIZE * 8.0f;
 		const float itemBlockDist2 = itemBlockRadius * itemBlockRadius;
@@ -562,6 +680,7 @@ bool GameLogic::update(float deltaTime,
 	if (ImGui::CollapsingHeader("World", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		ImGui::Text("World Seed: %d", worldSeed);
+		ImGui::SliderInt("Trap Difficulty", &trapDifficulty, 0, 3);
 		if (ImGui::Button("Reset World (New Seed)"))
 		{
 			resetWorldSeed = getRandomInt(rng, 1, 2000000000);
@@ -1197,6 +1316,7 @@ bool GameLogic::update(float deltaTime,
 
 	#pragma region temp enemy spawner
 	// temporary: spawn enemies for testing
+	if (!disableRandomEnemySpawns)
 	{
 		static float spawnTimer = 0.0f;
 		spawnTimer -= simDelta;
@@ -1270,8 +1390,337 @@ bool GameLogic::update(float deltaTime,
 	//renderer.renderRectangle(player.physical.getAABB(), Colors_Red);
 	player.update(simDelta);
 
+	// Trap rooms lock doors until their enemies are cleared.
+	auto isInsideRoom = [&](const FloorRoom &room, glm::vec2 pos, float margin)
+	{
+		float minX = room.pos.x + margin;
+		float minY = room.pos.y + margin;
+		float maxX = room.pos.x + room.size.x - margin;
+		float maxY = room.pos.y + room.size.y - margin;
+		if (maxX <= minX || maxY <= minY) { return false; }
+		return pos.x >= minX && pos.x <= maxX &&
+			pos.y >= minY && pos.y <= maxY;
+	};
+
+	auto isPlayerClearlyInsideRoom = [&](const FloorRoom &room)
+	{
+		glm::vec4 aabb = player.physics.getAABB();
+		float inset = trapRoomTriggerMargin;
+		float minX = room.pos.x + inset;
+		float minY = room.pos.y + inset;
+		float maxX = room.pos.x + room.size.x - inset;
+		float maxY = room.pos.y + room.size.y - inset;
+		if (maxX <= minX || maxY <= minY) { return false; }
+		return aabb.x >= minX && aabb.y >= minY &&
+			(aabb.x + aabb.z) <= maxX && (aabb.y + aabb.w) <= maxY;
+	};
+
+	auto roomHasLivingEnemies = [&](const FloorRoom &room)
+	{
+		for (auto &entity : entityHolder.entities)
+		{
+			if (entity->dying) { continue; }
+			if (isInsideRoom(room, entity->physics.getPos(), 0.0f))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
+	auto emitTrapSpawnParticles = [&](glm::vec2 pos, float duration)
+	{
+		glm::vec4 startColor = {1.0f, 0.7f, 0.25f, 0.9f};
+		glm::vec4 endColor = {0.95f, 0.35f, 0.1f, 0.65f};
+		ParticleSettings ring = getSmallSquareParticle(startColor, endColor);
+		ring.onCreateCount = 12;
+		ring.particleLifeTime = {duration * 0.85f, duration * 1.05f};
+		ring.velocityX = {0.0f, 0.0f};
+		ring.velocityY = {0.0f, 0.0f};
+		ring.dragX = {0.0f, 0.0f};
+		ring.dragY = {0.0f, 0.0f};
+		ring.positionX = {0.0f, 0.0f};
+		ring.positionY = {0.0f, 0.0f};
+		ring.rotationSpeed = {0.0f, 0.0f};
+		ring.animationType = ParticleSettings::ANIMATION_TYPES::animationCircle;
+		ring.animationSpeed = {-7.5f, 7.5f};
+		ring.animationAcceleration = {-2.5f, 2.5f};
+		ring.animationScaleX = {PIXEL_SIZE * 4.5f, PIXEL_SIZE * 8.0f};
+		ring.animationScaleY = {PIXEL_SIZE * 4.5f, PIXEL_SIZE * 8.0f};
+		particleSystem.emitParticles(ring, pos, rng, pos);
+
+		ParticleSettings flash = getSparkBurstParticle(startColor, endColor);
+		flash.onCreateCount = 10;
+		flash.particleLifeTime = {0.25f, 0.4f};
+		flash.velocityX = glm::vec2{-30.0f, 30.0f} * PIXEL_SIZE;
+		flash.velocityY = glm::vec2{-30.0f, 30.0f} * PIXEL_SIZE;
+		flash.dragX = glm::vec2{-140.0f, -220.0f} * PIXEL_SIZE;
+		flash.dragY = glm::vec2{-140.0f, -220.0f} * PIXEL_SIZE;
+		flash.positionX = glm::vec2{-2.5f, 2.5f} * PIXEL_SIZE;
+		flash.positionY = glm::vec2{-2.5f, 2.5f} * PIXEL_SIZE;
+		particleSystem.emitParticles(flash, pos, rng, pos);
+	};
+
+	auto emitTrapRewardParticles = [&](glm::vec2 pos)
+	{
+		glm::vec4 startColor = {1.0f, 0.85f, 0.25f, 0.9f};
+		glm::vec4 endColor = {0.85f, 0.55f, 0.15f, 0.65f};
+		ParticleSettings burst = getSparkBurstParticle(startColor, endColor);
+		burst.onCreateCount = 14;
+		burst.particleLifeTime = {0.25f, 0.45f};
+		burst.velocityX = glm::vec2{-32.0f, 32.0f} * PIXEL_SIZE;
+		burst.velocityY = glm::vec2{-32.0f, 32.0f} * PIXEL_SIZE;
+		burst.dragX = glm::vec2{-140.0f, -220.0f} * PIXEL_SIZE;
+		burst.dragY = glm::vec2{-140.0f, -220.0f} * PIXEL_SIZE;
+		particleSystem.emitParticles(burst, pos, rng, pos);
+	};
+
+	auto isChestBlocking = [&](glm::vec2 pos, float radius)
+	{
+		float radius2 = radius * radius;
+		for (const auto &item : droppedItems.items)
+		{
+			if (item.type != DroppedItemType::Chest) { continue; }
+			glm::vec2 diff = item.pos - pos;
+			if (glm::dot(diff, diff) <= radius2)
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
+	auto buildTrapSpawnPositions = [&](const FloorRoom &room)
+	{
+		std::vector<glm::vec2> positions;
+		positions.reserve(room.enemySpawnPositions.size());
+		for (const auto &pos : room.enemySpawnPositions)
+		{
+			if (!isChestBlocking(pos, 0.5f))
+			{
+				positions.push_back(pos);
+			}
+		}
+		return positions;
+	};
+
+	auto startTrapWave = [&](TrapRoomState &state)
+	{
+		state.pendingSpawns.clear();
+		if (state.currentWaveIndex < 0
+			|| state.currentWaveIndex >= (int)state.wavePlan.size())
+		{
+			return;
+		}
+		const auto &wave = state.wavePlan[state.currentWaveIndex];
+		state.pendingSpawns.reserve(wave.size());
+		int spawnIndex = 0;
+		for (const auto &spawn : wave)
+		{
+			float delay = trapRoomSpawnDelaySeconds + spawnIndex * trapRoomSpawnStaggerSeconds;
+			TrapRoomSpawn pending = {};
+			pending.spawn = spawn;
+			pending.timer = delay;
+			state.pendingSpawns.push_back(pending);
+			spawnIndex++;
+		}
+	};
+
+	auto queueTrapWaves = [&](TrapRoomState &state, const FloorRoom &room)
+	{
+		auto spawnPositions = buildTrapSpawnPositions(room);
+		TrapWavePlan plan = buildTrapRoomWavePlan(room, trapDifficulty, rng, &spawnPositions);
+		state.wavePlan = plan.waves;
+		state.currentWaveIndex = state.wavePlan.empty() ? -1 : 0;
+		startTrapWave(state);
+	};
+
+	auto isTrapSpawnOccupied = [&](glm::vec2 spawnPos)
+	{
+		if (isChestBlocking(spawnPos, 0.5f))
+		{
+			return true;
+		}
+		if (glm::distance(player.physics.getPos(), spawnPos) < 0.5f)
+		{
+			return true;
+		}
+		for (auto &summon : summons.summons)
+		{
+			if (summon->isDying()) { continue; }
+			if (glm::distance(summon->physics.getPos(), spawnPos) < 0.4f)
+			{
+				return true;
+			}
+		}
+		for (auto &entity : entityHolder.entities)
+		{
+			if (entity->dying) { continue; }
+			if (glm::distance(entity->physics.getPos(), spawnPos) < 0.4f)
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
+	auto pickTrapRewardSpot = [&](const FloorRoom &room, glm::vec2 &outPos)
+	{
+		std::vector<glm::vec2> positions = buildTrapSpawnPositions(room);
+		for (int attempt = 0; attempt < 6 && !positions.empty(); attempt++)
+		{
+			int index = getRandomInt(rng, 0, (int)positions.size() - 1);
+			glm::vec2 pos = positions[index];
+			positions[index] = positions.back();
+			positions.pop_back();
+			bool blocked = false;
+			for (const auto &item : droppedItems.items)
+			{
+				if (glm::distance(item.pos, pos) < 0.5f)
+				{
+					blocked = true;
+					break;
+				}
+			}
+			if (!blocked)
+			{
+				outPos = pos;
+				return true;
+			}
+		}
+
+		glm::vec2 centerPos = glm::vec2(room.center());
+		for (const auto &item : droppedItems.items)
+		{
+			if (glm::distance(item.pos, centerPos) < 0.5f)
+			{
+				return false;
+			}
+		}
+		outPos = centerPos;
+		return true;
+	};
+
+	auto updateTrapSpawns = [&](TrapRoomState &state)
+	{
+		for (size_t spawnIndex = 0; spawnIndex < state.pendingSpawns.size(); )
+		{
+			auto &pending = state.pendingSpawns[spawnIndex];
+			pending.timer -= simDelta;
+			if (!pending.effectStarted && pending.timer <= trapRoomSpawnDelaySeconds)
+			{
+				pending.effectStarted = true;
+				emitTrapSpawnParticles(pending.spawn.pos, trapRoomSpawnDelaySeconds);
+			}
+			if (pending.timer > 0.0f)
+			{
+				spawnIndex++;
+				continue;
+			}
+			if (!isTrapSpawnOccupied(pending.spawn.pos))
+			{
+				spawnTrapWaveEnemy(entityHolder, pending.spawn.type,
+					pending.spawn.pos, rng);
+			}
+			state.pendingSpawns[spawnIndex] = state.pendingSpawns.back();
+			state.pendingSpawns.pop_back();
+		}
+	};
+
+	auto closeTrapDoors = [&](TrapRoomState &state)
+	{
+		for (const auto &anchor : state.doorAnchors)
+		{
+			auto it = doorHolder.doors.find(anchor);
+			if (it != doorHolder.doors.end())
+			{
+				it->second.open = false;
+			}
+		}
+	};
+
+	if (!trapRooms.empty() && trapRooms.size() == floorInfo.rooms.size())
+	{
+		for (size_t i = 0; i < trapRooms.size(); i++)
+		{
+			auto &state = trapRooms[i];
+			if (!state.isTrap || state.cleared) { continue; }
+			const auto &room = floorInfo.rooms[i];
+			bool playerInside = isPlayerClearlyInsideRoom(room);
+			if (!state.triggered && playerInside)
+			{
+				state.triggered = true;
+				if (state.currentWaveIndex < 0)
+				{
+					queueTrapWaves(state, room);
+				}
+				for (auto &summon : summons.summons)
+				{
+					if (summon->isDying()) { continue; }
+					if (!isInsideRoom(room, summon->physics.getPos(), 0.0f))
+					{
+						summon->physics.teleport(player.physics.getPos());
+						summon->physics.velocity = {};
+						summon->physics.acceleration = {};
+					}
+				}
+				closeTrapDoors(state);
+			}
+			if (state.triggered && !state.pendingSpawns.empty())
+			{
+				updateTrapSpawns(state);
+			}
+			if (state.triggered && !state.cleared)
+			{
+				if (state.pendingSpawns.empty() && !roomHasLivingEnemies(room))
+				{
+					if (state.currentWaveIndex + 1 < (int)state.wavePlan.size())
+					{
+						state.currentWaveIndex++;
+						startTrapWave(state);
+					}
+					else
+					{
+						state.cleared = true;
+						if (!state.rewardGranted)
+						{
+							state.rewardGranted = true;
+							if (getRandomChance(rng, 0.3f))
+							{
+								glm::vec2 rewardPos = {};
+								if (pickTrapRewardSpot(room, rewardPos))
+								{
+									droppedItems.spawnChest(rewardPos, rng);
+									emitTrapRewardParticles(rewardPos);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	std::vector<glm::vec4> doorTriggerRects;
 	doorTriggerRects.reserve(doorHolder.doors.size());
+
+	auto isDoorLockedByTrap = [&](glm::ivec2 pos)
+	{
+		if (trapRooms.empty() || trapRooms.size() != floorInfo.rooms.size()) { return false; }
+		for (size_t i = 0; i < trapRooms.size(); i++)
+		{
+			const auto &state = trapRooms[i];
+			if (!state.isTrap || !state.triggered || state.cleared) { continue; }
+			for (const auto &anchor : state.doorAnchors)
+			{
+				if (anchor.x == pos.x && anchor.y == pos.y)
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	};
 
 	// Door collisions and opening logic (horizontal doors only).
 	auto updateDoors = [&]()
@@ -1296,6 +1745,11 @@ bool GameLogic::update(float deltaTime,
 		{
 			auto &door = doorPair.second;
 			glm::ivec2 pos = doorPair.first;
+			bool lockedByTrap = isDoorLockedByTrap(pos);
+			if (lockedByTrap)
+			{
+				door.open = false;
+			}
 			if (door.orientation == Door::Orientation::Horizontal)
 			{
 				glm::vec4 triggerRect = {
@@ -1318,7 +1772,7 @@ bool GameLogic::update(float deltaTime,
 					movingToward = moveIntent.y > moveThreshold;
 				}
 
-				if (!door.open && movingToward && checkCollisionRecs(playerRect, triggerRect))
+				if (!lockedByTrap && !door.open && movingToward && checkCollisionRecs(playerRect, triggerRect))
 				{
 					door.open = true;
 				}
@@ -1368,7 +1822,7 @@ bool GameLogic::update(float deltaTime,
 					movingToward = moveIntent.x > moveThreshold;
 				}
 
-				if (!door.open && movingToward && checkCollisionRecs(playerRect, triggerRect))
+				if (!lockedByTrap && !door.open && movingToward && checkCollisionRecs(playerRect, triggerRect))
 				{
 					door.open = true;
 				}

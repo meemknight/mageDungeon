@@ -11,6 +11,12 @@
 // Holds a miniature simulation for spell previews.
 struct SpellPreviewContext
 {
+	SpellPreviewContext() = default;
+	SpellPreviewContext(const SpellPreviewContext &) = delete;
+	SpellPreviewContext &operator=(const SpellPreviewContext &) = delete;
+	SpellPreviewContext(SpellPreviewContext &&) noexcept = default;
+	SpellPreviewContext &operator=(SpellPreviewContext &&) noexcept = default;
+
 	Map map;
 	Player player;
 	EntityHolder entities;

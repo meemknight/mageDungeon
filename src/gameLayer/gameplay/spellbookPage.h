@@ -17,6 +17,12 @@ namespace gl2d
 // Book page for browsing spell previews and recipes.
 struct SpellbookEntry
 {
+	SpellbookEntry() = default;
+	SpellbookEntry(const SpellbookEntry &) = delete;
+	SpellbookEntry &operator=(const SpellbookEntry &) = delete;
+	SpellbookEntry(SpellbookEntry &&) noexcept = default;
+	SpellbookEntry &operator=(SpellbookEntry &&) noexcept = default;
+
 	int spellType = -1;
 	SpellRecepie recipe = {};
 	const char *name = "";
