@@ -336,12 +336,13 @@ struct BasicMeleEnemy : public Entity
 	// Movement/AI behavior - handles chasing, pathfinding, wandering
 	EnemyBehavior behavior;
 
-	// Hit animation state - triggers when enemy touches player
+	// Attack animation state - triggers on melee contact or ranged shots
 	bool playingHitAnimation = false;
 	float hitAnimationTimer = 0.0f;
-	float hitAnimationDuration = 0.36f; // 6 frames * 0.06s per frame
+	float hitAnimationDuration = 0.36f; // melee attack hold time
 	int hitAnimationBaseY = 0; // base Y for current hit animation direction
 	int lastAnimationFrame = 0; // track previous frame to detect animation wrap
+	bool rangedAttackAnimation = false; // ranged attacks play a single cycle
 
 	// Sprite render offset so taller sprites sit lower on the collider.
 	float renderOffsetY = PIXEL_SIZE * 10.0f;

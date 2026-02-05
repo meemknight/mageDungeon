@@ -35,6 +35,9 @@ struct DroppedItem
 	float particleTimer = 0.0f; // idle particle pacing
 	float chestOpenTimer = 0.0f; // chest open animation + fade timer
 	bool chestOpening = false;
+	bool chestHasWand = false;
+	Wand chestWand = {};
+	bool chestHasHearth = false;
 };
 
 // Handles dropped items in the world (spawn, hover, render, pickup).
@@ -49,7 +52,7 @@ struct DroppedItemSystem
 		glm::vec2 playerPos, bool usesController);
 
 	void spawnWand(glm::vec2 pos, const Wand &wand, std::ranlux24_base &rng);
-	void spawnChest(glm::vec2 pos, std::ranlux24_base &rng);
+	void spawnChest(glm::vec2 pos, std::ranlux24_base &rng, const Wand *wand = nullptr, bool forceHearth = false);
 	void spawnHearth(glm::vec2 pos, std::ranlux24_base &rng);
 	void spawnCoin(glm::vec2 pos, std::ranlux24_base &rng);
 	void spawnMagicStone(glm::vec2 pos, int element, int uses, std::ranlux24_base &rng);

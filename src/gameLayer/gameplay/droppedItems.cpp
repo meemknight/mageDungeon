@@ -144,7 +144,7 @@ void DroppedItemSystem::spawnWand(glm::vec2 pos, const Wand &wand, std::ranlux24
 	items.push_back(item);
 }
 
-void DroppedItemSystem::spawnChest(glm::vec2 pos, std::ranlux24_base &rng)
+void DroppedItemSystem::spawnChest(glm::vec2 pos, std::ranlux24_base &rng, const Wand *wand, bool forceHearth)
 {
 	DroppedItem item;
 	item.type = DroppedItemType::Chest;
@@ -153,6 +153,12 @@ void DroppedItemSystem::spawnChest(glm::vec2 pos, std::ranlux24_base &rng)
 	item.particleTimer = getRandomFloat(rng, 0.0f, itemParticleInterval);
 	item.chestOpenTimer = 0.0f;
 	item.chestOpening = false;
+	item.chestHasWand = wand != nullptr;
+	item.chestHasHearth = forceHearth && !item.chestHasWand;
+	if (wand)
+	{
+		item.chestWand = *wand;
+	}
 	items.push_back(item);
 }
 
@@ -466,6 +472,20 @@ bool DroppedItemSystem::openChest(int itemIndex, std::ranlux24_base &rng, Partic
 
 	emitDropParticles(particleSystem, rng, item.pos,
 		chestStart, chestEnd, 18, 1.1f, 1.3f, 0.8f);
+
+	if (item.chestHasWand)
+	{
+		spawnWand(item.pos, item.chestWand, rng);
+		emitWandPickupParticles(item.pos, particleSystem, rng);
+		return true;
+	}
+	if (item.chestHasHearth)
+	{
+		spawnHearth(item.pos, rng);
+		emitDropParticles(particleSystem, rng, item.pos,
+			hearthStart, hearthEnd, 10, 1.05f, 1.2f, 0.85f);
+		return true;
+	}
 
 	bool dropStone = getRandomInt(rng, 0, magicStoneDropOdds - 1) == 0;
 	if (dropStone)

@@ -46,6 +46,8 @@ struct WorldTextSystem
 	float defaultTextSize = 0.0f;
 	float iconScale = 1.0f;
 	float tokenPaddingScale = 0.25f;
+	float iconYOffsetScale = 1.3f; // pushes button icons up relative to text size
+	float lineGapScale = 0.35f; // extra line spacing as a size fraction
 
 	WorldTextSystem();
 

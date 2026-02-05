@@ -82,6 +82,7 @@ struct GameLogic
 	DoorHolder doorHolder;
 	std::vector<TrapRoomState> trapRooms;
 	int trapDifficulty = 0;
+	bool forceTrapDifficulty = false;
 	BreakableDecorationSystem breakableDecorations;
 	Wand wands[2];
 	bool hasWand[2] = {};
@@ -120,6 +121,8 @@ struct GameLogic
 	float zoom = 100;
 	// World seed used for procedural floor generation.
 	int worldSeed = 12345;
+	int currentFloorIndex = 0;
+	bool keepFloorOnClose = false;
 	// Free camera debug mode decouples camera from player.
 	bool freeCameraMode = false;
 	glm::vec2 freeCameraPosition = {};

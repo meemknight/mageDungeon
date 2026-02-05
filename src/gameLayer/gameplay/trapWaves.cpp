@@ -60,6 +60,19 @@ namespace
 		return waves;
 	}
 
+	int getMinimumWaveCount(int difficulty, int roomTier)
+	{
+		int minCount = 2;
+		if (difficulty == 1) { minCount = 3; }
+		else if (difficulty == 2) { minCount = 5; }
+		else if (difficulty >= 3) { minCount = 6; }
+		if (roomTier == 0)
+		{
+			minCount = std::max(2, minCount - 1);
+		}
+		return minCount;
+	}
+
 	TrapEnemyType pickWeighted(std::ranlux24_base &rng,
 		const std::vector<WeightedEnemy> &pool)
 	{
@@ -85,14 +98,21 @@ namespace
 		std::vector<glm::vec2> positions = spawnPositions;
 		std::vector<glm::vec2> result;
 		if (positions.empty() || count <= 0) { return result; }
-		count = std::min(count, (int)positions.size());
+		int uniqueCount = std::min(count, (int)positions.size());
 		result.reserve(count);
-		for (int i = 0; i < count; i++)
+		for (int i = 0; i < uniqueCount; i++)
 		{
 			int index = getRandomInt(rng, 0, (int)positions.size() - 1);
 			result.push_back(positions[index]);
 			positions[index] = positions.back();
 			positions.pop_back();
+		}
+		while ((int)result.size() < count)
+		{
+			glm::vec2 base = spawnPositions[getRandomInt(rng, 0, (int)spawnPositions.size() - 1)];
+			float offsetX = getRandomFloat(rng, -0.18f, 0.18f);
+			float offsetY = getRandomFloat(rng, -0.18f, 0.18f);
+			result.push_back(base + glm::vec2{offsetX, offsetY});
 		}
 		return result;
 	}
@@ -102,26 +122,26 @@ namespace
 		switch (clampDifficulty(difficulty))
 		{
 		case 0:
-			return {
-				{
-					{TrapEnemyType::GoblinArcher, 2},
-					{TrapEnemyType::GoblinSpearman, 3},
-					{TrapEnemyType::GoblinThief, 6}
-				},
+				return {
+					{
+						{TrapEnemyType::GoblinArcher, 2},
+						{TrapEnemyType::GoblinSpearman, 3},
+						{TrapEnemyType::GoblinThief, 6}
+					},
 				{
 					{TrapEnemyType::GoblinHeavy, 1}
 				},
-				0.12f,
-				0.2f,
-				0.3f
+				0.08f,
+				0.16f,
+				0.26f
 			};
 			case 1:
 				return {
 					{
-						{TrapEnemyType::GoblinArcher, 3},
+						{TrapEnemyType::GoblinArcher, 2},
 						{TrapEnemyType::GoblinSpearman, 3},
 						{TrapEnemyType::GoblinThief, 2},
-						{TrapEnemyType::OrcArcher, 2}
+						{TrapEnemyType::OrcArcher, 6}
 					},
 					{
 						{TrapEnemyType::GoblinHeavy, 2},
@@ -176,7 +196,12 @@ TrapWavePlan buildTrapRoomWavePlan(const FloorRoom &room, int difficulty,
 	int roomTier = pickRoomSizeTier(room);
 	int baseCount = pickBaseCount(roomTier, rng);
 	baseCount += clampDifficulty(difficulty);
-	baseCount = std::max(1, std::min(baseCount, (int)roomSpawns.size()));
+	if (difficulty <= 0)
+	{
+		baseCount = std::max(1, baseCount - 1);
+	}
+	baseCount = std::max(baseCount, getMinimumWaveCount(difficulty, roomTier));
+	baseCount = std::max(1, baseCount);
 
 	int waveCount = pickWaveCount(roomTier, rng);
 	DifficultyPools pools = getDifficultyPools(difficulty);
@@ -189,7 +214,7 @@ TrapWavePlan buildTrapRoomWavePlan(const FloorRoom &room, int difficulty,
 		{
 			waveCountLocal = std::max(2, baseCount - 1);
 		}
-		waveCountLocal = std::min(waveCountLocal, (int)roomSpawns.size());
+		waveCountLocal = std::max(1, waveCountLocal);
 
 		float eliteChance = pools.eliteChanceSmall;
 		if (roomTier == 1) { eliteChance = pools.eliteChanceMedium; }

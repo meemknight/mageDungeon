@@ -27,6 +27,12 @@ namespace
 			return texture && texture->isValid();
 		};
 
+		auto resolveMouseKey = [](const std::string &key)
+		{
+			if (key == "Mouse") { return std::string("Simple"); }
+			return key;
+		};
+
 		if (usesController)
 		{
 			if (!prompt.controller.empty())
@@ -38,7 +44,8 @@ namespace
 			}
 			if (!prompt.mouse.empty())
 			{
-				if (auto *texture = assetsManager.buttonSprites.getMouse(prompt.mouse))
+				std::string mouseKey = resolveMouseKey(prompt.mouse);
+				if (auto *texture = assetsManager.buttonSprites.getMouse(mouseKey))
 				{
 					if (isValid(texture)) { return texture; }
 				}
@@ -55,7 +62,8 @@ namespace
 		{
 			if (!prompt.mouse.empty())
 			{
-				if (auto *texture = assetsManager.buttonSprites.getMouse(prompt.mouse))
+				std::string mouseKey = resolveMouseKey(prompt.mouse);
+				if (auto *texture = assetsManager.buttonSprites.getMouse(mouseKey))
 				{
 					if (isValid(texture)) { return texture; }
 				}
@@ -208,6 +216,7 @@ void WorldTextSystem::render(gl2d::Renderer2D &renderer, const AssetsManager &as
 		{
 			lineAdvance = lineHeight;
 		}
+		lineAdvance += size * lineGapScale;
 
 		std::vector<ResolvedToken> resolved;
 		resolved.reserve(entry.tokens.size());
@@ -305,7 +314,7 @@ void WorldTextSystem::render(gl2d::Renderer2D &renderer, const AssetsManager &as
 				{
 					float hover = std::sin(hoverTime * 3.5f) * (PIXEL_SIZE * 1.2f);
 					float iconY = cursorY + lineHeight * 0.5f - iconSize * 0.5f;
-					iconY -= size * 0.25f;
+					iconY -= size * iconYOffsetScale;
 					iconY += hover;
 					glm::vec4 rect = {cursorX, iconY, iconSize, iconSize};
 					renderer.renderRectangle(rect, *token.texture, {1, 1, 1, entry.color.a});

@@ -4,6 +4,8 @@
 #include "gameplay/projectiles/projectiles.h"
 #include <cmath>
 
+static const float enemyMoveSpeedMultiplier = 0.9f;
+
 // Start death animation - called when life <= 0
 bool BasicMeleEnemy::startDying()
 {
@@ -36,12 +38,15 @@ bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParti
 	ProjectileHolder &projectiles)
 {
 	// Handle hit animation timer
+	bool attackAnimationEnded = false;
 	if (playingHitAnimation)
 	{
 		hitAnimationTimer -= deltaTime;
 		if (hitAnimationTimer <= 0.0f)
 		{
 			playingHitAnimation = false;
+			rangedAttackAnimation = false;
+			attackAnimationEnded = true;
 		}
 	}
 
@@ -51,16 +56,20 @@ bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParti
 		hoverTimer += deltaTime;
 	}
 
-	animator.update(deltaTime, 0.12, 6);
+	constexpr float animationFrameDuration = 0.12f;
+	constexpr int animationFrameCount = 6;
+	animator.update(deltaTime, animationFrameDuration, animationFrameCount);
 
 	// Update movement behavior and get move direction
 	glm::vec2 moveDir = behavior.update(deltaTime, map, rng,
 		physics.getPos(), player.physics.getPos(), summons);
 
 	// Shoot if behavior wants to shoot
+	bool firedRangedShot = false;
 	if (behavior.wantsToShoot)
 	{
 		behavior.shoot(physics.getPos(), projectiles, player, summons, rng);
+		firedRangedShot = true;
 	}
 
 	// Apply movement
@@ -75,7 +84,8 @@ bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParti
 		{
 			speedMultiplier = behavior.hoverMeleeSpeedMultiplier;
 		}
-		float finalSpeed = behavior.speed * speedMultiplier * statusSpeedMultiplier;
+		float finalSpeed = behavior.speed * speedMultiplier * statusSpeedMultiplier
+			* enemyMoveSpeedMultiplier;
 		physics.getPos() += moveDir * finalSpeed * deltaTime;
 	}
 
@@ -129,29 +139,60 @@ bool BasicMeleEnemy::update(float deltaTime, Map &map, ParticleSystem &mainParti
 	bool animationWrapped = (lastAnimationFrame > 0 && animator.positionX == 0);
 	lastAnimationFrame = animator.positionX;
 
+	// If playing hit animation and animation just wrapped, allow direction change or end ranged shot
+	if (playingHitAnimation && animationWrapped)
+	{
+		if (rangedAttackAnimation)
+		{
+			playingHitAnimation = false;
+			rangedAttackAnimation = false;
+			attackAnimationEnded = true;
+		}
+		else
+		{
+			int newHitY = 6 + facingDirection;
+			hitAnimationBaseY = newHitY;
+			animator.positionY = hitAnimationBaseY;
+			animator.flipX = facingFlipX;
+		}
+	}
+
+	// Trigger attack animation on ranged shots
+	if (!playingHitAnimation && firedRangedShot)
+	{
+		playingHitAnimation = true;
+		rangedAttackAnimation = true;
+		hitAnimationTimer = animationFrameDuration * (float)animationFrameCount;
+		hitAnimationBaseY = 6 + facingDirection;
+		animator.setAnimation(hitAnimationBaseY);
+		animator.flipX = facingFlipX;
+		attackAnimationEnded = false;
+	}
+
 	// Check if touching player to trigger hit animation (melee attack)
 	if (!playingHitAnimation && physics.transform.intersectTransform(player.physics.transform))
 	{
 		playingHitAnimation = true;
+		rangedAttackAnimation = false;
 		hitAnimationTimer = hitAnimationDuration;
 		hitAnimationBaseY = 6 + facingDirection;
 		animator.setAnimation(hitAnimationBaseY);
 		animator.flipX = facingFlipX;
-	}
-
-	// If playing hit animation and animation just wrapped, allow direction change
-	if (playingHitAnimation && animationWrapped)
-	{
-		int newHitY = 6 + facingDirection;
-		hitAnimationBaseY = newHitY;
-		animator.positionY = hitAnimationBaseY;
-		animator.flipX = facingFlipX;
+		attackAnimationEnded = false;
 	}
 
 	// Set animation based on movement, but only if not playing hit animation
 	if (!playingHitAnimation)
 	{
-		animator.setAnimationBasedOnMovement(moveDir);
+		if (attackAnimationEnded && glm::length2(moveDir) <= 1e-6f)
+		{
+			animator.setAnimation(facingDirection);
+			animator.flipX = facingFlipX;
+		}
+		else
+		{
+			animator.setAnimationBasedOnMovement(moveDir);
+		}
 	}
 
 	basicPhysicsAndCollisionsCheck(deltaTime, map);

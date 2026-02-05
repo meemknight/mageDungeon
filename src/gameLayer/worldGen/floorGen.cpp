@@ -119,8 +119,42 @@ void FloorGenerator::generateTutorialFloor(int sizeX, int sizeY, Map &map, Floor
 	if (outInfo.rooms.size() >= 3)
 	{
 		glm::ivec2 exitCenter = outInfo.rooms.back().center();
-		map.secondLayer.getBlockUnsafe(exitCenter.x, exitCenter.y).type = Blocks::exit;
-		outInfo.exitPos = {exitCenter.x + 0.5f, exitCenter.y + 0.5f};
+		auto isExitSpotValid = [&](glm::ivec2 pos)
+		{
+			if (pos.x <= 0 || pos.y <= 0 || pos.x >= sizeX - 1 || pos.y >= sizeY - 1) { return false; }
+			int belowY = pos.y + 1;
+			if (belowY <= 0 || belowY >= sizeY - 1) { return false; }
+			if (map.isCollidableAtPosSafe(pos.x, belowY)) { return false; }
+			auto &tile = map.firstLayer.getBlockUnsafe(pos.x, pos.y);
+			if (isWall(tile.type) || tile.type == Blocks::none) { return false; }
+			auto &over = map.secondLayer.getBlockUnsafe(pos.x, pos.y);
+			if (over.type != Blocks::none) { return false; }
+			return true;
+		};
+
+		glm::ivec2 exitPos = exitCenter;
+		if (!isExitSpotValid(exitPos))
+		{
+			int attempts = 8;
+			for (int attempt = 0; attempt < attempts; attempt++)
+			{
+				glm::ivec2 pos = {
+					exitCenter.x + getRandomInt(rng, -2, 2),
+					exitCenter.y + getRandomInt(rng, -2, 2)
+				};
+				if (isExitSpotValid(pos))
+				{
+					exitPos = pos;
+					break;
+				}
+			}
+		}
+
+		if (isExitSpotValid(exitPos))
+		{
+			map.secondLayer.getBlockUnsafe(exitPos.x, exitPos.y).type = Blocks::exit;
+			outInfo.exitPos = {exitPos.x + 0.5f, exitPos.y + 0.5f};
+		}
 	}
 }
 
@@ -3656,6 +3690,35 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 		int minY = room.y + 2;
 		int maxY = room.y2() - 3;
 		if (minX > maxX || minY > maxY) { return {}; }
+
+		auto isExitSpotValid = [&](glm::ivec2 pos)
+		{
+			if (pos.x < minX || pos.x > maxX || pos.y < minY || pos.y > maxY) { return false; }
+			if (isDoorTooClose(roomIndex, pos, 3)) { return false; }
+			int belowY = pos.y + 1;
+			if (belowY <= 0 || belowY >= map.size.y - 1) { return false; }
+			if (map.isCollidableAtPosSafe(pos.x, belowY)) { return false; }
+			auto &tile = map.firstLayer.getBlockUnsafe(pos.x, pos.y);
+			if (!canSpawnOnTile(room, tile.type)) { return false; }
+			if (isWall(tile.type) || tile.type == Blocks::none) { return false; }
+			auto &over = map.secondLayer.getBlockUnsafe(pos.x, pos.y);
+			if (over.type != Blocks::none) { return false; }
+			return true;
+		};
+
+		glm::ivec2 center = room.center();
+		if (isExitSpotValid(center)) { return center; }
+
+		int centerAttempts = 8;
+		for (int attempt = 0; attempt < centerAttempts; attempt++)
+		{
+			glm::ivec2 pos = {
+				center.x + getRandomInt(rng, -2, 2),
+				center.y + getRandomInt(rng, -2, 2)
+			};
+			if (isExitSpotValid(pos)) { return pos; }
+		}
+
 		int attempts = 12;
 		for (int attempt = 0; attempt < attempts; attempt++)
 		{
@@ -3663,13 +3726,7 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 				getRandomInt(rng, minX, maxX),
 				getRandomInt(rng, minY, maxY)
 			};
-			if (isDoorTooClose(roomIndex, pos, 3)) { continue; }
-			auto &tile = map.firstLayer.getBlockUnsafe(pos.x, pos.y);
-			if (!canSpawnOnTile(room, tile.type)) { continue; }
-			if (isWall(tile.type) || tile.type == Blocks::none) { continue; }
-			auto &over = map.secondLayer.getBlockUnsafe(pos.x, pos.y);
-			if (over.type != Blocks::none) { continue; }
-			return pos;
+			if (isExitSpotValid(pos)) { return pos; }
 		}
 		return {};
 	};

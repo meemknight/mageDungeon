@@ -17,6 +17,7 @@
 #include <randomStuff.h>
 #include <particles/particleCreator.h>
 #include <gameplay/statusEffects.h>
+#include <gameplay/inputPrompts.h>
 
 #include <gameplay/elements.h>
 #include <gameplay/worldTextSystem.h>
@@ -30,28 +31,89 @@ static const float trapRoomChance = 0.80f;
 static const float trapRoomTriggerMargin = 1.5f;
 static const float trapRoomSpawnDelaySeconds = 1.3f;
 static const float trapRoomSpawnStaggerSeconds = 0.3f;
+static const int tutorialFloorSizeX = 100;
+static const int tutorialFloorSizeY = 100;
+static const int dungeonFloorSizeX = 100;
+static const int dungeonFloorSizeY = 100;
+static const int maxCombatFloors = 4;
 
 namespace
 {
-	// Spawns a random enemy from the basic roster.
-	void spawnRandomEnemy(EntityHolder &entityHolder, std::ranlux24_base &rng, glm::vec2 pos)
+	int getFloorDifficulty(int floorIndex)
 	{
-		constexpr int enemyCount = 12;
-		int pick = getRandomInt(rng, 0, enemyCount - 1);
-		switch (pick)
+		int tier = floorIndex - 1;
+		if (tier < 0) { tier = 0; }
+		if (tier > 3) { tier = 3; }
+		return tier;
+	}
+
+	int getFloorWandTier(int floorIndex)
+	{
+		if (floorIndex <= 0) { return 0; }
+		int tier = floorIndex + 1;
+		if (tier > 5) { tier = 5; }
+		return tier;
+	}
+
+	bool isLastFloor(int floorIndex)
+	{
+		return floorIndex >= maxCombatFloors;
+	}
+
+	// Spawns a random enemy from the basic roster.
+	void spawnRandomEnemy(EntityHolder &entityHolder, std::ranlux24_base &rng, glm::vec2 pos, int difficulty)
+	{
+		difficulty = std::max(0, std::min(difficulty, 3));
+		switch (difficulty)
 		{
-			case 0: entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), pos); break;
-			case 1: entityHolder.addEntity(EnemyTypes::getTemplarOriginalEnemy(), pos); break;
-			case 2: entityHolder.addEntity(EnemyTypes::getEarthTemplarEnemy(), pos); break;
-			case 3: entityHolder.addEntity(EnemyTypes::getFireTemplarEnemy(), pos); break;
-			case 4: entityHolder.addEntity(EnemyTypes::getIceTemplarEnemy(), pos); break;
-			case 5: entityHolder.addEntity(EnemyTypes::getWaterTemplarEnemy(), pos); break;
-			case 6: entityHolder.addEntity(EnemyTypes::getGoblinArcherEnemy(), pos); break;
-			case 7: entityHolder.addEntity(EnemyTypes::getGoblinSpearmanEnemy(), pos); break;
-			case 8: entityHolder.addEntity(EnemyTypes::getGoblinHeavyEnemy(), pos); break;
-			case 9: entityHolder.addEntity(EnemyTypes::getGoblinThiefEnemy(), pos); break;
-			case 10: entityHolder.addEntity(EnemyTypes::getOrcArcherEnemy(), pos); break;
-			default: entityHolder.addEntity(EnemyTypes::getDarkAngelEnemy(), pos); break;
+			case 0:
+			{
+				int pick = getRandomInt(rng, 0, 9);
+				if (pick < 4) { entityHolder.addEntity(EnemyTypes::getGoblinThiefEnemy(), pos); }
+				else if (pick < 7) { entityHolder.addEntity(EnemyTypes::getGoblinSpearmanEnemy(), pos); }
+				else if (pick < 9) { entityHolder.addEntity(EnemyTypes::getGoblinArcherEnemy(), pos); }
+				else { entityHolder.addEntity(EnemyTypes::getGoblinHeavyEnemy(), pos); }
+			} break;
+			case 1:
+			{
+				int pick = getRandomInt(rng, 0, 11);
+				if (pick < 3) { entityHolder.addEntity(EnemyTypes::getGoblinThiefEnemy(), pos); }
+				else if (pick < 5) { entityHolder.addEntity(EnemyTypes::getGoblinSpearmanEnemy(), pos); }
+				else if (pick < 7) { entityHolder.addEntity(EnemyTypes::getGoblinArcherEnemy(), pos); }
+				else if (pick < 9) { entityHolder.addEntity(EnemyTypes::getOrcArcherEnemy(), pos); }
+				else if (pick < 11) { entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), pos); }
+				else { entityHolder.addEntity(EnemyTypes::getGoblinHeavyEnemy(), pos); }
+			} break;
+			case 2:
+			{
+				int pick = getRandomInt(rng, 0, 11);
+				if (pick < 3) { entityHolder.addEntity(EnemyTypes::getTemplarOriginalEnemy(), pos); }
+				else if (pick < 5) { entityHolder.addEntity(EnemyTypes::getEarthTemplarEnemy(), pos); }
+				else if (pick < 7) { entityHolder.addEntity(EnemyTypes::getFireTemplarEnemy(), pos); }
+				else if (pick < 9) { entityHolder.addEntity(EnemyTypes::getIceTemplarEnemy(), pos); }
+				else if (pick < 10) { entityHolder.addEntity(EnemyTypes::getWaterTemplarEnemy(), pos); }
+				else { entityHolder.addEntity(EnemyTypes::getSkeletonEnemy(), pos); }
+			} break;
+			default:
+			{
+				int pick = getRandomInt(rng, 0, 9);
+				if (pick < 6)
+				{
+					int templarPick = getRandomInt(rng, 0, 4);
+					switch (templarPick)
+					{
+						case 0: entityHolder.addEntity(EnemyTypes::getTemplarOriginalEnemy(), pos); break;
+						case 1: entityHolder.addEntity(EnemyTypes::getEarthTemplarEnemy(), pos); break;
+						case 2: entityHolder.addEntity(EnemyTypes::getFireTemplarEnemy(), pos); break;
+						case 3: entityHolder.addEntity(EnemyTypes::getIceTemplarEnemy(), pos); break;
+						default: entityHolder.addEntity(EnemyTypes::getWaterTemplarEnemy(), pos); break;
+					}
+				}
+				else
+				{
+					entityHolder.addEntity(EnemyTypes::getDarkAngelEnemy(), pos);
+				}
+			} break;
 		}
 	}
 }
@@ -68,8 +130,17 @@ bool GameLogic::init()
 		worldSeed = getRandomInt(std::ranlux24_base{std::random_device()()}, 1, 2000000000);
 	}
 
-	//floorGenerator.generateDungeonFloor(140, 140, map, worldSeed, connections, true, floorInfo, doorHolder);
-	floorGenerator.generateTutorialFloor(140, 140, map, floorInfo, doorHolder);
+	int sizeX = (currentFloorIndex == 0) ? tutorialFloorSizeX : dungeonFloorSizeX;
+	int sizeY = (currentFloorIndex == 0) ? tutorialFloorSizeY : dungeonFloorSizeY;
+	if (currentFloorIndex == 0)
+	{
+		floorGenerator.generateTutorialFloor(sizeX, sizeY, map, floorInfo, doorHolder);
+	}
+	else
+	{
+		int floorSeed = worldSeed + currentFloorIndex * 7919;
+		floorGenerator.generateDungeonFloor(sizeX, sizeY, map, floorSeed, connections, true, floorInfo, doorHolder);
+	}
 
 
 	floorGenerator.clear();
@@ -249,6 +320,13 @@ bool GameLogic::init()
 			trapRooms[anchoredRooms[pick]].isTrap = true;
 		}
 	}
+	if (currentFloorIndex == 0)
+	{
+		for (auto &state : trapRooms)
+		{
+			state.isTrap = false;
+		}
+	}
 
 	wands[0] = getRandomWand(0, rng);
 	hasWand[0] = true;
@@ -324,23 +402,93 @@ bool GameLogic::init()
 			return pos;
 		};
 
-		int maxWandSpawns = std::min(24, (int)spawnPositions.size());
-		int minWandSpawns = std::min(8, maxWandSpawns);
+		int maxWandSpawns = std::min(5, (int)spawnPositions.size());
+		int minWandSpawns = std::min(0, maxWandSpawns);
 		int wandSpawnCount = maxWandSpawns > 0 ? getRandomInt(rng, minWandSpawns, maxWandSpawns) : 0;
 		for (int i = 0; i < wandSpawnCount; i++)
 		{
 			glm::vec2 pos = popSpawn(rng);
-			int tier = getRandomInt(rng, 1, 3);
+			int tier = getFloorWandTier(currentFloorIndex);
 			droppedItems.spawnWand(pos, getRandomWand(tier, rng), rng);
 		}
 
-		int maxChestSpawns = std::min(20, (int)spawnPositions.size());
-		int minChestSpawns = std::min(8, maxChestSpawns);
+		int maxChestSpawns = std::min(8, (int)spawnPositions.size());
+		int minChestSpawns = std::min(2, maxChestSpawns);
 		int chestSpawnCount = maxChestSpawns > 0 ? getRandomInt(rng, minChestSpawns, maxChestSpawns) : 0;
+		const float chestWandChance = 0.22f;
+		auto isDropSpotFree = [&](glm::vec2 pos)
+		{
+			for (const auto &item : droppedItems.items)
+			{
+				if (glm::distance(item.pos, pos) < 0.5f)
+				{
+					return false;
+				}
+			}
+			return true;
+		};
 		for (int i = 0; i < chestSpawnCount; i++)
 		{
 			glm::vec2 pos = popSpawn(rng);
-			droppedItems.spawnChest(pos, rng);
+			if (getRandomChance(rng, chestWandChance))
+			{
+				int tier = getFloorWandTier(currentFloorIndex);
+				Wand chestWand = getRandomWand(tier, rng);
+				droppedItems.spawnChest(pos, rng, &chestWand);
+			}
+			else
+			{
+				droppedItems.spawnChest(pos, rng);
+			}
+		}
+
+		if (currentFloorIndex > 0 && floorInfo.exitRoomIndex)
+		{
+			const auto &exitRoom = floorInfo.rooms[*floorInfo.exitRoomIndex];
+			std::vector<glm::vec2> exitSpawns = exitRoom.wandSpawnPositions.empty()
+				? exitRoom.enemySpawnPositions
+				: exitRoom.wandSpawnPositions;
+			auto pickExitSpot = [&](glm::vec2 &outPos)
+			{
+				while (!exitSpawns.empty())
+				{
+					int index = getRandomInt(rng, 0, (int)exitSpawns.size() - 1);
+					glm::vec2 pick = exitSpawns[index];
+					exitSpawns[index] = exitSpawns.back();
+					exitSpawns.pop_back();
+					if (isDropSpotFree(pick))
+					{
+						outPos = pick;
+						return true;
+					}
+				}
+				return false;
+			};
+			glm::vec2 pos = {};
+			bool foundPos = pickExitSpot(pos);
+			if (!foundPos && floorInfo.exitPos && isDropSpotFree(*floorInfo.exitPos))
+			{
+				pos = *floorInfo.exitPos;
+				foundPos = true;
+			}
+			if (foundPos)
+			{
+				int tier = getFloorWandTier(currentFloorIndex);
+				Wand chestWand = getRandomWand(tier, rng);
+				droppedItems.spawnChest(pos, rng, &chestWand);
+			}
+
+			glm::vec2 hearthPos = {};
+			bool foundHearthPos = pickExitSpot(hearthPos);
+			if (!foundHearthPos && floorInfo.exitPos && isDropSpotFree(*floorInfo.exitPos))
+			{
+				hearthPos = *floorInfo.exitPos;
+				foundHearthPos = true;
+			}
+			if (foundHearthPos)
+			{
+				droppedItems.spawnChest(hearthPos, rng, nullptr, true);
+			}
 		}
 	}
 
@@ -366,6 +514,7 @@ bool GameLogic::init()
 			return false;
 		};
 
+		int floorDifficulty = getFloorDifficulty(currentFloorIndex);
 		for (int i = 0; i < (int)floorInfo.rooms.size(); i++)
 		{
 			const auto &room = floorInfo.rooms[i];
@@ -397,7 +546,7 @@ bool GameLogic::init()
 					{
 						continue;
 					}
-					spawnRandomEnemy(entityHolder, rng, pos);
+					spawnRandomEnemy(entityHolder, rng, pos, floorDifficulty);
 					spawned = true;
 				}
 			}
@@ -681,6 +830,8 @@ bool GameLogic::update(float deltaTime,
 	if (ImGui::CollapsingHeader("World", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		ImGui::Text("World Seed: %d", worldSeed);
+		ImGui::Text("Floor: %d / %d", currentFloorIndex, maxCombatFloors);
+		ImGui::Checkbox("Force Trap Difficulty", &forceTrapDifficulty);
 		ImGui::SliderInt("Trap Difficulty", &trapDifficulty, 0, 3);
 		if (ImGui::Button("Reset World (New Seed)"))
 		{
@@ -908,7 +1059,8 @@ bool GameLogic::update(float deltaTime,
 		};
 		if (ImGui::Button("Random"))
 		{
-			spawnRandomEnemy(entityHolder, rng, player.physics.getPos() + glm::vec2(1.6f, 0.0f));
+			spawnRandomEnemy(entityHolder, rng, player.physics.getPos() + glm::vec2(1.6f, 0.0f),
+				getFloorDifficulty(currentFloorIndex));
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Templar"))
@@ -1382,7 +1534,7 @@ bool GameLogic::update(float deltaTime,
 				}
 
 				if (!placed) { continue; }
-				spawnRandomEnemy(entityHolder, rng, spawnPos);
+				spawnRandomEnemy(entityHolder, rng, spawnPos, getFloorDifficulty(currentFloorIndex));
 				break;
 			}
 		}
@@ -1530,7 +1682,9 @@ bool GameLogic::update(float deltaTime,
 	auto queueTrapWaves = [&](TrapRoomState &state, const FloorRoom &room)
 	{
 		auto spawnPositions = buildTrapSpawnPositions(room);
-		TrapWavePlan plan = buildTrapRoomWavePlan(room, trapDifficulty, rng, &spawnPositions);
+		int floorDifficulty = getFloorDifficulty(currentFloorIndex);
+		int waveDifficulty = forceTrapDifficulty ? trapDifficulty : floorDifficulty;
+		TrapWavePlan plan = buildTrapRoomWavePlan(room, waveDifficulty, rng, &spawnPositions);
 		state.wavePlan = plan.waves;
 		state.currentWaveIndex = state.wavePlan.empty() ? -1 : 0;
 		startTrapWave(state);
@@ -1691,7 +1845,17 @@ bool GameLogic::update(float deltaTime,
 								glm::vec2 rewardPos = {};
 								if (pickTrapRewardSpot(room, rewardPos))
 								{
-									droppedItems.spawnChest(rewardPos, rng);
+									const float chestWandChance = 0.22f;
+									if (getRandomChance(rng, chestWandChance))
+									{
+										int tier = getFloorWandTier(currentFloorIndex);
+										Wand chestWand = getRandomWand(tier, rng);
+										droppedItems.spawnChest(rewardPos, rng, &chestWand);
+									}
+									else
+									{
+										droppedItems.spawnChest(rewardPos, rng);
+									}
 									emitTrapRewardParticles(rewardPos);
 								}
 							}
@@ -1855,6 +2019,97 @@ bool GameLogic::update(float deltaTime,
 	};
 
 	updateDoors();
+
+	struct FloorTransitionState
+	{
+		Player player = {};
+		float playerDamageCooldown = 0.0f;
+		Wand wands[2] = {};
+		bool hasWand[2] = {};
+		int activeWandIndex = 0;
+		SpellRecepie spellRecepies[2] = {};
+		WandStoneSlot wandStoneSlots[2][4] = {};
+		std::vector<MagicStone> stoneInventory;
+	};
+
+	auto captureFloorState = [&]()
+	{
+		FloorTransitionState state = {};
+		state.player = player;
+		state.playerDamageCooldown = playerDamageCooldown;
+		state.activeWandIndex = activeWandIndex;
+		for (int i = 0; i < 2; i++)
+		{
+			state.wands[i] = wands[i];
+			state.hasWand[i] = hasWand[i];
+			state.spellRecepies[i] = spellRecepies[i];
+			for (int slot = 0; slot < 4; slot++)
+			{
+				state.wandStoneSlots[i][slot] = wandStoneSlots[i][slot];
+			}
+		}
+		state.stoneInventory = stoneInventory;
+		return state;
+	};
+
+	auto restoreFloorState = [&](const FloorTransitionState &state)
+	{
+		player = state.player;
+		playerDamageCooldown = state.playerDamageCooldown;
+		activeWandIndex = state.activeWandIndex;
+		for (int i = 0; i < 2; i++)
+		{
+			wands[i] = state.wands[i];
+			hasWand[i] = state.hasWand[i];
+			spellRecepies[i] = state.spellRecepies[i];
+			for (int slot = 0; slot < 4; slot++)
+			{
+				wandStoneSlots[i][slot] = state.wandStoneSlots[i][slot];
+			}
+			spellSelectionLogic[i].resetSelectionForWand(wands[i], spellRecepies[i], false);
+		}
+		stoneInventory = state.stoneInventory;
+		inventoryOpen = false;
+
+		if (floorInfo.playerSpawnPos)
+		{
+			player.physics.teleport(*floorInfo.playerSpawnPos);
+		}
+		else
+		{
+			player.physics.teleport({35, 35});
+		}
+		player.physics.velocity = {};
+		player.physics.acceleration = {};
+	};
+
+	auto tryAdvanceFloor = [&]()
+	{
+		if (!floorInfo.exitPos) { return false; }
+		if (inventoryOpen) { return false; }
+		bool wantsExit = input.buttons[platform::Button::E].pressed ||
+			input.controller.buttons[platform::Controller::A].pressed;
+		if (!wantsExit) { return false; }
+		float dist = glm::distance(player.physics.getPos(), *floorInfo.exitPos);
+		if (dist > 1.1f) { return false; }
+		if (isLastFloor(currentFloorIndex))
+		{
+			exitDungeon = true;
+			return true;
+		}
+		FloorTransitionState state = captureFloorState();
+		currentFloorIndex++;
+		keepFloorOnClose = true;
+		close();
+		init();
+		restoreFloorState(state);
+		return true;
+	};
+
+	if (tryAdvanceFloor())
+	{
+		return !exitDungeon;
+	}
 
 	// Render entities/player/doors sorted by Y for proper overlap.
 	struct RenderEntry
@@ -2118,6 +2373,21 @@ bool GameLogic::update(float deltaTime,
 
 	static WorldTextSystem mapTextSystem;
 	map.renderMapAfterEntities(renderer, assetsManager, &doorHolder, &mapTextSystem, usesController);
+
+	if (floorInfo.exitPos)
+	{
+		const ButtonPrompt exitPrompt = {"E", "A"};
+		const float promptRadius = 1.6f;
+		float dist = glm::distance(player.physics.getPos(), *floorInfo.exitPos);
+		if (dist <= promptRadius)
+		{
+			float hover = std::sin(wandHoverTimer * 1.1f) * (PIXEL_SIZE * 1.4f);
+			float promptSize = PIXEL_SIZE * 12.0f;
+			float promptOffset = PIXEL_SIZE * 18.0f;
+			glm::vec2 promptPos = {floorInfo.exitPos->x, floorInfo.exitPos->y - promptOffset - hover};
+			renderPrompt(renderer, assetsManager, usesController, exitPrompt, promptPos, promptSize, 0.85f);
+		}
+	}
 	damageViewerSystem.render(renderer, assetsManager.font);
 
 #pragma endregion
@@ -2893,7 +3163,15 @@ bool GameLogic::update(float deltaTime,
 void GameLogic::close()
 {
 	int keepSeed = worldSeed;
+	int keepTrapDifficulty = trapDifficulty;
+	bool keepForceTrap = forceTrapDifficulty;
+	int keepFloorIndex = currentFloorIndex;
+	bool keepFloor = keepFloorOnClose;
 	*this = {};
 	worldSeed = keepSeed; // keep current world seed across resets
+	trapDifficulty = keepTrapDifficulty;
+	forceTrapDifficulty = keepForceTrap;
+	currentFloorIndex = keepFloor ? keepFloorIndex : 0;
+	keepFloorOnClose = false;
 	inGame = 0;
 }
