@@ -3950,6 +3950,51 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 			}
 		};
 
+		std::vector<glm::ivec2> entrySeeds;
+		auto addEntrySeed = [&](int x, int y)
+		{
+			if (!isInterior(x, y)) { return; }
+			if (!isWalkable(x, y))
+			{
+				carveCaveTile(x, y);
+			}
+			for (auto s : entrySeeds)
+			{
+				if (s.x == x && s.y == y) { return; }
+			}
+			entrySeeds.push_back({x, y});
+		};
+
+		for (auto d : outInfo.rooms[roomIndex].doorPositions)
+		{
+			bool onNorth = d.y == room.y;
+			bool onSouth = d.y == room.y2() - 2;
+			bool onWest = d.x == room.x;
+			bool onEast = d.x == room.x2() - 2;
+			if (onNorth || onSouth)
+			{
+				int baseY = onNorth ? (d.y + 1) : d.y;
+				int dirY = onNorth ? 1 : -1;
+				for (int depth = 0; depth <= 1; depth++)
+				{
+					int y = baseY + dirY * depth;
+					addEntrySeed(d.x, y);
+					addEntrySeed(d.x + 1, y);
+				}
+			}
+			if (onWest || onEast)
+			{
+				int baseX = onWest ? (d.x + 1) : d.x;
+				int dirX = onWest ? 1 : -1;
+				for (int depth = 0; depth <= 1; depth++)
+				{
+					int x = baseX + dirX * depth;
+					addEntrySeed(x, d.y);
+					addEntrySeed(x, d.y + 1);
+				}
+			}
+		}
+
 		std::vector<int> zoneId(roomW * roomH, -1);
 		std::vector<glm::ivec2> zoneSeeds;
 		std::vector<int> zoneSizes;
@@ -3990,12 +4035,25 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 
 		if (zoneSeeds.size() <= 1) { return; }
 
-		int mainZone = 0;
-		for (int i = 1; i < (int)zoneSeeds.size(); i++)
+		int mainZone = -1;
+		for (auto s : entrySeeds)
 		{
-			if (zoneSizes[i] > zoneSizes[mainZone])
+			int idx = indexOf(s.x, s.y);
+			if (idx >= 0 && idx < (int)zoneId.size() && zoneId[idx] != -1)
 			{
-				mainZone = i;
+				mainZone = zoneId[idx];
+				break;
+			}
+		}
+		if (mainZone == -1)
+		{
+			mainZone = 0;
+			for (int i = 1; i < (int)zoneSeeds.size(); i++)
+			{
+				if (zoneSizes[i] > zoneSizes[mainZone])
+				{
+					mainZone = i;
+				}
 			}
 		}
 
