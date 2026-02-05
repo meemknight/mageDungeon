@@ -29,6 +29,7 @@ void FloorGenerator::generateTutorialFloor(int sizeX, int sizeY, Map &map, Floor
 	map.create(sizeX, sizeY);
 	outInfo = {};
 	doorHolder.clear();
+	std::ranlux24_base rng{std::random_device{}()};
 
 	for (int y = 0; y < sizeY; y++)
 	{

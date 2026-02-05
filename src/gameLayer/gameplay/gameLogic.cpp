@@ -18,6 +18,7 @@
 #include <particles/particleCreator.h>
 #include <gameplay/statusEffects.h>
 #include <gameplay/inputPrompts.h>
+#include <gameplay/aStar.h>
 
 #include <gameplay/elements.h>
 #include <gameplay/worldTextSystem.h>
@@ -371,7 +372,35 @@ bool GameLogic::init()
 	{
 		std::vector<glm::vec2> spawnPositions;
 		spawnPositions.reserve(48);
+		std::vector<glm::vec2> preferredCenters;
+		preferredCenters.reserve(16);
 
+		// Avoid placing drops on tiles with walls beneath.
+		auto isSpawnSpotValid = [&](glm::vec2 pos)
+		{
+			glm::ivec2 tile = WorldToTile(pos);
+			if (tile.x < 0 || tile.y < 0 || tile.x >= map.size.x || tile.y >= map.size.y)
+			{
+				return false;
+			}
+			if (map.isCollidableAtPosSafe(tile.x, tile.y)) { return false; }
+			int belowY = tile.y + 1;
+			if (belowY < 0 || belowY >= map.size.y) { return false; }
+			if (map.isCollidableAtPosSafe(tile.x, belowY)) { return false; }
+			return true;
+		};
+
+		auto addUniquePos = [&](std::vector<glm::vec2> &list, glm::vec2 pos)
+		{
+			for (const auto &existing : list)
+			{
+				if (existing.x == pos.x && existing.y == pos.y)
+				{
+					return;
+				}
+			}
+			list.push_back(pos);
+		};
 		for (const auto &room : floorInfo.rooms)
 		{
 			if (room.isSpawnRoom)
@@ -389,12 +418,40 @@ bool GameLogic::init()
 				{
 					continue;
 				}
-				spawnPositions.push_back(pos);
+				if (!isSpawnSpotValid(pos)) { continue; }
+				addUniquePos(spawnPositions, pos);
+			}
+
+			glm::vec2 centerPos = {
+				(float)room.center().x + 0.5f,
+				(float)room.center().y + 0.5f
+			};
+			if (glm::distance(centerPos, player.physics.getPos()) >= 3.0f && isSpawnSpotValid(centerPos))
+			{
+				addUniquePos(spawnPositions, centerPos);
+				addUniquePos(preferredCenters, centerPos);
 			}
 		}
 
 		auto popSpawn = [&](std::ranlux24_base &rng)
 		{
+			if (!preferredCenters.empty() && getRandomChance(rng, 0.35f))
+			{
+				int pick = getRandomInt(rng, 0, (int)preferredCenters.size() - 1);
+				glm::vec2 pos = preferredCenters[pick];
+				preferredCenters[pick] = preferredCenters.back();
+				preferredCenters.pop_back();
+				for (int i = 0; i < (int)spawnPositions.size(); i++)
+				{
+					if (spawnPositions[i].x == pos.x && spawnPositions[i].y == pos.y)
+					{
+						spawnPositions[i] = spawnPositions.back();
+						spawnPositions.pop_back();
+						break;
+					}
+				}
+				return pos;
+			}
 			int index = getRandomInt(rng, 0, (int)spawnPositions.size() - 1);
 			glm::vec2 pos = spawnPositions[index];
 			spawnPositions[index] = spawnPositions.back();
@@ -448,6 +505,12 @@ bool GameLogic::init()
 			std::vector<glm::vec2> exitSpawns = exitRoom.wandSpawnPositions.empty()
 				? exitRoom.enemySpawnPositions
 				: exitRoom.wandSpawnPositions;
+			bool hasExitPos = floorInfo.exitPos.has_value();
+			glm::vec2 exitPos = hasExitPos ? *floorInfo.exitPos : glm::vec2{};
+			auto isExitBlocked = [&](glm::vec2 pos)
+			{
+				return hasExitPos && glm::distance(pos, exitPos) < 0.4f;
+			};
 			auto pickExitSpot = [&](glm::vec2 &outPos)
 			{
 				while (!exitSpawns.empty())
@@ -456,7 +519,25 @@ bool GameLogic::init()
 					glm::vec2 pick = exitSpawns[index];
 					exitSpawns[index] = exitSpawns.back();
 					exitSpawns.pop_back();
-					if (isDropSpotFree(pick))
+					if (isSpawnSpotValid(pick) && isDropSpotFree(pick) && !isExitBlocked(pick))
+					{
+						outPos = pick;
+						return true;
+					}
+				}
+				return false;
+			};
+			auto pickExitOffsetSpot = [&](glm::vec2 &outPos)
+			{
+				if (!hasExitPos) { return false; }
+				glm::vec2 offsets[] = {
+					{1.0f, 0.0f}, {-1.0f, 0.0f}, {0.0f, 1.0f}, {0.0f, -1.0f},
+					{1.0f, 1.0f}, {-1.0f, 1.0f}, {1.0f, -1.0f}, {-1.0f, -1.0f}
+				};
+				for (const auto &offset : offsets)
+				{
+					glm::vec2 pick = exitPos + offset;
+					if (isSpawnSpotValid(pick) && isDropSpotFree(pick) && !isExitBlocked(pick))
 					{
 						outPos = pick;
 						return true;
@@ -466,10 +547,9 @@ bool GameLogic::init()
 			};
 			glm::vec2 pos = {};
 			bool foundPos = pickExitSpot(pos);
-			if (!foundPos && floorInfo.exitPos && isDropSpotFree(*floorInfo.exitPos))
+			if (!foundPos)
 			{
-				pos = *floorInfo.exitPos;
-				foundPos = true;
+				foundPos = pickExitOffsetSpot(pos);
 			}
 			if (foundPos)
 			{
@@ -480,10 +560,9 @@ bool GameLogic::init()
 
 			glm::vec2 hearthPos = {};
 			bool foundHearthPos = pickExitSpot(hearthPos);
-			if (!foundHearthPos && floorInfo.exitPos && isDropSpotFree(*floorInfo.exitPos))
+			if (!foundHearthPos)
 			{
-				hearthPos = *floorInfo.exitPos;
-				foundHearthPos = true;
+				foundHearthPos = pickExitOffsetSpot(hearthPos);
 			}
 			if (foundHearthPos)
 			{
