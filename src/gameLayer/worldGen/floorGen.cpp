@@ -3904,48 +3904,43 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 	};
 
 
-	// Flood fill cave floors and connect any isolated pockets.
+	// Flood fill cave floors and connect isolated pockets inside the room interior.
 	auto ensureCaveRoomConnectivity = [&](int roomIndex)
 	{
 		if (roomIndex < 0 || roomIndex >= (int)rooms.size()) { return; }
 		const Rect &room = rooms[roomIndex];
 		if (!room.isCave) { return; }
 
-		auto isInsideRoom = [&](int x, int y)
-		{
-			return x >= room.x && x < room.x2() && y >= room.y && y < room.y2();
-		};
-
-		auto isCaveFloorTile = [&](BlockType type)
-		{
-			return type == Blocks::caveFloor || type == Blocks::floor2
-				|| type == Blocks::woodenFloor;
-		};
+		int minX = room.x + 1;
+		int maxX = room.x2() - 2;
+		int minY = room.y + 1;
+		int maxY = room.y2() - 2;
+		if (minX > maxX || minY > maxY) { return; }
 
 		int roomW = room.w;
 		int roomH = room.h;
-		if (roomW <= 0 || roomH <= 0) { return; }
-
 		auto indexOf = [&](int x, int y)
 		{
 			return (x - room.x) + (y - room.y) * roomW;
 		};
 
-		auto isDoorTile = [&](int x, int y)
+		auto isInterior = [&](int x, int y)
 		{
-			return isDoorTileForRoom(roomIndex, x, y);
+			return x >= minX && x <= maxX && y >= minY && y <= maxY;
 		};
 
-		auto isInteriorTile = [&](int x, int y)
+		auto isWalkable = [&](int x, int y)
 		{
-			return x > room.x && x < room.x2() - 1
-				&& y > room.y && y < room.y2() - 1;
+			if (!isInterior(x, y)) { return false; }
+			auto &tile = map.firstLayer.getBlockUnsafe(x, y);
+			if (tile.type == Blocks::none || isWall(tile.type)) { return false; }
+			if (map.isCollidableAtPosSafe(x, y)) { return false; }
+			return true;
 		};
 
 		auto carveCaveTile = [&](int x, int y)
 		{
-			if (!isInsideRoom(x, y)) { return; }
-			if (!isInteriorTile(x, y) && !isDoorTile(x, y)) { return; }
+			if (!isInterior(x, y)) { return; }
 			auto &tile = map.firstLayer.getBlockUnsafe(x, y);
 			tile.type = Blocks::caveFloor;
 			auto &over = map.secondLayer.getBlockUnsafe(x, y);
@@ -3955,149 +3950,88 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 			}
 		};
 
-		for (int pass = 0; pass < 2; pass++)
+		std::vector<int> zoneId(roomW * roomH, -1);
+		std::vector<glm::ivec2> zoneSeeds;
+		std::vector<int> zoneSizes;
+
+		const int dirs[4][2] = {{1,0},{-1,0},{0,1},{0,-1}};
+		for (int y = minY; y <= maxY; y++)
 		{
-			std::vector<char> visited(roomW * roomH, 0);
-			std::vector<glm::ivec2> queue;
-			queue.reserve(roomW * roomH);
-			std::vector<glm::ivec2> reachable;
-			reachable.reserve(roomW * roomH);
-
-			std::vector<glm::ivec2> seeds;
-			for (auto d : outInfo.rooms[roomIndex].doorPositions)
+			for (int x = minX; x <= maxX; x++)
 			{
-				for (int dy = 0; dy <= 1; dy++)
+				if (!isWalkable(x, y)) { continue; }
+				int idx = indexOf(x, y);
+				if (zoneId[idx] != -1) { continue; }
+
+				int zoneIndex = (int)zoneSeeds.size();
+				zoneSeeds.push_back({x, y});
+				zoneSizes.push_back(0);
+				std::vector<glm::ivec2> queue;
+				queue.reserve(roomW * roomH / 2);
+				queue.push_back({x, y});
+				zoneId[idx] = zoneIndex;
+				for (size_t i = 0; i < queue.size(); i++)
 				{
-					for (int dx = 0; dx <= 1; dx++)
+					glm::ivec2 pos = queue[i];
+					zoneSizes[zoneIndex]++;
+					for (auto &dir : dirs)
 					{
-						int x = d.x + dx;
-						int y = d.y + dy;
-						if (!isInsideRoom(x, y)) { continue; }
-						map.firstLayer.getBlockUnsafe(x, y).type = Blocks::caveFloor;
-						seeds.push_back({x, y});
+						int nx = pos.x + dir[0];
+						int ny = pos.y + dir[1];
+						if (!isWalkable(nx, ny)) { continue; }
+						int nIdx = indexOf(nx, ny);
+						if (zoneId[nIdx] != -1) { continue; }
+						zoneId[nIdx] = zoneIndex;
+						queue.push_back({nx, ny});
 					}
 				}
 			}
+		}
 
-			if (seeds.empty())
+		if (zoneSeeds.size() <= 1) { return; }
+
+		int mainZone = 0;
+		for (int i = 1; i < (int)zoneSeeds.size(); i++)
+		{
+			if (zoneSizes[i] > zoneSizes[mainZone])
 			{
-				glm::ivec2 center = room.center();
-				if (isInsideRoom(center.x, center.y))
+				mainZone = i;
+			}
+		}
+
+		for (int i = 0; i < (int)zoneSeeds.size(); i++)
+		{
+			if (i == mainZone) { continue; }
+			glm::ivec2 start = zoneSeeds[i];
+			glm::ivec2 end = zoneSeeds[mainZone];
+			bool horizontalFirst = getRandomChance(rng, 0.5f);
+			if (horizontalFirst)
+			{
+				int stepX = (end.x >= start.x) ? 1 : -1;
+				for (int x = start.x; x != end.x; x += stepX)
 				{
-					carveCaveTile(center.x, center.y);
-					seeds.push_back(center);
+					carveCaveTile(x, start.y);
 				}
-				else
+				int stepY = (end.y >= start.y) ? 1 : -1;
+				for (int y = start.y; y != end.y; y += stepY)
 				{
-					for (int y = room.y; y < room.y2(); y++)
-					{
-						for (int x = room.x; x < room.x2(); x++)
-						{
-							auto &tile = map.firstLayer.getBlockUnsafe(x, y);
-							if (isCaveFloorTile(tile.type))
-							{
-								seeds.push_back({x, y});
-								break;
-							}
-						}
-						if (!seeds.empty()) { break; }
-					}
+					carveCaveTile(end.x, y);
 				}
 			}
-
-			if (seeds.empty()) { return; }
-
-			for (auto s : seeds)
+			else
 			{
-				int idx = indexOf(s.x, s.y);
-				if (!visited[idx])
+				int stepY = (end.y >= start.y) ? 1 : -1;
+				for (int y = start.y; y != end.y; y += stepY)
 				{
-					visited[idx] = 1;
-					queue.push_back(s);
-					reachable.push_back(s);
+					carveCaveTile(start.x, y);
+				}
+				int stepX = (end.x >= start.x) ? 1 : -1;
+				for (int x = start.x; x != end.x; x += stepX)
+				{
+					carveCaveTile(x, end.y);
 				}
 			}
-
-			const int dirs[4][2] = {{1,0},{-1,0},{0,1},{0,-1}};
-			for (size_t qi = 0; qi < queue.size(); qi++)
-			{
-				auto pos = queue[qi];
-				for (auto &dir : dirs)
-				{
-					int nx = pos.x + dir[0];
-					int ny = pos.y + dir[1];
-					if (!isInsideRoom(nx, ny)) { continue; }
-					int nIdx = indexOf(nx, ny);
-					if (visited[nIdx]) { continue; }
-					auto &tile = map.firstLayer.getBlockUnsafe(nx, ny);
-					if (!isCaveFloorTile(tile.type)) { continue; }
-					visited[nIdx] = 1;
-					queue.push_back({nx, ny});
-					reachable.push_back({nx, ny});
-				}
-			}
-
-			std::vector<glm::ivec2> unreachable;
-			for (int y = room.y; y < room.y2(); y++)
-			{
-				for (int x = room.x; x < room.x2(); x++)
-				{
-					auto &tile = map.firstLayer.getBlockUnsafe(x, y);
-					if (!isCaveFloorTile(tile.type)) { continue; }
-					if (!visited[indexOf(x, y)])
-					{
-						unreachable.push_back({x, y});
-					}
-				}
-			}
-
-			if (unreachable.empty()) { return; }
-
-			for (auto target : unreachable)
-			{
-				int bestDist = INT_MAX;
-				glm::ivec2 best = target;
-				for (auto src : reachable)
-				{
-					int dist = std::abs(target.x - src.x) + std::abs(target.y - src.y);
-					if (dist < bestDist)
-					{
-						bestDist = dist;
-						best = src;
-					}
-				}
-				if (bestDist == INT_MAX) { continue; }
-
-				bool horizontalFirst = getRandomChance(rng, 0.5f);
-				if (horizontalFirst)
-				{
-					int stepX = (best.x >= target.x) ? 1 : -1;
-					for (int x = target.x; x != best.x; x += stepX)
-					{
-						carveCaveTile(x, target.y);
-					}
-					int stepY = (best.y >= target.y) ? 1 : -1;
-					for (int y = target.y; y != best.y; y += stepY)
-					{
-						carveCaveTile(best.x, y);
-					}
-				}
-				else
-				{
-					int stepY = (best.y >= target.y) ? 1 : -1;
-					for (int y = target.y; y != best.y; y += stepY)
-					{
-						carveCaveTile(target.x, y);
-					}
-					int stepX = (best.x >= target.x) ? 1 : -1;
-					for (int x = target.x; x != best.x; x += stepX)
-					{
-						carveCaveTile(x, best.y);
-					}
-				}
-				carveCaveTile(best.x, best.y);
-				reachable.push_back(target);
-			}
+			carveCaveTile(end.x, end.y);
 		}
 	};
 

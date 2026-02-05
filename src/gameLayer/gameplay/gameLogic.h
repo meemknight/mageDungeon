@@ -120,7 +120,7 @@ struct GameLogic
 
 	float zoom = 100;
 	// World seed used for procedural floor generation.
-	int worldSeed = 12345;
+	int worldSeed = 819242882;
 	int currentFloorIndex = 0;
 	bool keepFloorOnClose = false;
 	// Free camera debug mode decouples camera from player.
