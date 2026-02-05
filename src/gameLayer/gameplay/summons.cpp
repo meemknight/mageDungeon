@@ -96,11 +96,13 @@ void SummonHolder::clear()
 	summons.clear();
 }
 
-void resolveSummonEntityPush(EntityHolder &entityHolder, SummonHolder &summons)
+void resolveSummonEntityPush(EntityHolder &entityHolder, SummonHolder &summons, Player &player)
 {
 	const float entityWeight = 1.0f;
 	const float summonWeight = 1.0f;
 	const float pushFactor = 0.5f;
+	const float playerWeight = 0.0f;
+	const float playerPushFactor = 0.15f;
 
 	auto getRadius = [&](const PhysicalEntity &entity)
 	{
@@ -111,7 +113,7 @@ void resolveSummonEntityPush(EntityHolder &entityHolder, SummonHolder &summons)
 		return 0.5f * std::max(entity.transform.size.x, entity.transform.size.y);
 	};
 
-	auto applyPush = [&](PhysicalEntity &a, float weightA, PhysicalEntity &b, float weightB)
+	auto applyPush = [&](PhysicalEntity &a, float weightA, PhysicalEntity &b, float weightB, float localPushFactor)
 	{
 		if (!a.transform.intersectTransform(b.transform))
 		{
@@ -139,8 +141,8 @@ void resolveSummonEntityPush(EntityHolder &entityHolder, SummonHolder &summons)
 			return;
 		}
 
-		float pushA = overlap * pushFactor * (weightA / totalWeight);
-		float pushB = overlap * pushFactor * (weightB / totalWeight);
+		float pushA = overlap * localPushFactor * (weightA / totalWeight);
+		float pushB = overlap * localPushFactor * (weightB / totalWeight);
 
 		a.getPos() -= dir * pushA;
 		b.getPos() += dir * pushB;
@@ -153,7 +155,7 @@ void resolveSummonEntityPush(EntityHolder &entityHolder, SummonHolder &summons)
 		{
 			if (summons.summons[j]->isDying()) { continue; }
 			applyPush(summons.summons[i]->physics, summonWeight,
-				summons.summons[j]->physics, summonWeight);
+				summons.summons[j]->physics, summonWeight, pushFactor);
 		}
 	}
 
@@ -163,8 +165,11 @@ void resolveSummonEntityPush(EntityHolder &entityHolder, SummonHolder &summons)
 		for (auto &entity : entityHolder.entities)
 		{
 			if (entity->dying) continue; // skip dying entities
-			applyPush(summon->physics, summonWeight, entity->physics, entityWeight);
+			applyPush(summon->physics, summonWeight, entity->physics, entityWeight, pushFactor);
 		}
+
+		// Player can nudge summons, but summons never move the player.
+		applyPush(player.physics, playerWeight, summon->physics, summonWeight, playerPushFactor);
 	}
 }
 

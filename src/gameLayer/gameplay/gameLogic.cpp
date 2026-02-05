@@ -28,6 +28,7 @@
 
 // Temporary: disable legacy random enemy spawning system.
 static const bool disableRandomEnemySpawns = true;
+static const bool skipTutorialFloor = true;
 static const float trapRoomChance = 0.80f;
 static const float trapRoomTriggerMargin = 1.5f;
 static const float trapRoomSpawnDelaySeconds = 1.3f;
@@ -133,6 +134,12 @@ bool GameLogic::init()
 
 	int sizeX = (currentFloorIndex == 0) ? tutorialFloorSizeX : dungeonFloorSizeX;
 	int sizeY = (currentFloorIndex == 0) ? tutorialFloorSizeY : dungeonFloorSizeY;
+	if (skipTutorialFloor && currentFloorIndex == 0)
+	{
+		currentFloorIndex = 1;
+	}
+	sizeX = (currentFloorIndex == 0) ? tutorialFloorSizeX : dungeonFloorSizeX;
+	sizeY = (currentFloorIndex == 0) ? tutorialFloorSizeY : dungeonFloorSizeY;
 	if (currentFloorIndex == 0)
 	{
 		floorGenerator.generateTutorialFloor(sizeX, sizeY, map, floorInfo, doorHolder);
@@ -383,6 +390,10 @@ bool GameLogic::init()
 			{
 				return false;
 			}
+			if (floorInfo.exitPos && glm::distance(pos, *floorInfo.exitPos) < 0.4f)
+			{
+				return false;
+			}
 			if (map.isCollidableAtPosSafe(tile.x, tile.y)) { return false; }
 			int belowY = tile.y + 1;
 			if (belowY < 0 || belowY >= map.size.y) { return false; }
@@ -459,9 +470,13 @@ bool GameLogic::init()
 			return pos;
 		};
 
-		int maxWandSpawns = std::min(5, (int)spawnPositions.size());
-		int minWandSpawns = std::min(0, maxWandSpawns);
-		int wandSpawnCount = maxWandSpawns > 0 ? getRandomInt(rng, minWandSpawns, maxWandSpawns) : 0;
+		int wandSpawnCount = 0;
+		if (currentFloorIndex > 0)
+		{
+			int maxWandSpawns = std::min(5, (int)spawnPositions.size());
+			int minWandSpawns = std::min(0, maxWandSpawns);
+			wandSpawnCount = maxWandSpawns > 0 ? getRandomInt(rng, minWandSpawns, maxWandSpawns) : 0;
+		}
 		for (int i = 0; i < wandSpawnCount; i++)
 		{
 			glm::vec2 pos = popSpawn(rng);
@@ -469,10 +484,14 @@ bool GameLogic::init()
 			droppedItems.spawnWand(pos, getRandomWand(tier, rng), rng);
 		}
 
-		int maxChestSpawns = std::min(8, (int)spawnPositions.size());
-		int minChestSpawns = std::min(2, maxChestSpawns);
-		int chestSpawnCount = maxChestSpawns > 0 ? getRandomInt(rng, minChestSpawns, maxChestSpawns) : 0;
+		int chestSpawnCount = 0;
 		const float chestWandChance = 0.22f;
+		if (currentFloorIndex > 0)
+		{
+			int maxChestSpawns = std::min(8, (int)spawnPositions.size());
+			int minChestSpawns = std::min(2, maxChestSpawns);
+			chestSpawnCount = maxChestSpawns > 0 ? getRandomInt(rng, minChestSpawns, maxChestSpawns) : 0;
+		}
 		auto isDropSpotFree = [&](glm::vec2 pos)
 		{
 			for (const auto &item : droppedItems.items)
@@ -621,6 +640,10 @@ bool GameLogic::init()
 					spawnPositions[index] = spawnPositions.back();
 					spawnPositions.pop_back();
 
+					if (floorInfo.exitPos && glm::distance(pos, *floorInfo.exitPos) < 0.4f)
+					{
+						continue;
+					}
 					if (isItemBlocking(pos))
 					{
 						continue;
@@ -1505,7 +1528,7 @@ bool GameLogic::update(float deltaTime,
 
 	entityHolder.update(simDelta, map, particleSystem, rng, player, summons, projectiles);
 	resolveEntityPush(entityHolder, player);
-	resolveSummonEntityPush(entityHolder, summons);
+	resolveSummonEntityPush(entityHolder, summons, player);
 
 	// Break decorations on contact with player or enemies.
 	if (!breakableDecorations.positions.empty())

@@ -1151,8 +1151,35 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 		{
 			int roomIndex = findRoomIndexAt(x, y);
 			if (roomIndex < 0) { return true; }
-			if (!rooms[roomIndex].isCave) { return true; }
 			return isDoorTileForRoom(roomIndex, x, y);
+		};
+		auto canCarveLine = [&](glm::ivec2 start, glm::ivec2 end)
+		{
+			if (start.x == end.x)
+			{
+				int y0 = std::min(start.y, end.y);
+				int y1 = std::max(start.y, end.y);
+				for (int y = y0; y <= y1; y++)
+				{
+					for (int x = start.x; x < start.x + width; x++)
+					{
+						if (!canCarveCorridorTile(x, y)) { return false; }
+					}
+				}
+			}
+			else
+			{
+				int x0 = std::min(start.x, end.x);
+				int x1 = std::max(start.x, end.x);
+				for (int x = x0; x <= x1; x++)
+				{
+					for (int y = start.y; y < start.y + width; y++)
+					{
+						if (!canCarveCorridorTile(x, y)) { return false; }
+					}
+				}
+			}
+			return true;
 		};
 		auto carveLine = [&](glm::ivec2 start, glm::ivec2 end)
 		{
@@ -1164,7 +1191,6 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 				{
 					for (int x = start.x; x < start.x + width; x++)
 					{
-						if (!canCarveCorridorTile(x, y)) { continue; }
 						paintCorridorTile(x, y, style);
 					}
 				}
@@ -1177,22 +1203,119 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 				{
 					for (int y = start.y; y < start.y + width; y++)
 					{
-						if (!canCarveCorridorTile(x, y)) { continue; }
 						paintCorridorTile(x, y, style);
 					}
 				}
 			}
 		};
+		auto carvePathBfs = [&]()
+		{
+			const int maxNodes = sizeX * sizeY;
+			std::vector<int> prev(maxNodes, -1);
+			std::vector<char> visited(maxNodes, 0);
+			auto indexOf = [&](int x, int y) { return y * sizeX + x; };
+			auto inBounds = [&](int x, int y)
+			{
+				return x >= 1 && y >= 1 && x < sizeX - 1 && y < sizeY - 1;
+			};
+			std::vector<glm::ivec2> queue;
+			queue.reserve(maxNodes / 2);
+			if (!inBounds(from.x, from.y) || !inBounds(to.x, to.y)) { return false; }
+			if (!canCarveCorridorTile(from.x, from.y)) { return false; }
+			if (!canCarveCorridorTile(to.x, to.y)) { return false; }
+			int startIndex = indexOf(from.x, from.y);
+			int goalIndex = indexOf(to.x, to.y);
+			queue.push_back(from);
+			visited[startIndex] = 1;
+			int head = 0;
+			while (head < (int)queue.size())
+			{
+				glm::ivec2 current = queue[head++];
+				if (current.x == to.x && current.y == to.y) { break; }
+				glm::ivec2 neighbors[4] = {
+					{current.x + 1, current.y},
+					{current.x - 1, current.y},
+					{current.x, current.y + 1},
+					{current.x, current.y - 1}
+				};
+				for (auto n : neighbors)
+				{
+					if (!inBounds(n.x, n.y)) { continue; }
+					int idx = indexOf(n.x, n.y);
+					if (visited[idx]) { continue; }
+					if (!canCarveCorridorTile(n.x, n.y)) { continue; }
+					visited[idx] = 1;
+					prev[idx] = indexOf(current.x, current.y);
+					queue.push_back(n);
+				}
+			}
+			if (!visited[goalIndex]) { return false; }
+			std::vector<glm::ivec2> path;
+			int cur = goalIndex;
+			while (cur != -1)
+			{
+				int x = cur % sizeX;
+				int y = cur / sizeX;
+				path.push_back({x, y});
+				if (cur == startIndex) { break; }
+				cur = prev[cur];
+			}
+			if (path.empty()) { return false; }
+			std::reverse(path.begin(), path.end());
+			glm::ivec2 lastDir = {};
+			for (size_t i = 0; i < path.size(); i++)
+			{
+				glm::ivec2 current = path[i];
+				if (i + 1 < path.size())
+				{
+					lastDir = path[i + 1] - current;
+				}
+				else if (i > 0)
+				{
+					lastDir = current - path[i - 1];
+				}
+				paintCorridorTile(current.x, current.y, style);
+				if (lastDir.x != 0)
+				{
+					paintCorridorTile(current.x, current.y + 1, style);
+				}
+				else if (lastDir.y != 0)
+				{
+					paintCorridorTile(current.x + 1, current.y, style);
+				}
+			}
+			return true;
+		};
+		auto tryCarve = [&](bool horizontalFirst)
+		{
+			glm::ivec2 mid = horizontalFirst
+				? glm::ivec2{to.x, from.y}
+				: glm::ivec2{from.x, to.y};
+			if (!canCarveLine(from, mid) || !canCarveLine(mid, to)) { return false; }
+			carveLine(from, mid);
+			carveLine(mid, to);
+			return true;
+		};
 
 		if (getRandomChance(rng, 0.6f))
 		{
-			carveLine(from, {to.x, from.y});
-			carveLine({to.x, from.y}, to);
+			if (!tryCarve(true))
+			{
+				if (!tryCarve(false))
+				{
+					carvePathBfs();
+				}
+			}
 		}
 		else
 		{
-			carveLine(from, {from.x, to.y});
-			carveLine({from.x, to.y}, to);
+			if (!tryCarve(false))
+			{
+				if (!tryCarve(true))
+				{
+					carvePathBfs();
+				}
+			}
 		}
 	};
 
@@ -4271,4 +4394,7 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 			}
 		}
 	}
+
+	// Final pass to restore room perimeter walls and doors.
+	enforceRoomPerimeters();
 }

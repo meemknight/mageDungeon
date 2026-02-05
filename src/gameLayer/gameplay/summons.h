@@ -67,8 +67,8 @@ struct SummonHolder
 	void clear();
 };
 
-// Handles summon push against other entities (not the player).
-void resolveSummonEntityPush(EntityHolder &entityHolder, SummonHolder &summons);
+// Handles summon push against entities and player (player only pushes summons).
+void resolveSummonEntityPush(EntityHolder &entityHolder, SummonHolder &summons, Player &player);
 
 // Access the active summon holder.
 SummonHolder &getSummonHolder();
