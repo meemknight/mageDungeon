@@ -38,6 +38,18 @@ namespace EnemyTypes
 		enemy.behavior.shootPatterns = ShootPattern_None;
 	}
 
+	// Makes an enemy hesitate more often while chasing for a more docile personality.
+	inline void setupDocileGoblinBehavior(BasicMeleEnemy &enemy)
+	{
+		enemy.behavior.hesitationEnabled = true;
+		enemy.behavior.hesitationChance = 0.44f;
+		enemy.behavior.hesitationCheckMin = 0.5f;
+		enemy.behavior.hesitationCheckMax = 0.95f;
+		enemy.behavior.hesitationDurationMin = 0.3f;
+		enemy.behavior.hesitationDurationMax = 0.9f;
+		enemy.behavior.hesitationMinDistance = 1.7f;
+	}
+
 	struct SkeletonEnemy : public BasicMeleEnemy
 	{
 		SkeletonEnemy()
@@ -132,6 +144,7 @@ namespace EnemyTypes
 		{
 			setupEnemy(*this, getAssetManager().goblinArcher, 48);
 			setupRanged(*this, ShootPattern_TripleSpread, 9.0f, 1.0f);
+			setupDocileGoblinBehavior(*this);
 			behavior.stopChaseRange = 5.0f;
 		}
 	};
@@ -142,6 +155,7 @@ namespace EnemyTypes
 		{
 			setupEnemy(*this, getAssetManager().goblinSpearman, 48);
 			setupRanged(*this, ShootPattern_BurstForward, 9.0f, 1.0f);
+			setupDocileGoblinBehavior(*this);
 			behavior.orbitEnabled = true;
 			behavior.orbitRange = 5.0f;
 		}
@@ -165,6 +179,7 @@ namespace EnemyTypes
 		{
 			setupEnemy(*this, getAssetManager().goblinThief, 32);
 			setupRanged(*this, ShootPattern_Single, 7.0f, 1.0f);
+			setupDocileGoblinBehavior(*this);
 			behavior.orbitEnabled = true;
 			behavior.orbitRange = 5.0f;
 		}

@@ -73,6 +73,15 @@ struct EnemyBehavior
 	float shootHoldDurationMin = 1.0f;    // min pause duration
 	float shootHoldDurationMax = 2.0f;    // max pause duration
 
+	// Personality hesitation (docile behavior) configuration
+	bool hesitationEnabled = false;        // enables random pauses while chasing
+	float hesitationChance = 0.0f;         // chance per roll to pause and do nothing
+	float hesitationCheckMin = 0.6f;       // min seconds between hesitation rolls
+	float hesitationCheckMax = 1.0f;       // max seconds between hesitation rolls
+	float hesitationDurationMin = 0.25f;   // min hesitation duration
+	float hesitationDurationMax = 0.7f;    // max hesitation duration
+	float hesitationMinDistance = 1.8f;    // don't hesitate when already in melee range
+
 	// Hover melee (flying swoop) configuration
 	bool hoverMeleeEnabled = false;       // enable curved melee swoop
 	float hoverMeleeRange = 5.0f;         // trigger range for swoop
@@ -128,6 +137,9 @@ struct EnemyBehavior
 	bool shootHoldActive = false;
 	float shootHoldTimer = 0.0f;
 	float shootHoldCheckTimer = 0.0f;
+	bool hesitationActive = false;
+	float hesitationTimer = 0.0f;
+	float hesitationCheckTimer = 0.0f;
 
 	// Hover melee state
 	bool hoverMeleeActive = false;
@@ -206,6 +218,9 @@ struct EnemyBehavior
 		shootHoldActive = false;
 		shootHoldTimer = 0.0f;
 		shootHoldCheckTimer = 0.0f;
+		hesitationActive = false;
+		hesitationTimer = 0.0f;
+		hesitationCheckTimer = 0.0f;
 		hoverMeleeActive = false;
 			hoverMeleeTimer = 0.0f;
 			hoverMeleeActiveDuration = 0.0f;

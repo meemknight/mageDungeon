@@ -968,6 +968,55 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline ChainBoltSpell getChainBoltSpell()
+	{
+		ChainBoltSpell ret;
+		ret.element = Elements::Water;
+		ret.maxFireCount = 4;
+		ret.triggerDelay = 0.15f;
+		ret.boltCount = 4;
+		ret.boltDelay = 0.15f;
+		ret.minBoltDistance = 1.7f;
+		ret.maxBoltDistance = 3.4f;
+		ret.boltDamage = 4.0f;
+		ret.statusAmount = 0.0f;
+		ret.hitRadius = PIXEL_SIZE * 9.0f;
+		ret.targetRange = 3.6f;
+		ret.firstBoltSnapRange = 1.15f;
+		return ret;
+	}
+
+	inline ChainBoltSpell getFireChainBoltSpell()
+	{
+		ChainBoltSpell ret = getChainBoltSpell();
+		ret.element = Elements::Fire;
+		ret.boltDamage = 3.5f;
+		ret.statusAmount = 1.0f; // short fire debuff per hit
+		return ret;
+	}
+
+	inline ChainBoltSpell getBigChainBoltSpell()
+	{
+		ChainBoltSpell ret = getChainBoltSpell();
+		ret.element = Elements::Ice;
+		ret.maxFireCount = 5;
+		ret.boltCount = 5;
+		ret.boltDamage = 7.0f;
+		ret.secondaryDamage = 2.0f;
+		ret.particleSizeScale = 1.45f;
+		return ret;
+	}
+
+	inline ChainBoltSpell getBigFireChainBoltSpell()
+	{
+		ChainBoltSpell ret = getBigChainBoltSpell();
+		ret.element = Elements::Fire;
+		ret.boltDamage = 6.5f;
+		ret.secondaryDamage = 1.5f;
+		ret.statusAmount = 1.0f; // 1 second burning on both hits
+		return ret;
+	}
+
 		enum Spells
 		{
 		none,
@@ -1018,6 +1067,10 @@ namespace SpellTypes
 		iceWall,
 		boulder,
 		waterSiphon,
+		chainBolt,
+		chainBoltFire,
+		bigChainBolt,
+		bigChainBoltFire,
 		waterTsunami,
 		fireTsunami,
 		homingBoulders,

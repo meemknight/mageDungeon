@@ -28,6 +28,8 @@
 
 // Temporary: disable legacy random enemy spawning system.
 static const bool disableRandomEnemySpawns = true;
+static bool removeLightSystem = false;
+static bool disableSecondLightLayer = true;
 static const bool skipTutorialFloor = true;
 static const float trapRoomChance = 0.80f;
 static const float trapRoomTriggerMargin = 1.5f;
@@ -128,14 +130,15 @@ namespace
 
 bool GameLogic::init()
 {
-	
+
 	FloorGenerator floorGenerator;
 	floorGenerator.init();
 
 	std::vector<FloorConnection> connections;
 	if (worldSeed <= 0)
 	{
-		worldSeed = getRandomInt(std::ranlux24_base{std::random_device()()}, 1, 2000000000);
+		std::ranlux24_base localRng{std::random_device{}()};
+		worldSeed = getRandomInt(localRng, 1, 2000000000);
 	}
 
 	int sizeX = (currentFloorIndex == 0) ? tutorialFloorSizeX : dungeonFloorSizeX;
@@ -211,9 +214,9 @@ bool GameLogic::init()
 				glm::ivec2 pos = {x, y};
 				auto found = std::find_if(breakableDecorations.positions.begin(),
 					breakableDecorations.positions.end(), [&](const glm::ivec2 &other)
-					{
-						return other.x == pos.x && other.y == pos.y;
-					});
+				{
+					return other.x == pos.x && other.y == pos.y;
+				});
 				if (found == breakableDecorations.positions.end())
 				{
 					breakableDecorations.positions.push_back(pos);
@@ -239,6 +242,7 @@ bool GameLogic::init()
 	}
 
 	placeDoorCollisionBlocks();
+	roomLightingSystem.resetForFloor(map, floorInfo);
 
 	// Pick trap rooms (spawn/exit rooms are excluded).
 	trapRooms.clear();
@@ -356,7 +360,21 @@ bool GameLogic::init()
 	}
 
 	//wands[0] = getRandomWand(0, rng); //starter wand
-	wands[0] = getRandomWand(1, rng); //temporary give tier 1 wand to the player
+	//wands[0] = getRandomWand(1, rng); //temporary give tier 1 wand to the player
+	{
+		Wand elderWand;
+		elderWand.up = {WandSlotType::Element, Elements::Fire, 4};
+		elderWand.down = {WandSlotType::Element, Elements::Water, 4};
+		elderWand.left = {WandSlotType::Element, Elements::Earth, 4};
+		elderWand.right = {WandSlotType::Element, Elements::Ice, 4};
+		elderWand.alwaysCast = {WandSlotType::Disabled};
+		elderWand.maxMana = 15;
+		elderWand.manaChargeSpeed = 1.3f;
+		elderWand.maxElementsPerCast = 7;
+		elderWand.wandSprite = Wand::elderWand;
+		elderWand.sanitize();
+		wands[0] = elderWand;
+	}
 
 	hasWand[0] = true;
 	hasWand[1] = false;
@@ -382,6 +400,7 @@ bool GameLogic::init()
 	summons.clear();
 
 	particlePostProcessRenderer.init();
+	minimapSystem.init();
 	gameFbo.create(1, 1, true);
 	paletteEffect.loadPalette();
 
@@ -857,8 +876,20 @@ bool GameLogic::update(float deltaTime,
 		switchActiveWand(otherIndex, true);
 	}
 
-	if (input.buttons[platform::Button::Tab].pressed ||
-		input.controller.buttons[platform::Controller::Start].pressed)
+	if (input.buttons[platform::Button::M].pressed ||
+		input.controller.buttons[platform::Controller::Back].pressed)
+	{
+		mapViewerOpen = !mapViewerOpen;
+		if (mapViewerOpen)
+		{
+			inventoryOpen = false;
+			mapViewerCenter = player.physics.getPos();
+			mapViewerViewSize = minimapSystem.viewSize;
+		}
+	}
+
+	if (!mapViewerOpen && (input.buttons[platform::Button::Tab].pressed ||
+		input.controller.buttons[platform::Controller::Start].pressed))
 	{
 		inventoryOpen = !inventoryOpen;
 	}
@@ -868,7 +899,7 @@ bool GameLogic::update(float deltaTime,
 		draggingStoneOffset = {};
 		draggingStone = false;
 	}
-	if (!inventoryOpen)
+	if (!inventoryOpen && !mapViewerOpen)
 	{
 		quickActionEditIndex = -1;
 	}
@@ -878,7 +909,7 @@ bool GameLogic::update(float deltaTime,
 	}
 
 	int wandCountBefore = (hasWand[0] ? 1 : 0) + (hasWand[1] ? 1 : 0);
-	bool pickupInput = !inventoryOpen && !freeCameraMode && (input.buttons[platform::Button::E].pressed ||
+	bool pickupInput = !inventoryOpen && !mapViewerOpen && !freeCameraMode && (input.buttons[platform::Button::E].pressed ||
 		input.controller.buttons[platform::Controller::A].pressed);
 	if (pickupInput)
 	{
@@ -955,16 +986,23 @@ bool GameLogic::update(float deltaTime,
 
 	#pragma region imgui
 	//ImGui::ShowDemoWindow();
+	if (input.buttons[platform::Button::F7].pressed)
+	{
+		removeLightSystem = !removeLightSystem;
+	}
 	if (input.buttons[platform::Button::F8].pressed)
 	{
 		renderCollidersFlag = !renderCollidersFlag;
 	}
 	if (input.buttons[platform::Button::F9].pressed)
 	{
-		freeCameraMode = !freeCameraMode;
-		if (freeCameraMode)
+		if (!mapViewerOpen)
 		{
-			freeCameraPosition = renderer.currentCamera.position;
+			freeCameraMode = !freeCameraMode;
+			if (freeCameraMode)
+			{
+				freeCameraPosition = renderer.currentCamera.position;
+			}
 		}
 	}
 	if (input.buttons[platform::Button::F10].pressed)
@@ -985,6 +1023,8 @@ bool GameLogic::update(float deltaTime,
 		ImGui::Text("World Seed: %d", worldSeed);
 		ImGui::Text("Floor: %d / %d", currentFloorIndex, maxCombatFloors);
 		ImGui::Checkbox("Render Colliders", &renderCollidersFlag);
+		ImGui::Checkbox("Disable Light System", &removeLightSystem);
+		ImGui::Checkbox("Disable 0.8 Light Layer", &disableSecondLightLayer);
 		ImGui::Checkbox("Force Trap Difficulty", &forceTrapDifficulty);
 		ImGui::SliderInt("Trap Difficulty", &trapDifficulty, 0, 3);
 		if (ImGui::Button("Reset World (New Seed)"))
@@ -1278,6 +1318,7 @@ bool GameLogic::update(float deltaTime,
 		ImGui::End();
 		renderSpellRecepieWindow(spellsHolder, player, fireDirection);
 	}
+	roomLightingSystem.enableLowLightLayer = !disableSecondLightLayer;
 	if (resetWorld)
 	{
 		close();
@@ -1318,6 +1359,7 @@ bool GameLogic::update(float deltaTime,
 			input.buttons[platform::Button::S].pressed ||
 			input.buttons[platform::Button::Q].pressed ||
 			input.buttons[platform::Button::E].pressed ||
+			input.buttons[platform::Button::M].pressed ||
 			input.buttons[platform::Button::NR1].pressed ||
 			input.buttons[platform::Button::NR2].pressed ||
 			input.buttons[platform::Button::Tab].pressed;
@@ -1334,8 +1376,8 @@ bool GameLogic::update(float deltaTime,
 		}
 	}
 
-	// pause gameplay updates while inventory is open
-	float simDelta = inventoryOpen ? 0.0f : deltaTime;
+	// pause gameplay updates while inventory/map viewer is open
+	float simDelta = (inventoryOpen || mapViewerOpen) ? 0.0f : deltaTime;
 	wandHoverTimer += deltaTime;
 
 	{
@@ -1356,8 +1398,43 @@ bool GameLogic::update(float deltaTime,
 
 #pragma region input
 	{
+		if (mapViewerOpen)
+		{
+			float zoomInput = 0.0f;
+			if (platform::isButtonHeld(platform::Button::Q)) { zoomInput -= 1.0f; } // zoom in
+			if (platform::isButtonHeld(platform::Button::E)) { zoomInput += 1.0f; } // zoom out
+			if (zoomInput != 0.0f)
+			{
+				mapViewerViewSize += zoomInput * 16.0f * deltaTime;
+			}
+			float maxView = (float)std::max(map.size.x, map.size.y) + 8.0f;
+			mapViewerViewSize = glm::clamp(mapViewerViewSize, 20.0f, maxView);
 
-		if (freeCameraMode)
+			glm::vec2 camMove = {};
+			if (platform::isButtonHeld(platform::Button::A)) { camMove.x -= 1.0f; }
+			if (platform::isButtonHeld(platform::Button::D)) { camMove.x += 1.0f; }
+			if (platform::isButtonHeld(platform::Button::W)) { camMove.y -= 1.0f; }
+			if (platform::isButtonHeld(platform::Button::S)) { camMove.y += 1.0f; }
+			if (glm::length(camMove) > 0.0001f)
+			{
+				camMove = glm::normalize(camMove);
+				float moveSpeed = std::max(12.0f, mapViewerViewSize * 0.9f);
+				mapViewerCenter += camMove * moveSpeed * deltaTime;
+			}
+
+			float halfView = mapViewerViewSize * 0.5f;
+			float minX = halfView;
+			float minY = halfView;
+			float maxX = std::max(minX, (float)map.size.x - halfView);
+			float maxY = std::max(minY, (float)map.size.y - halfView);
+			mapViewerCenter.x = glm::clamp(mapViewerCenter.x, minX, maxX);
+			mapViewerCenter.y = glm::clamp(mapViewerCenter.y, minY, maxY);
+
+			fireInputActive = false;
+			usesController = false;
+		}
+
+		if (freeCameraMode && !mapViewerOpen)
 		{
 
 			const float freeCameraZoomTravelSeconds = 1.f;
@@ -1411,7 +1488,7 @@ bool GameLogic::update(float deltaTime,
 			usesController = false;
 		}
 
-		if (!inventoryOpen && !freeCameraMode)
+		if (!inventoryOpen && !mapViewerOpen && !freeCameraMode)
 		{
 			glm::vec2 move = {};
 			if (platform::isButtonHeld(platform::Button::A))
@@ -1911,15 +1988,7 @@ bool GameLogic::update(float deltaTime,
 
 	auto isPlayerClearlyInsideRoom = [&](const FloorRoom &room)
 	{
-		glm::vec4 aabb = player.physics.getAABB();
-		float inset = trapRoomTriggerMargin;
-		float minX = room.pos.x + inset;
-		float minY = room.pos.y + inset;
-		float maxX = room.pos.x + room.size.x - inset;
-		float maxY = room.pos.y + room.size.y - inset;
-		if (maxX <= minX || maxY <= minY) { return false; }
-		return aabb.x >= minX && aabb.y >= minY &&
-			(aabb.x + aabb.z) <= maxX && (aabb.y + aabb.w) <= maxY;
+		return isInsideRoomTriggerBounds(room, player.physics.getAABB(), trapRoomTriggerMargin);
 	};
 
 	auto roomHasLivingEnemies = [&](const FloorRoom &room)
@@ -1934,6 +2003,8 @@ bool GameLogic::update(float deltaTime,
 		}
 		return false;
 	};
+
+	roomLightingSystem.update(simDelta, map, floorInfo, player.physics.getAABB(), trapRoomTriggerMargin);
 
 	auto emitTrapSpawnParticles = [&](glm::vec2 pos, float duration)
 	{
@@ -2256,7 +2327,7 @@ bool GameLogic::update(float deltaTime,
 		glm::vec4 playerRect = player.physics.getAABB();
 		doorTriggerRects.clear();
 		glm::vec2 moveIntent = {};
-		if (!inventoryOpen)
+		if (!inventoryOpen && !mapViewerOpen)
 		{
 			if (platform::isButtonHeld(platform::Button::A)) { moveIntent.x -= 1.0f; }
 			if (platform::isButtonHeld(platform::Button::D)) { moveIntent.x += 1.0f; }
@@ -2449,7 +2520,7 @@ bool GameLogic::update(float deltaTime,
 	auto tryAdvanceFloor = [&]()
 	{
 		if (!floorInfo.exitPos) { return false; }
-		if (inventoryOpen) { return false; }
+		if (inventoryOpen || mapViewerOpen) { return false; }
 		bool wantsExit = input.buttons[platform::Button::E].pressed ||
 			input.controller.buttons[platform::Controller::A].pressed;
 		if (!wantsExit) { return false; }
@@ -2758,6 +2829,10 @@ bool GameLogic::update(float deltaTime,
 		}
 	}
 	damageViewerSystem.render(renderer, assetsManager.font);
+	if (!removeLightSystem)
+	{
+		roomLightingSystem.renderOverlay(renderer, map);
+	}
 
 #pragma endregion
 
@@ -2836,7 +2911,23 @@ bool GameLogic::update(float deltaTime,
 		renderer.popCamera();
 	}
 
-	if (!inventoryOpen)
+	if (mapViewerOpen)
+	{
+		const RoomLightingSystem *mapLighting = removeLightSystem ? nullptr : &roomLightingSystem;
+		minimapSystem.update(renderer, map, doorHolder, player.physics.getPos(), &floorInfo,
+			mapLighting,
+			&mapViewerCenter, &mapViewerViewSize);
+		minimapSystem.renderAt(renderer, {0, 0, (float)renderer.windowW, (float)renderer.windowH}, 0.84f);
+	}
+	else
+	{
+		const RoomLightingSystem *mapLighting = removeLightSystem ? nullptr : &roomLightingSystem;
+		minimapSystem.update(renderer, map, doorHolder, player.physics.getPos(), &floorInfo,
+			mapLighting);
+		minimapSystem.render(renderer);
+	}
+
+	if (!inventoryOpen && !mapViewerOpen)
 	{
 		// wand slots ui
 		{

@@ -19,6 +19,8 @@
 #include <gameplay/spellbookPage.h>
 #include "spellSelectionInputLogic.h"
 #include <gameplay/trapWaves.h>
+#include <gameplay/minimapSystem.h>
+#include <gameplay/roomLightingSystem.h>
 
 //this is an instance of the game.
 //This shouldn't load things like textures, those should be load outside
@@ -123,6 +125,7 @@ struct GameLogic
 	bool forceTrapDifficulty = false;
 	BreakableDecorationSystem breakableDecorations;
 	TrapSpikeSystem trapSpikes;
+	RoomLightingSystem roomLightingSystem;
 	Wand wands[2];
 	bool hasWand[2] = {};
 	int activeWandIndex = 0;
@@ -139,6 +142,7 @@ struct GameLogic
 
 	ParticleSystem particleSystem;
 	ParticlePostProcessRenderer particlePostProcessRenderer;
+	MinimapSystem minimapSystem; // offscreen minimap renderer
 	gl2d::FrameBuffer gameFbo;
 	PaletteEffect paletteEffect;
 	bool inventoryOpen = false;
@@ -165,6 +169,9 @@ struct GameLogic
 	// Free camera debug mode decouples camera from player.
 	bool freeCameraMode = false;
 	glm::vec2 freeCameraPosition = {};
+	bool mapViewerOpen = false; // fullscreen map overlay toggle
+	glm::vec2 mapViewerCenter = {};
+	float mapViewerViewSize = 56.0f;
 	bool inGame = 0;
 
 	std::ranlux24_base rng{std::random_device()()};

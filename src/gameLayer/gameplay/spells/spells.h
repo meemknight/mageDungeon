@@ -303,6 +303,402 @@ struct TsunamiSpell: public Spell
 	}
 };
 
+// Spawns chained lightning-like bolt nodes that jump forward or to nearby targets.
+struct ChainBoltSpell: public Spell
+{
+	// **configuration variables**
+	int boltCount = 4;
+	float boltDelay = 0.15f;
+	float minBoltDistance = 1.7f;
+	float maxBoltDistance = 3.4f;
+	float frontAngleDegrees = 24.0f;
+	float sideAngleMinDegrees = 34.0f;
+	float sideAngleMaxDegrees = 72.0f;
+	float boltDamage = 4.0f;
+	float secondaryDamage = 0.0f;
+	float statusAmount = 0.0f;
+	float hitRadius = PIXEL_SIZE * 9.0f;
+	float targetRange = 3.6f;
+	float firstBoltSnapRange = 1.15f;
+	float particleSizeScale = 1.0f;
+
+	// **state variables**
+	bool initialized = false;
+	glm::vec2 chainDir = {1.0f, 0.0f};
+	glm::vec2 lastBoltPos = {};
+	Entity *queuedTarget = nullptr;
+	std::vector<Entity *> hitEntities;
+	ParticleSettings burstParticle;
+	ParticleSettings nodeParticle;
+	ParticleSettings linkParticle;
+
+	ChainBoltSpell()
+	{
+		maxFireCount = 4;
+		triggerDelay = 0.15f;
+	}
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		(void)deltaTime;
+		(void)projectileHolder;
+		(void)player;
+
+		auto normalizeSafe = [](glm::vec2 v)
+		{
+			float l = glm::length(v);
+			if (l <= 0.0001f)
+			{
+				return glm::vec2(1.0f, 0.0f);
+			}
+			return v / l;
+		};
+
+		if (!initialized)
+		{
+			initialized = true;
+			maxFireCount = std::max(1, boltCount);
+			triggerDelay = boltDelay;
+
+			glm::vec2 aimDir = currentAimDir;
+			if (glm::length(aimDir) <= 0.0001f)
+			{
+				aimDir = createAimDir;
+			}
+			chainDir = normalizeSafe(aimDir);
+			lastBoltPos = createPos;
+			hitEntities.clear();
+
+			glm::vec4 startColor = elementToSecondaryColor(element);
+			glm::vec4 endColor = elementToColor(element);
+			startColor.a = 1.0f;
+			endColor.a = 0.78f;
+			float sizeScale = std::max(0.2f, particleSizeScale);
+
+			burstParticle = getLightningZapParticle(startColor, endColor);
+			burstParticle.onCreateCount = 14;
+			burstParticle.particleLifeTime = {0.12f, 0.26f};
+			burstParticle.velocityX = glm::vec2{-105.0f, 105.0f} * PIXEL_SIZE;
+			burstParticle.velocityY = glm::vec2{-105.0f, 105.0f} * PIXEL_SIZE;
+			burstParticle.createApearence.size = glm::vec2{0.75f, 3.0f} * PIXEL_SIZE * sizeScale;
+			burstParticle.endApearence.size = glm::vec2{0.2f, 1.1f} * PIXEL_SIZE * sizeScale;
+			burstParticle.animationType = ParticleSettings::ANIMATION_TYPES::animationZigZag;
+			burstParticle.animationSpeed = {-18.0f, 18.0f};
+			burstParticle.animationScaleX = {PIXEL_SIZE * 2.0f, PIXEL_SIZE * 7.0f};
+			burstParticle.animationScaleY = {PIXEL_SIZE * 0.8f, PIXEL_SIZE * 3.0f};
+			burstParticle.animationScaleX *= sizeScale;
+			burstParticle.animationScaleY *= sizeScale;
+			burstParticle.folowParent = false;
+
+			nodeParticle = getOrbitParticle(startColor, endColor);
+			nodeParticle.onCreateCount = 7;
+			nodeParticle.particleLifeTime = {0.22f, 0.38f};
+			nodeParticle.velocityX = {0.0f, 0.0f};
+			nodeParticle.velocityY = {0.0f, 0.0f};
+			nodeParticle.dragX = {0.0f, 0.0f};
+			nodeParticle.dragY = {0.0f, 0.0f};
+			nodeParticle.animationSpeed = {-12.0f, 12.0f};
+			nodeParticle.animationScaleX = {PIXEL_SIZE * 2.1f, PIXEL_SIZE * 5.4f};
+			nodeParticle.animationScaleY = {PIXEL_SIZE * 2.1f, PIXEL_SIZE * 5.4f};
+			nodeParticle.createApearence.size *= sizeScale;
+			nodeParticle.endApearence.size *= sizeScale;
+			nodeParticle.animationScaleX *= sizeScale;
+			nodeParticle.animationScaleY *= sizeScale;
+			nodeParticle.folowParent = false;
+
+			linkParticle = getLightningZapParticle(startColor, endColor);
+			linkParticle.onCreateCount = 2;
+			linkParticle.particleLifeTime = {0.09f, 0.17f};
+			linkParticle.velocityX = glm::vec2{-14.0f, 14.0f} * PIXEL_SIZE;
+			linkParticle.velocityY = glm::vec2{-14.0f, 14.0f} * PIXEL_SIZE;
+			linkParticle.createApearence.size = glm::vec2{0.65f, 2.2f} * PIXEL_SIZE * sizeScale;
+			linkParticle.endApearence.size = glm::vec2{0.24f, 0.85f} * PIXEL_SIZE * sizeScale;
+			linkParticle.animationType = ParticleSettings::ANIMATION_TYPES::animationZigZag;
+			linkParticle.animationSpeed = {-12.0f, 12.0f};
+			linkParticle.animationScaleX = {PIXEL_SIZE * 1.0f, PIXEL_SIZE * 4.0f};
+			linkParticle.animationScaleY = {PIXEL_SIZE * 0.4f, PIXEL_SIZE * 1.8f};
+			linkParticle.animationScaleX *= sizeScale;
+			linkParticle.animationScaleY *= sizeScale;
+			linkParticle.folowParent = false;
+		}
+
+		auto isBlocked = [&](glm::vec2 worldPos)
+		{
+			glm::ivec2 tile = WorldToTile(worldPos);
+			if (tile.x < 0 || tile.y < 0 || tile.x >= map.size.x || tile.y >= map.size.y)
+			{
+				return true;
+			}
+			return map.isCollidableAtPosSafe(tile.x, tile.y);
+		};
+
+		auto clampDistanceToWalls = [&](glm::vec2 start, glm::vec2 dir, float wantedDistance)
+		{
+			const float step = PIXEL_SIZE * 2.0f;
+			float safeDistance = 0.0f;
+			for (float t = step; t <= wantedDistance; t += step)
+			{
+				glm::vec2 checkPos = start + dir * t;
+				if (isBlocked(checkPos))
+				{
+					break;
+				}
+				safeDistance = t;
+			}
+			return safeDistance;
+		};
+
+		auto pickArcDirection = [&]()
+		{
+			float angleDegrees = 0.0f;
+			if (getRandomChance(rng, 0.58f))
+			{
+				angleDegrees = getRandomFloat(rng, -frontAngleDegrees, frontAngleDegrees);
+			}
+			else
+			{
+				float sideAngle = getRandomFloat(rng, sideAngleMinDegrees, sideAngleMaxDegrees);
+				angleDegrees = getRandomChance(rng, 0.5f) ? sideAngle : -sideAngle;
+			}
+
+			float angleRad = glm::radians(angleDegrees);
+			float c = std::cos(angleRad);
+			float s = std::sin(angleRad);
+			glm::vec2 dir = {
+				chainDir.x * c - chainDir.y * s,
+				chainDir.x * s + chainDir.y * c
+			};
+			return normalizeSafe(dir);
+		};
+
+		auto pointerStillValid = [&](Entity *entity)
+		{
+			if (!entity) { return false; }
+			for (auto &e : entityHolder.entities)
+			{
+				if (e.get() == entity)
+				{
+					return !e->dying;
+				}
+			}
+			return false;
+		};
+
+		auto findNearbyTarget = [&](glm::vec2 origin, float maxRange)
+		{
+			auto wasHitBefore = [&](Entity *entity)
+			{
+				for (auto *hit : hitEntities)
+				{
+					if (hit == entity)
+					{
+						return true;
+					}
+				}
+				return false;
+			};
+
+			float range2 = maxRange * maxRange;
+			Entity *bestFreshEntity = nullptr;
+			float bestFreshDist2 = range2;
+			Entity *bestEntity = nullptr;
+			float bestDist2 = range2;
+			for (auto &e : entityHolder.entities)
+			{
+				if (e->dying) { continue; }
+				glm::vec2 diff = e->physics.getPos() - origin;
+				float dist2 = glm::dot(diff, diff);
+				if (dist2 > range2)
+				{
+					continue;
+				}
+
+				if (!HasLineOfSightTiles(map, WorldToTile(origin), WorldToTile(e->physics.getPos())))
+				{
+					continue;
+				}
+
+				if (dist2 <= bestDist2)
+				{
+					bestDist2 = dist2;
+					bestEntity = e.get();
+				}
+
+				if (!wasHitBefore(e.get()) && dist2 <= bestFreshDist2)
+				{
+					bestFreshDist2 = dist2;
+					bestFreshEntity = e.get();
+				}
+			}
+			if (bestFreshEntity)
+			{
+				return bestFreshEntity;
+			}
+			return bestEntity;
+		};
+
+		glm::vec2 spawnPos = lastBoltPos;
+		glm::vec2 stepDir = chainDir;
+		bool usedTarget = false;
+		if (isFirstTime())
+		{
+			// First bolt keeps cast direction unless an enemy is almost on top of the player.
+			queuedTarget = findNearbyTarget(lastBoltPos, firstBoltSnapRange);
+		}
+		else
+		{
+			queuedTarget = findNearbyTarget(lastBoltPos, targetRange);
+		}
+		if (pointerStillValid(queuedTarget))
+		{
+			glm::vec2 targetPos = queuedTarget->physics.getPos();
+			glm::vec2 toTarget = targetPos - lastBoltPos;
+			float targetDist = glm::length(toTarget);
+			if (targetDist <= targetRange &&
+				HasLineOfSightTiles(map, WorldToTile(lastBoltPos), WorldToTile(targetPos)))
+			{
+				spawnPos = targetPos;
+				stepDir = normalizeSafe(toTarget);
+				usedTarget = true;
+			}
+		}
+		queuedTarget = nullptr;
+
+		if (!usedTarget)
+		{
+			if (isFirstTime())
+			{
+				stepDir = chainDir;
+			}
+			else
+			{
+				stepDir = pickArcDirection();
+			}
+			float wantedDistance = getRandomFloat(rng, minBoltDistance, maxBoltDistance);
+			float safeDistance = clampDistanceToWalls(lastBoltPos, stepDir, wantedDistance);
+			spawnPos = lastBoltPos + stepDir * safeDistance;
+		}
+
+		// Emit connecting sparks to sell the electric arc between bolt nodes.
+		glm::vec2 chainSegment = spawnPos - lastBoltPos;
+		float segmentLength = glm::length(chainSegment);
+		if (segmentLength > 0.0001f)
+		{
+			glm::vec2 segDir = chainSegment / segmentLength;
+			glm::vec2 segPerp = {-segDir.y, segDir.x};
+			int segmentCount = std::max(3, (int)std::ceil(segmentLength / (PIXEL_SIZE * 5.0f)));
+			for (int i = 0; i <= segmentCount; i++)
+			{
+				float t = (float)i / (float)segmentCount;
+				glm::vec2 p = glm::mix(lastBoltPos, spawnPos, t);
+				if (i != 0 && i != segmentCount)
+				{
+					p += segPerp * getRandomFloat(rng, -PIXEL_SIZE * 2.2f, PIXEL_SIZE * 2.2f);
+				}
+				mainParticleSystem.emitParticles(linkParticle, p, rng, p);
+			}
+		}
+
+		mainParticleSystem.emitParticles(nodeParticle, spawnPos, rng, spawnPos);
+		mainParticleSystem.emitParticles(burstParticle, spawnPos, rng, spawnPos);
+
+		// Each bolt can damage a primary target and an optional weaker secondary target.
+		Entity *hitEntity = nullptr;
+		Entity *secondHitEntity = nullptr;
+		float bestHitDist2 = 999999.0f;
+		float secondBestHitDist2 = 999999.0f;
+		for (auto &e : entityHolder.entities)
+		{
+			if (e->dying) { continue; }
+			float hitRange = hitRadius + std::max(e->physics.transform.size.x,
+				e->physics.transform.size.y) * 0.35f;
+			float hitRange2 = hitRange * hitRange;
+			glm::vec2 diff = e->physics.getPos() - spawnPos;
+			float dist2 = glm::dot(diff, diff);
+			if (dist2 > hitRange2)
+			{
+				continue;
+			}
+			if (dist2 < bestHitDist2)
+			{
+				secondBestHitDist2 = bestHitDist2;
+				secondHitEntity = hitEntity;
+				bestHitDist2 = dist2;
+				hitEntity = e.get();
+			}
+			else if (dist2 < secondBestHitDist2)
+			{
+				secondBestHitDist2 = dist2;
+				secondHitEntity = e.get();
+			}
+		}
+
+		auto applyHitToEntity = [&](Entity *target, float damage)
+		{
+			if (!target || damage <= 0.0f)
+			{
+				return;
+			}
+
+			HitStats hitStats;
+			hitStats.damage = damage;
+			hitStats.pushBack = 0.0f;
+			glm::vec2 pushBack = {};
+			target->life.computeHit(hitStats, element, target->element, stepDir, pushBack);
+			if (hitStats.damage > 0.0f)
+			{
+				target->onDamaged(hitStats.damage);
+			}
+			target->physics.velocity += pushBack;
+			if (statusAmount > 0.0f)
+			{
+				addStatusEffectFromElement(target->statusEffects, target->statusImmunities,
+					element, statusAmount);
+			}
+
+			glm::vec2 damagePos = target->physics.getPos();
+			damagePos.y -= target->physics.transform.size.y * 0.6f;
+			getDamageViewerSystem().addDamage(hitStats.damage, damagePos);
+
+			bool alreadyStored = false;
+			for (auto *hit : hitEntities)
+			{
+				if (hit == target)
+				{
+					alreadyStored = true;
+					break;
+				}
+			}
+			if (!alreadyStored)
+			{
+				hitEntities.push_back(target);
+			}
+		};
+
+		if (hitEntity)
+		{
+			applyHitToEntity(hitEntity, boltDamage);
+			if (secondHitEntity && secondHitEntity != hitEntity)
+			{
+				applyHitToEntity(secondHitEntity, secondaryDamage);
+			}
+		}
+
+		queuedTarget = findNearbyTarget(spawnPos, targetRange);
+
+		glm::vec2 forwardStep = spawnPos - lastBoltPos;
+		if (glm::length(forwardStep) > 0.0001f)
+		{
+			chainDir = normalizeSafe(forwardStep);
+		}
+		lastBoltPos = spawnPos;
+
+		return true;
+	}
+};
+
 // Spawns projectiles into the standby ring around the player.
 struct StandbyProjectilesSpell: public Spell
 {

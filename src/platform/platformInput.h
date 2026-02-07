@@ -29,6 +29,7 @@ namespace platform
 			Tab,
 			LeftShift,
 			LeftAlt,
+			F7,
 			F8,
 			F9,
 			F10,

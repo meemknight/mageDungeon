@@ -57,6 +57,10 @@ namespace SpellTypes
 			{Elements::Fire,Elements::Ice},	//iceWall,
 			{Elements::Fire,Elements::Water},	//boulder,
 			{Elements::Water,Elements::Water,Elements::Water},	//waterSiphon,
+			{Elements::Ice,Elements::Ice,Elements::Water},	//chainBolt,
+			{Elements::Ice,Elements::Ice,Elements::Fire},	//chainBoltFire,
+			{Elements::Ice,Elements::Ice,Elements::Water,Elements::Water},	//bigChainBolt,
+			{Elements::Ice,Elements::Ice,Elements::Fire,Elements::Fire},	//bigChainBoltFire,
 			{Elements::Water,Elements::Water,Elements::Water,Elements::Water},	//waterTsunami,
 			{Elements::Water,Elements::Water,Elements::Water,Elements::Fire},	//fireTsunami,
 			{Elements::Water,Elements::Fire,Elements::Water},	//homingBoulders,
@@ -189,6 +193,10 @@ namespace SpellTypes
 			"Ice Wall",
 			"Boulder",
 			"Water Siphon",
+			"Water Chain Bolt",
+			"Fire Chain Bolt",
+			"Big Ice Chain Bolt",
+			"Big Fire Chain Bolt",
 			"Tsunami",
 			"Fire Tsunami",
 			"Homing Boulders",
@@ -409,6 +417,22 @@ namespace SpellTypes
 
 		case waterSiphon:
 		return std::make_unique<WaterSiphonSpell>(getWaterSiphonSpell());
+		break;
+
+		case chainBolt:
+		return std::make_unique<ChainBoltSpell>(getChainBoltSpell());
+		break;
+
+		case chainBoltFire:
+		return std::make_unique<ChainBoltSpell>(getFireChainBoltSpell());
+		break;
+
+		case bigChainBolt:
+		return std::make_unique<ChainBoltSpell>(getBigChainBoltSpell());
+		break;
+
+		case bigChainBoltFire:
+		return std::make_unique<ChainBoltSpell>(getBigFireChainBoltSpell());
 		break;
 
 		case waterTsunami:

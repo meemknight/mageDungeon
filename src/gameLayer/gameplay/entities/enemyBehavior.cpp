@@ -321,8 +321,55 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		}
 	}
 
+	// Personality hesitation: temporarily stand still to make behavior less aggressive.
+	if (hesitationActive)
+	{
+		const bool canKeepHesitating = hesitationEnabled && chasing && canSeeTarget &&
+			distanceToTarget > hesitationMinDistance && !shootHoldActive &&
+			!hoverMeleeActive && !dashActive;
+		if (!canKeepHesitating)
+		{
+			hesitationActive = false;
+			hesitationTimer = 0.0f;
+		}
+		else
+		{
+			hesitationTimer -= deltaTime;
+			if (hesitationTimer <= 0.0f)
+			{
+				hesitationActive = false;
+				hesitationTimer = 0.0f;
+			}
+		}
+	}
+
+	if (!hesitationActive)
+	{
+		const bool canRollHesitation = hesitationEnabled && chasing && canSeeTarget &&
+			distanceToTarget > hesitationMinDistance && !shootHoldActive &&
+			!hoverMeleeActive && !dashActive;
+		if (canRollHesitation)
+		{
+			hesitationCheckTimer -= deltaTime;
+			if (hesitationCheckTimer <= 0.0f)
+			{
+				hesitationCheckTimer = getRandomFloat(rng, hesitationCheckMin, hesitationCheckMax);
+				if (getRandomChance(rng, hesitationChance))
+				{
+					hesitationActive = true;
+					hesitationTimer = getRandomFloat(rng, hesitationDurationMin, hesitationDurationMax);
+				}
+			}
+		}
+		else
+		{
+			hesitationCheckTimer = 0.0f;
+		}
+	}
+
 	// Trigger a dash strike when close and in LOS
-	if (!dashActive && !hoverMeleeActive && !shootHoldActive && dashEnabled && chasing && canSeeTarget &&
+	if (!dashActive && !hoverMeleeActive && !shootHoldActive && !hesitationActive &&
+		dashEnabled && chasing && canSeeTarget &&
 		distanceToTarget <= dashRange && dashCooldownTimer <= 0.0f)
 	{
 		float chance = dashChance * deltaTime;
@@ -340,7 +387,8 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 	}
 
 	// Trigger a hover melee swoop when close and in LOS
-	if (!hoverMeleeActive && !dashActive && !shootHoldActive && hoverMeleeEnabled && chasing && canSeeTarget &&
+	if (!hoverMeleeActive && !dashActive && !shootHoldActive && !hesitationActive &&
+		hoverMeleeEnabled && chasing && canSeeTarget &&
 		distanceToTarget <= hoverMeleeRange && hoverMeleeCooldownTimer <= 0.0f)
 	{
 		float chance = hoverMeleeChance * deltaTime;
@@ -589,13 +637,13 @@ glm::vec2 EnemyBehavior::update(float deltaTime, Map &map, std::ranlux24_base &r
 		}
 	}
 
-	if (shootHoldActive)
+	if (shootHoldActive || hesitationActive)
 	{
 		moveDir = glm::vec2(0.0f);
 	}
 
 	// Determine if we should melee or shoot
-	if (!firingBurstShot && chasing && canSeeTarget && !hoverMeleeActive && !dashActive)
+	if (!hesitationActive && !firingBurstShot && chasing && canSeeTarget && !hoverMeleeActive && !dashActive)
 	{
 		if (!shootHoldActive && distanceToTarget <= meleeRange)
 		{
