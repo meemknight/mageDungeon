@@ -2648,3 +2648,420 @@ struct WaterSiphonSpell: public Spell
 		renderer.renderRectangleOutline(rect, Colors_Blue, 0.02f, {}, angle);
 	}
 };
+
+// Locks onto one target in front and channels a charged water-electric beam.
+struct ConcentratedWaterBeamSpell: public Spell
+{
+	// **configuration variables**
+	float maxRange = 8.0f;
+	float breakRangeBonus = 2.0f;
+	float aimDotThreshold = 0.55f;
+	float chargeDuration = 2.5f;
+	float finalDamage = 20.0f;
+	float beamEmitInterval = 0.03f;
+	float targetAtomInterval = 0.12f;
+	float arcWaveAmplitude = PIXEL_SIZE * 1.8f;
+	float arcWaveFrequency = 2.2f;
+	float arcWaveSpeed = 4.2f;
+
+	// **state variables**
+	bool initialized = false;
+	Entity *lockedTarget = nullptr;
+	float chargeTimer = 0.0f;
+	float beamTimer = 0.0f;
+	float targetAtomTimer = 0.0f;
+	float arcWaveTime = 0.0f;
+	glm::vec2 castDir = {1.0f, 0.0f};
+	glm::vec2 renderOrigin = {};
+	ParticleSystem beamParticles;
+	ParticleSettings beamArcParticle;
+	ParticleSettings targetAtomParticle;
+	ParticleSettings failSparkParticle;
+	ParticleSettings explosionParticle;
+	ParticleSettings shockParticle;
+
+	// Tracks currently locked targets so multiple beams try to split targets.
+	static inline std::vector<std::pair<const ConcentratedWaterBeamSpell *, Entity *>> reservedTargets = {};
+
+	void clearTargetReservation()
+	{
+		for (int i = 0; i < (int)reservedTargets.size(); i++)
+		{
+			if (reservedTargets[i].first == this)
+			{
+				reservedTargets[i] = reservedTargets.back();
+				reservedTargets.pop_back();
+				--i;
+			}
+		}
+	}
+
+	void reserveTarget(Entity *target)
+	{
+		clearTargetReservation();
+		if (target)
+		{
+			reservedTargets.push_back({this, target});
+		}
+	}
+
+	bool isTargetReservedByAnother(Entity *target) const
+	{
+		for (auto &entry : reservedTargets)
+		{
+			if (entry.first != this && entry.second == target)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	ConcentratedWaterBeamSpell()
+	{
+		continuousUpdate = true;
+		continuousUpdateTimer = chargeDuration + 0.6f;
+		beamParticles.maxCount = 1800;
+	}
+
+	~ConcentratedWaterBeamSpell() override
+	{
+		clearTargetReservation();
+	}
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		(void)projectileHolder;
+
+		auto normalizeSafe = [](glm::vec2 v)
+		{
+			float len = glm::length(v);
+			if (len <= 0.0001f)
+			{
+				return glm::vec2(1.0f, 0.0f);
+			}
+			return v / len;
+		};
+
+		auto pointerStillValid = [&](Entity *entity)
+		{
+			if (!entity) { return false; }
+			for (auto &e : entityHolder.entities)
+			{
+				if (e.get() == entity)
+				{
+					return !e->dying;
+				}
+			}
+			return false;
+		};
+
+		auto emitFailFlash = [&](glm::vec2 origin, glm::vec2 dir, const ParticleSettings &emitParticle)
+		{
+			mainParticleSystem.emitParticles(emitParticle, origin, rng, origin);
+			for (int i = 0; i < 6; i++)
+			{
+				float along = getRandomFloat(rng, PIXEL_SIZE * 3.0f, PIXEL_SIZE * 15.0f);
+				glm::vec2 p = origin + dir * along;
+				p += glm::vec2(
+					getRandomFloat(rng, -PIXEL_SIZE * 3.0f, PIXEL_SIZE * 3.0f),
+					getRandomFloat(rng, -PIXEL_SIZE * 3.0f, PIXEL_SIZE * 3.0f)
+				);
+				mainParticleSystem.emitParticles(emitParticle, p, rng, p);
+			}
+		};
+
+		renderOrigin = player.physics.getPos();
+
+		if (!initialized)
+		{
+			initialized = true;
+			beamParticles.particles.clear();
+			continuousUpdateTimer = chargeDuration + 0.6f;
+			chargeTimer = 0.0f;
+			beamTimer = 0.0f;
+			targetAtomTimer = 0.0f;
+			arcWaveTime = getRandomFloat(rng, 0.0f, 6.2831853f);
+
+			castDir = currentAimDir;
+			if (glm::length(castDir) <= 0.0001f)
+			{
+				castDir = createAimDir;
+			}
+			castDir = normalizeSafe(castDir);
+
+			glm::vec4 waterStart = elementToSecondaryColor(Elements::Water);
+			glm::vec4 waterEnd = elementToColor(Elements::Water);
+			waterStart.a = 0.8f;
+			waterEnd.a = 0.45f;
+			glm::vec4 electricStart = {0.75f, 1.0f, 1.0f, 0.95f};
+			glm::vec4 electricEnd = {0.35f, 0.85f, 1.0f, 0.55f};
+
+			beamArcParticle = getLightningZapParticle(electricStart, electricEnd);
+			beamArcParticle.onCreateCount = 1;
+			beamArcParticle.particleLifeTime = {0.08f, 0.16f};
+			beamArcParticle.velocityX = glm::vec2{-16.0f, 16.0f} * PIXEL_SIZE;
+			beamArcParticle.velocityY = glm::vec2{-16.0f, 16.0f} * PIXEL_SIZE;
+			beamArcParticle.createApearence.size = glm::vec2{0.75f, 2.6f} * PIXEL_SIZE;
+			beamArcParticle.endApearence.size = glm::vec2{0.22f, 0.95f} * PIXEL_SIZE;
+			beamArcParticle.animationType = ParticleSettings::ANIMATION_TYPES::animationZigZag;
+			beamArcParticle.animationSpeed = {-12.0f, 12.0f};
+			beamArcParticle.animationScaleX = {PIXEL_SIZE * 1.3f, PIXEL_SIZE * 4.8f};
+			beamArcParticle.animationScaleY = {PIXEL_SIZE * 1.3f, PIXEL_SIZE * 4.8f};
+			beamArcParticle.folowParent = false;
+
+			targetAtomParticle = getOrbitParticle(electricStart, waterEnd);
+			targetAtomParticle.onCreateCount = 1;
+			targetAtomParticle.particleLifeTime = {0.75f, 1.2f};
+			targetAtomParticle.velocityX = {0.0f, 0.0f};
+			targetAtomParticle.velocityY = {0.0f, 0.0f};
+			targetAtomParticle.dragX = {0.0f, 0.0f};
+			targetAtomParticle.dragY = {0.0f, 0.0f};
+			targetAtomParticle.createApearence.size = glm::vec2{1.05f, 2.45f} * PIXEL_SIZE;
+			targetAtomParticle.endApearence.size = glm::vec2{0.42f, 1.25f} * PIXEL_SIZE;
+			targetAtomParticle.animationType = ParticleSettings::ANIMATION_TYPES::animationAtom;
+			targetAtomParticle.animationSpeed = {8.0f, 13.0f};
+			targetAtomParticle.animationScaleX = {PIXEL_SIZE * 4.2f, PIXEL_SIZE * 7.6f};
+			targetAtomParticle.animationScaleY = {PIXEL_SIZE * 4.2f, PIXEL_SIZE * 7.6f};
+			targetAtomParticle.animationPhase = {0.0f, 6.2831853f};
+			targetAtomParticle.folowParent = false;
+
+			failSparkParticle = getLightningZapParticle(electricStart, electricEnd);
+			failSparkParticle.onCreateCount = 4;
+			failSparkParticle.particleLifeTime = {0.08f, 0.18f};
+			failSparkParticle.createApearence.size = glm::vec2{0.8f, 2.9f} * PIXEL_SIZE;
+			failSparkParticle.endApearence.size = glm::vec2{0.22f, 1.0f} * PIXEL_SIZE;
+			failSparkParticle.folowParent = false;
+
+			explosionParticle = getSparkBurstParticle(electricStart, electricEnd);
+			explosionParticle.onCreateCount = 52;
+			explosionParticle.particleLifeTime = {0.3f, 0.58f};
+			explosionParticle.velocityX = glm::vec2{-48.0f, 48.0f} * PIXEL_SIZE;
+			explosionParticle.velocityY = glm::vec2{-48.0f, 48.0f} * PIXEL_SIZE;
+			explosionParticle.createApearence.size = glm::vec2{1.75f, 4.6f} * PIXEL_SIZE;
+			explosionParticle.endApearence.size = glm::vec2{0.65f, 2.1f} * PIXEL_SIZE;
+			explosionParticle.folowParent = false;
+
+			shockParticle = getTeleportPuffParticle(waterStart, electricEnd);
+			shockParticle.onCreateCount = 30;
+			shockParticle.particleLifeTime = {0.32f, 0.68f};
+			shockParticle.velocityX = glm::vec2{-20.0f, 20.0f} * PIXEL_SIZE;
+			shockParticle.velocityY = glm::vec2{-20.0f, 20.0f} * PIXEL_SIZE;
+			shockParticle.createApearence.size = glm::vec2{2.7f, 5.1f} * PIXEL_SIZE;
+			shockParticle.endApearence.size = glm::vec2{1.0f, 3.0f} * PIXEL_SIZE;
+			shockParticle.folowParent = false;
+
+			Entity *bestTarget = nullptr;
+			float bestScore = -999999.0f;
+			Entity *bestUntakenTarget = nullptr;
+			float bestUntakenScore = -999999.0f;
+			for (auto &e : entityHolder.entities)
+			{
+				if (e->dying) { continue; }
+				glm::vec2 toEnemy = e->physics.getPos() - renderOrigin;
+				float dist = glm::length(toEnemy);
+				if (dist <= 0.0001f || dist > maxRange) { continue; }
+				glm::vec2 toEnemyDir = toEnemy / dist;
+				float dotValue = glm::dot(castDir, toEnemyDir);
+				if (dotValue < aimDotThreshold) { continue; }
+				if (!HasLineOfSightGrid(map, renderOrigin, e->physics.getPos())) { continue; }
+				float score = dotValue * 2.4f - (dist / maxRange);
+				if (score > bestScore)
+				{
+					bestScore = score;
+					bestTarget = e.get();
+				}
+
+				if (!isTargetReservedByAnother(e.get()) && score > bestUntakenScore)
+				{
+					bestUntakenScore = score;
+					bestUntakenTarget = e.get();
+				}
+			}
+
+			lockedTarget = bestUntakenTarget ? bestUntakenTarget : bestTarget;
+			reserveTarget(lockedTarget);
+			if (!lockedTarget)
+			{
+				// No lock target: vent a short failed beam forward with wall stop.
+				ParticleSettings failParticleLong = failSparkParticle;
+				failParticleLong.particleLifeTime += glm::vec2(0.5f, 0.5f);
+
+				float wantedDistance = getRandomFloat(rng, 3.7f, 4.3f);
+				float safeDistance = 0.0f;
+				for (float t = 0.2f; t <= wantedDistance; t += 0.2f)
+				{
+					glm::vec2 checkPos = renderOrigin + castDir * t;
+					glm::ivec2 tile = WorldToTile(checkPos);
+					if (tile.x < 0 || tile.y < 0 || tile.x >= map.size.x || tile.y >= map.size.y)
+					{
+						break;
+					}
+					if (map.isCollidableAtPosSafe(tile.x, tile.y))
+					{
+						break;
+					}
+					safeDistance = t;
+				}
+
+				glm::vec2 failEnd = renderOrigin + castDir * safeDistance;
+				glm::vec2 segment = failEnd - renderOrigin;
+				float segmentLength = glm::length(segment);
+				if (segmentLength > 0.0001f)
+				{
+					glm::vec2 segDir = segment / segmentLength;
+					glm::vec2 segPerp = {-segDir.y, segDir.x};
+					int segmentCount = std::max(4,
+						(int)std::ceil(segmentLength / (PIXEL_SIZE * 4.5f)));
+					for (int i = 0; i <= segmentCount; i++)
+					{
+						float t = (float)i / (float)segmentCount;
+						glm::vec2 p = glm::mix(renderOrigin, failEnd, t);
+						if (i != 0 && i != segmentCount)
+						{
+							p += segPerp * getRandomFloat(rng, -PIXEL_SIZE * 1.6f, PIXEL_SIZE * 1.6f);
+						}
+						mainParticleSystem.emitParticles(failParticleLong, p, rng, p);
+					}
+				}
+
+				emitFailFlash(renderOrigin, castDir, failParticleLong);
+				mainParticleSystem.emitParticles(failParticleLong, failEnd, rng, failEnd);
+				clearTargetReservation();
+				return false;
+			}
+		}
+
+		if (!pointerStillValid(lockedTarget))
+		{
+			mainParticleSystem.emitParticles(failSparkParticle, renderOrigin, rng, renderOrigin);
+			clearTargetReservation();
+			return false;
+		}
+
+		glm::vec2 targetPos = lockedTarget->physics.getPos();
+		float currentDist = glm::length(targetPos - renderOrigin);
+		if (currentDist > (maxRange + breakRangeBonus) || !HasLineOfSightGrid(map, renderOrigin, targetPos))
+		{
+			mainParticleSystem.emitParticles(failSparkParticle, targetPos, rng, targetPos);
+			clearTargetReservation();
+			return false;
+		}
+
+		chargeTimer += deltaTime;
+		float chargeAlpha = glm::clamp(chargeTimer / std::max(0.01f, chargeDuration), 0.0f, 1.0f);
+		arcWaveTime += deltaTime * arcWaveSpeed;
+
+		auto emitBeamArc = [&](const ParticleSettings &arcParticle)
+		{
+			glm::vec2 segment = targetPos - renderOrigin;
+			float segmentLength = glm::length(segment);
+			if (segmentLength <= 0.0001f)
+			{
+				return;
+			}
+
+			glm::vec2 segDir = segment / segmentLength;
+			glm::vec2 segPerp = {-segDir.y, segDir.x};
+			int segmentCount = std::max(6,
+				(int)std::ceil(segmentLength / (PIXEL_SIZE * 5.0f)));
+			float phaseOffset = getRandomFloat(rng, 0.0f, 6.2831853f);
+
+			for (int i = 0; i <= segmentCount; i++)
+			{
+				float t = (float)i / (float)segmentCount;
+				glm::vec2 p = glm::mix(renderOrigin, targetPos, t);
+				if (i != 0 && i != segmentCount)
+				{
+					float wave = std::sin(t * 6.2831853f * arcWaveFrequency
+						+ arcWaveTime + phaseOffset) * arcWaveAmplitude * (0.7f + chargeAlpha * 1.5f);
+					p += segPerp * wave;
+					p += segPerp * getRandomFloat(rng,
+						-PIXEL_SIZE * (0.7f + chargeAlpha * 1.2f),
+						PIXEL_SIZE * (0.7f + chargeAlpha * 1.2f));
+				}
+				beamParticles.emitParticles(arcParticle, p, rng, p);
+			}
+		};
+
+		beamTimer -= deltaTime;
+		while (beamTimer <= 0.0f)
+		{
+			beamTimer += beamEmitInterval;
+
+			ParticleSettings dynamicArc = beamArcParticle;
+			dynamicArc.onCreateCount = 1;
+			float thickness = 0.85f + chargeAlpha * 2.15f;
+			dynamicArc.createApearence.size *= thickness;
+			dynamicArc.endApearence.size *= thickness;
+			dynamicArc.animationScaleX *= thickness;
+			dynamicArc.animationScaleY *= thickness;
+
+			emitBeamArc(dynamicArc);
+
+			beamParticles.emitParticles(dynamicArc, renderOrigin, rng, renderOrigin);
+		}
+
+		targetAtomTimer -= deltaTime;
+		while (targetAtomTimer <= 0.0f)
+		{
+			targetAtomTimer += targetAtomInterval;
+			ParticleSettings atom = targetAtomParticle;
+			float atomScale = 1.0f + chargeAlpha * 1.8f;
+			atom.animationScaleX *= atomScale;
+			atom.animationScaleY *= atomScale;
+			atom.particleLifeTime = {0.7f + chargeAlpha * 0.3f, 1.2f + chargeAlpha * 0.5f};
+			beamParticles.emitParticles(atom, targetPos, rng, targetPos);
+		}
+
+		beamParticles.update(deltaTime);
+
+		if (chargeTimer >= chargeDuration)
+		{
+			HitStats finalHit;
+			finalHit.damage = finalDamage;
+			finalHit.pushBack = 0.0f;
+			glm::vec2 pushBack = {};
+			lockedTarget->life.computeHit(finalHit, Elements::Water, lockedTarget->element,
+				targetPos - renderOrigin, pushBack);
+			if (finalHit.damage > 0.0f)
+			{
+				lockedTarget->onDamaged(finalHit.damage);
+			}
+			lockedTarget->physics.velocity += pushBack;
+
+			glm::vec2 damagePos = lockedTarget->physics.getPos();
+			damagePos.y -= lockedTarget->physics.transform.size.y * 0.6f;
+			getDamageViewerSystem().addDamage(finalHit.damage, damagePos);
+
+			mainParticleSystem.emitParticles(explosionParticle, targetPos, rng, targetPos);
+			mainParticleSystem.emitParticles(shockParticle, targetPos, rng, targetPos);
+			mainParticleSystem.emitParticles(explosionParticle, targetPos, rng, targetPos);
+			mainParticleSystem.emitParticles(shockParticle, targetPos, rng, targetPos);
+			mainParticleSystem.emitParticles(explosionParticle, targetPos, rng, targetPos);
+			for (int i = 0; i < 4; i++)
+			{
+				glm::vec2 extra = targetPos + glm::vec2(
+					getRandomFloat(rng, -PIXEL_SIZE * 4.0f, PIXEL_SIZE * 4.0f),
+					getRandomFloat(rng, -PIXEL_SIZE * 4.0f, PIXEL_SIZE * 4.0f)
+				);
+				mainParticleSystem.emitParticles(explosionParticle, extra, rng, extra);
+				if (getRandomChance(rng, 0.7f))
+				{
+					mainParticleSystem.emitParticles(shockParticle, extra, rng, extra);
+				}
+			}
+			clearTargetReservation();
+			return false;
+		}
+
+		return true;
+	}
+
+	void renderBeforeEntities(gl2d::Renderer2D &renderer) override
+	{
+		beamParticles.render(renderer, getParticlePostProcessRenderer(), renderOrigin);
+	}
+};

@@ -2,6 +2,7 @@
 #include <gameplay/map.h>
 #include <gameplay/blocks.h>
 #include <gameplay/Physics.h>
+#include <gameplay/doors.h>
 #include <worldGen/floorGen.h>
 #include <gl2d/gl2d.h>
 #include <queue>
@@ -22,6 +23,9 @@ bool isInsideRoomTriggerBounds(const FloorRoom &room, const glm::vec4 &aabb, flo
 
 namespace
 {
+	bool isDilationWallTileLit(const RoomLightingSystem &lighting, Map &map, int x, int y);
+	bool isTileVisibleWithoutDoorBoost(const RoomLightingSystem &lighting, Map &map, int x, int y);
+
 	bool inBounds(glm::ivec2 size, int x, int y)
 	{
 		return x >= 0 && y >= 0 && x < size.x && y < size.y;
@@ -29,9 +33,13 @@ namespace
 
 	bool hasTile(Map &map, int x, int y)
 	{
-		auto base = map.firstLayer.getBlockUnsafe(x, y).type;
-		auto over = map.secondLayer.getBlockUnsafe(x, y).type;
-		return base != Blocks::none || over != Blocks::none;
+		if (!inBounds(map.size, x, y)) { return false; }
+		auto *base = map.firstLayer.getBlockSafe(x, y);
+		auto *over = map.secondLayer.getBlockSafe(x, y);
+		if (!base && !over) { return false; }
+		auto baseType = base ? base->type : Blocks::none;
+		auto overType = over ? over->type : Blocks::none;
+		return baseType != Blocks::none || overType != Blocks::none;
 	}
 
 	bool isWalkable(Map &map, int x, int y)
@@ -41,20 +49,18 @@ namespace
 		return !map.isCollidableAtPosSafe(x, y);
 	}
 
-	bool hasLitNeighbor(const RoomLightingSystem &lighting, int x, int y)
+	bool hasLitWalkableNeighbor(const RoomLightingSystem &lighting, Map &map, int x, int y)
 	{
-		auto idxOf = [&](int tx, int ty)
-		{
-			return tx + ty * lighting.size.x;
-		};
 		const glm::ivec2 dirs[4] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 		for (auto d : dirs)
 		{
 			int nx = x + d.x;
 			int ny = y + d.y;
 			if (!inBounds(lighting.size, nx, ny)) { continue; }
-			int nIdx = idxOf(nx, ny);
-			if (lighting.revealedTiles[nIdx])
+			if (!isWalkable(map, nx, ny)) { continue; }
+			// Walls light up only when directly touching a lit non-wall tile.
+			// Use the no-door-boost query here to avoid recursive wall <-> door visibility loops.
+			if (isTileVisibleWithoutDoorBoost(lighting, map, nx, ny))
 			{
 				return true;
 			}
@@ -69,7 +75,60 @@ namespace
 		if (!hasTile(map, x, y)) { return false; }
 		if (isWalkable(map, x, y)) { return false; }
 
-		return hasLitNeighbor(lighting, x, y);
+		return hasLitWalkableNeighbor(lighting, map, x, y);
+	}
+
+	// Same visibility rule as RoomLightingSystem::isTileVisible, but it skips door boost checks.
+	// This keeps wall dilation evaluation finite and prevents recursion between door boosts and walls.
+	bool isTileVisibleWithoutDoorBoost(const RoomLightingSystem &lighting, Map &map, int tx, int ty)
+	{
+		if (!inBounds(lighting.size, tx, ty)) { return true; }
+		if (!hasTile(map, tx, ty)) { return true; }
+
+		int tidx = tx + ty * lighting.size.x;
+		if (lighting.revealedTiles[tidx]) { return true; }
+
+		auto isRevealedLightSource = [&](int sx, int sy)
+		{
+			if (!inBounds(lighting.size, sx, sy)) { return false; }
+			int sIdx = sx + sy * lighting.size.x;
+			if (!lighting.revealedTiles[sIdx]) { return false; }
+			return isWalkable(map, sx, sy);
+		};
+
+		int tRoomIndex = lighting.roomByTile[tidx];
+		bool tInUnexploredRoom = tRoomIndex >= 0 && tRoomIndex < (int)lighting.roomLit.size() && !lighting.roomLit[tRoomIndex];
+		int tCorridorIndex = lighting.corridorComponentByTile[tidx];
+		bool tInUnexploredCorridor = tCorridorIndex >= 0 && tCorridorIndex < (int)lighting.corridorLit.size() && !lighting.corridorLit[tCorridorIndex];
+
+		if (isDilationWallTileLit(lighting, map, tx, ty))
+		{
+			return true;
+		}
+
+		if (!tInUnexploredRoom && !tInUnexploredCorridor)
+		{
+			for (int oy = -1; oy <= 1; oy++)
+			{
+				for (int ox = -1; ox <= 1; ox++)
+				{
+					if (ox == 0 && oy == 0) { continue; }
+					int nx = tx + ox;
+					int ny = ty + oy;
+					if (isRevealedLightSource(nx, ny)) { return true; }
+				}
+			}
+		}
+
+		if (isRevealedLightSource(tx, ty + 1)) { return true; }
+		if (isRevealedLightSource(tx, ty + 2)) { return true; }
+
+		if (tInUnexploredRoom || tInUnexploredCorridor)
+		{
+			return false;
+		}
+
+		return false;
 	}
 
 	// Second light ring: keep tiles mostly dark, but slightly visible.
@@ -150,13 +209,14 @@ void RoomLightingSystem::revealTile(int x, int y)
 	}
 }
 
-void RoomLightingSystem::resetForFloor(Map &map, const FloorInfo &floorInfo)
+void RoomLightingSystem::resetForFloor(Map &map, const FloorInfo &floorInfo, const DoorHolder &doorHolder)
 {
 	size = map.size;
 	int count = std::max(0, size.x * size.y);
 	revealedTiles.assign(count, 0);
 	revealFade.assign(count, 0.0f);
 	roomByTile.assign(count, -1);
+	doorBoostSourcesByTile.assign(count, {});
 	roomLit.assign(floorInfo.rooms.size(), 0);
 
 	for (int roomIndex = 0; roomIndex < (int)floorInfo.rooms.size(); roomIndex++)
@@ -172,6 +232,77 @@ void RoomLightingSystem::resetForFloor(Map &map, const FloorInfo &floorInfo)
 			{
 				roomByTile[toIndex(x, y)] = roomIndex;
 			}
+		}
+	}
+
+	// Door lighting boost patterns using real door orientation.
+	for (const auto &doorPair : doorHolder.doors)
+	{
+		const auto &doorPos = doorPair.first;
+		const auto &door = doorPair.second;
+		std::vector<int> sources;
+		auto addSource = [&](int x, int y)
+		{
+			if (!inBounds(size, x, y)) { return; }
+			sources.push_back(toIndex(x, y));
+		};
+
+		if (door.orientation == Door::Orientation::Horizontal)
+		{
+			// Horizontal doors can be lit from top and bottom door tiles.
+			addSource(doorPos.x, doorPos.y);
+			addSource(doorPos.x + 1, doorPos.y);
+			addSource(doorPos.x, doorPos.y + 1);
+			addSource(doorPos.x + 1, doorPos.y + 1);
+		}
+		else
+		{
+			addSource(doorPos.x, doorPos.y);
+			addSource(doorPos.x + 1, doorPos.y);
+		}
+
+		if (sources.empty()) { continue; }
+
+		auto linkBoost = [&](int x, int y)
+		{
+			if (!inBounds(size, x, y)) { return; }
+			if (!hasTile(map, x, y)) { return; }
+			auto &dst = doorBoostSourcesByTile[toIndex(x, y)];
+			for (int source : sources)
+			{
+				dst.push_back(source);
+			}
+		};
+
+		if (door.orientation == Door::Orientation::Horizontal)
+		{
+			// Horizontal door at X,Y (only when X,Y is lit):
+			// X Y
+			// X+1 Y
+			// X Y+1
+			// X+1 Y+1
+			// X Y-1
+			// X Y-2
+			// X+1 Y-1
+			// X+1 Y-2
+			// X-1 Y
+			// X+3 Y
+			linkBoost(doorPos.x,     doorPos.y);
+			linkBoost(doorPos.x + 1, doorPos.y);
+			linkBoost(doorPos.x,     doorPos.y + 1);
+			linkBoost(doorPos.x + 1, doorPos.y + 1);
+			linkBoost(doorPos.x,     doorPos.y - 1);
+			linkBoost(doorPos.x,     doorPos.y - 2);
+			linkBoost(doorPos.x + 1, doorPos.y - 1);
+			linkBoost(doorPos.x + 1, doorPos.y - 2);
+			linkBoost(doorPos.x - 1, doorPos.y);
+			linkBoost(doorPos.x + 3, doorPos.y);
+		}
+		else if (door.orientation == Door::Orientation::Vertical)
+		{
+			// Vertical door: light just below when door tile is lit.
+			linkBoost(doorPos.x, doorPos.y + 1);
+			linkBoost(doorPos.x + 1, doorPos.y + 1);
 		}
 	}
 
@@ -346,24 +477,16 @@ bool RoomLightingSystem::isTileVisible(Map &map, int x, int y) const
 		return true;
 	}
 
-	int roomIndex = roomByTile[idx];
-	bool isInUnexploredRoom = roomIndex >= 0 && roomIndex < (int)roomLit.size() && !roomLit[roomIndex];
-	int corridorIndex = corridorComponentByTile[idx];
-	bool isInUnexploredCorridor = corridorIndex >= 0 && corridorIndex < (int)corridorLit.size() && !corridorLit[corridorIndex];
-
-	// One-ring expansion: neighbors of revealed tiles are also lit.
-	if (!isInUnexploredRoom && !isInUnexploredCorridor)
+	// Horizontal-door boost: extra tiles become visible when the door source is lit.
+	if (idx >= 0 && idx < (int)doorBoostSourcesByTile.size())
 	{
-		for (int oy = -1; oy <= 1; oy++)
+		for (int sourceIdx : doorBoostSourcesByTile[idx])
 		{
-			for (int ox = -1; ox <= 1; ox++)
+			if (sourceIdx >= 0 && sourceIdx < (int)revealedTiles.size())
 			{
-				if (ox == 0 && oy == 0) { continue; }
-				int nx = x + ox;
-				int ny = y + oy;
-				if (!inBounds(size, nx, ny)) { continue; }
-				int nIdx = nx + ny * size.x;
-				if (revealedTiles[nIdx])
+				int sx = sourceIdx % size.x;
+				int sy = sourceIdx / size.x;
+				if (isTileVisibleWithoutDoorBoost(*this, map, sx, sy))
 				{
 					return true;
 				}
@@ -371,33 +494,7 @@ bool RoomLightingSystem::isTileVisible(Map &map, int x, int y) const
 		}
 	}
 
-	// Extra up extension: 1 tile above and 2 tiles above revealed tiles.
-	int belowY = y + 1;
-	if (inBounds(size, x, belowY))
-	{
-		int belowIdx = x + belowY * size.x;
-		if (revealedTiles[belowIdx])
-		{
-			return true;
-		}
-	}
-	int belowY2 = y + 2;
-	if (inBounds(size, x, belowY2))
-	{
-		int belowIdx2 = x + belowY2 * size.x;
-		if (revealedTiles[belowIdx2])
-		{
-			return true;
-		}
-	}
-
-	if (isInUnexploredRoom || isInUnexploredCorridor)
-	{
-		// Keep unexplored rooms/corridors in shadow (except the explicit up-extension above).
-		return false;
-	}
-
-	return isDilationWallTileLit(*this, map, x, y);
+	return isTileVisibleWithoutDoorBoost(*this, map, x, y);
 }
 
 void RoomLightingSystem::renderOverlay(gl2d::Renderer2D &renderer, Map &map)

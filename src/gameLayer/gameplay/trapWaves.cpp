@@ -60,18 +60,14 @@ namespace
 		return waves;
 	}
 
-	int getMinimumWaveCount(int difficulty, int roomTier)
+	int getMinimumWaveCount(int roomTier)
 	{
-		// Keep trap rooms threatening, but reduce per-room crowding globally.
-		int minCount = 1;
-		if (difficulty == 1) { minCount = 2; }
-		else if (difficulty == 2) { minCount = 4; }
-		else if (difficulty >= 3) { minCount = 5; }
-		if (roomTier == 0)
+		switch (roomTier)
 		{
-			minCount = std::max(1, minCount - 1);
+			case 0: return 2;
+			case 1: return 3;
+			default: return 4;
 		}
-		return minCount;
 	}
 
 	TrapEnemyType pickWeighted(std::ranlux24_base &rng,
@@ -196,11 +192,7 @@ TrapWavePlan buildTrapRoomWavePlan(const FloorRoom &room, int difficulty,
 
 	int roomTier = pickRoomSizeTier(room);
 	int baseCount = pickBaseCount(roomTier, rng);
-	baseCount += clampDifficulty(difficulty);
-	if (difficulty <= 0)
-	{
-		baseCount = std::max(1, baseCount - 1);
-	}
+	baseCount = std::max(1, baseCount - 1);
 
 	bool isSmallRoom = room.isSmallRoom;
 	bool isLowCover = room.isLowCoverRoom;
@@ -216,7 +208,7 @@ TrapWavePlan buildTrapRoomWavePlan(const FloorRoom &room, int difficulty,
 	{
 		baseCount = std::min(baseCount, 3);
 	}
-	baseCount = std::max(baseCount, getMinimumWaveCount(difficulty, roomTier));
+	baseCount = std::max(baseCount, getMinimumWaveCount(roomTier));
 	baseCount = std::max(1, baseCount);
 
 	int waveCount = pickWaveCount(roomTier, rng);
@@ -263,6 +255,11 @@ TrapWavePlan buildTrapRoomWavePlan(const FloorRoom &room, int difficulty,
 			}
 		}
 		eliteCount = std::min(eliteCount, std::max(0, waveCountLocal - 1));
+		if (eliteCount > 0)
+		{
+			waveCountLocal = std::max(1, waveCountLocal - 1);
+			eliteCount = std::min(eliteCount, std::max(0, waveCountLocal - 1));
+		}
 
 		auto positions = pickSpawnPositions(roomSpawns, waveCountLocal, rng);
 		std::vector<TrapWaveSpawn> wave;

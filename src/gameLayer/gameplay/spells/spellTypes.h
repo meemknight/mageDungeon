@@ -941,6 +941,21 @@ namespace SpellTypes
 		return ret;
 	}
 
+	inline ConcentratedWaterBeamSpell getConcentratedWaterBeamSpell()
+	{
+		ConcentratedWaterBeamSpell ret;
+		ret.element = Elements::Water;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.0f;
+		ret.maxRange = 9.0f;
+		ret.breakRangeBonus = 2.0f;
+		ret.chargeDuration = 2.5f;
+		ret.finalDamage = 20.0f;
+		ret.aimDotThreshold = 0.55f;
+		ret.continuousUpdateTimer = ret.chargeDuration + 0.6f;
+		return ret;
+	}
+
 	inline WaterSiphonSpell getSwordSpell(int element)
 	{
 		WaterSiphonSpell ret;
@@ -1108,6 +1123,7 @@ namespace SpellTypes
 		iceWall,
 		boulder,
 		waterSiphon,
+		concentratedWaterBeam,
 		chainBolt,
 		chainBoltFire,
 		bigChainBolt,
@@ -1119,8 +1135,8 @@ namespace SpellTypes
 		fireSword,
 		earthRicochet,
 		earthRicochetIce,
-			earthRicochetWater,
-			bigIceBlock,
+		earthRicochetWater,
+		bigIceBlock,
 		iceDragonsBreath,
 		bigIceDragonsBreath,
 		bigWaterDragonsBreath,

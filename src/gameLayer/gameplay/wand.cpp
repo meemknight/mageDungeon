@@ -35,7 +35,7 @@ Wand makeStarterWand(std::ranlux24_base &rng)
 	wand.right = {WandSlotType::Empty, Elements::NoneElement, 1};
 	wand.alwaysCast = {WandSlotType::Disabled};
 	wand.maxMana = 3;
-	wand.manaChargeSpeed = 0.4f;
+	wand.manaChargeSpeed = 0.5f;
 	wand.maxElementsPerCast = 2;
 	wand.wandSprite = Wand::starterWand;
 	wand.sanitize();
@@ -98,18 +98,18 @@ namespace
 	const TierRules tierRules[6] =
 	{
 		{},
-		{3, 6, 3, 5, 0.45f, 0.75f, 2, 3, 1, 3, 2, 0.05f},
-		{5, 8, 4, 7, 0.5f, 0.8f, 2, 4, 2, 4, 4, 0.08f},
-		{7, 11, 5, 9, 0.6f, 0.95f, 3, 5, 2, 4, 5, 0.1f},
-		{9, 14, 7, 12, 0.75f, 1.1f, 4, 6, 3, 4, 6, 0.15f},
-		{12, 17, 9, 15, 0.9f, 1.3f, 5, 7, 3, 4, 7, 0.2f},
+		{3, 6, 3, 5, 0.5f, 0.75f, 2, 3, 1, 3, 2, 0.05f},
+		{5, 8, 4, 7, 0.6f, 0.8f, 2, 4, 2, 4, 4, 0.08f},
+		{7, 11, 5, 9, 0.65f, 0.95f, 3, 5, 2, 4, 5, 0.1f},
+		{9, 14, 6, 11, 0.75f, 1.1f, 4, 6, 3, 4, 6, 0.15f},
+		{12, 17, 7, 12, 0.8f, 1.2f, 5, 7, 3, 4, 7, 0.2f},
 	};
 
 	const int elementSlotCost = 2;
 	const int emptySlotCost = 2;
 	const int alwaysCastCost = 1;
 	const int castCountCost = 1;
-	const int maxElementsCost = 2;
+	const int maxElementsCost = 3;
 	const int maxManaCost = 1;
 	const int chargeSpeedCost = 1;
 	const float chargeSpeedStep = 0.1f;
@@ -122,7 +122,8 @@ namespace
 	const float tier1EmptySlotChance = 0.9f;
 	const float combineDuplicateChance = 0.5f;
 	const float badWandChance = 0.02f;
-	const float tier2MaxElementsBonusChance = 0.25f;
+	const float tier2MaxElementsBonusChance = 0.15f;
+	const float maxElementsActionChance = 0.6f;
 
 	Wand::WandSprite getRandomSpriteForTier(int tier, std::ranlux24_base &rng)
 	{
@@ -573,10 +574,11 @@ Wand getRandomWand(int tier, std::ranlux24_base &rng)
 			}
 		}
 
-		if (points >= maxElementsCost && wand.maxElementsPerCast < maxElementsAllowed)
+		if (points >= maxElementsCost && wand.maxElementsPerCast < maxElementsAllowed
+			&& getRandomChance(rng, maxElementsActionChance))
 		{
 			actions.push_back({IncreaseMaxElements, maxElementsCost});
-			if (tier >= 2 && getRandomChance(rng, 0.35f))
+			if (tier >= 2 && getRandomChance(rng, maxElementsActionChance * 0.5f))
 			{
 				actions.push_back({IncreaseMaxElements, maxElementsCost});
 			}

@@ -1387,6 +1387,7 @@ ThornProjectile::ThornProjectile()
 	hitStats.pushBack = 0.0f;
 	element = Elements::Earth;
 	timeAlieve = 14.0f;
+	renderBelowEntities = true;
 	physics.transform.size = {PIXEL_SIZE * 8.0f, PIXEL_SIZE * 8.0f};
 	physics.transform.isCircleCollider = true;
 }

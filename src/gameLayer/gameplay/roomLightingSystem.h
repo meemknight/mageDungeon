@@ -6,6 +6,7 @@
 struct Map;
 struct FloorInfo;
 struct FloorRoom;
+struct DoorHolder;
 
 namespace gl2d
 {
@@ -24,6 +25,7 @@ struct RoomLightingSystem
 
 	std::vector<int> roomByTile;
 	std::vector<unsigned char> roomLit;
+	std::vector<std::vector<int>> doorBoostSourcesByTile;
 
 	std::vector<int> corridorFloorComponentByTile;
 	std::vector<int> corridorComponentByTile;
@@ -36,7 +38,7 @@ struct RoomLightingSystem
 	float softEdgeNearAlpha = 0.22f;
 	float softEdgeFarAlpha = 0.10f;
 
-	void resetForFloor(Map &map, const FloorInfo &floorInfo);
+	void resetForFloor(Map &map, const FloorInfo &floorInfo, const DoorHolder &doorHolder);
 	void update(float deltaTime, Map &map, const FloorInfo &floorInfo,
 		const glm::vec4 &playerAabb, float roomTriggerInset);
 	void renderOverlay(gl2d::Renderer2D &renderer, Map &map);

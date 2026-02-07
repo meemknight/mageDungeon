@@ -33,6 +33,12 @@ struct MinimapSystem
 		const RoomLightingSystem *lightingSystem = nullptr,
 		const glm::vec2 *cameraCenterOverride = nullptr,
 		const float *viewSizeOverride = nullptr);
+	void renderFullscreenDirect(gl2d::Renderer2D &renderer, Map &map, const DoorHolder &doorHolder,
+		glm::vec2 playerPos, const FloorInfo *floorInfo = nullptr,
+		const RoomLightingSystem *lightingSystem = nullptr,
+		const glm::vec2 *cameraCenterOverride = nullptr,
+		const float *viewSizeOverride = nullptr,
+		float mapAlpha = 0.92f);
 	void render(gl2d::Renderer2D &renderer);
 	// Draw minimap texture into an arbitrary UI rect (fullscreen map viewer uses this).
 	void renderAt(gl2d::Renderer2D &renderer, glm::vec4 rect, float finalOpacity = -1.0f);

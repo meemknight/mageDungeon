@@ -59,6 +59,7 @@ namespace SpellTypes
 			{Elements::Fire,Elements::Ice},	//iceWall,
 			{Elements::Fire,Elements::Water},	//boulder,
 			{Elements::Water,Elements::Water,Elements::Water},	//waterSiphon,
+			{Elements::Water,Elements::Ice,Elements::Water},	//concentratedWaterBeam,
 			{Elements::Ice,Elements::Ice,Elements::Water},	//chainBolt,
 			{Elements::Ice,Elements::Ice,Elements::Fire},	//chainBoltFire,
 			{Elements::Ice,Elements::Ice,Elements::Water,Elements::Water},	//bigChainBolt,
@@ -197,6 +198,7 @@ namespace SpellTypes
 			"Ice Wall",
 			"Boulder",
 			"Water Siphon",
+			"Concentrated Water Beam",
 			"Water Chain Bolt",
 			"Fire Chain Bolt",
 			"Big Ice Chain Bolt",
@@ -429,6 +431,10 @@ namespace SpellTypes
 
 		case waterSiphon:
 		return std::make_unique<WaterSiphonSpell>(getWaterSiphonSpell());
+		break;
+
+		case concentratedWaterBeam:
+		return std::make_unique<ConcentratedWaterBeamSpell>(getConcentratedWaterBeamSpell());
 		break;
 
 		case chainBolt:

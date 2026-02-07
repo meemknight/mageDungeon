@@ -242,7 +242,7 @@ bool GameLogic::init()
 	}
 
 	placeDoorCollisionBlocks();
-	roomLightingSystem.resetForFloor(map, floorInfo);
+	roomLightingSystem.resetForFloor(map, floorInfo, doorHolder);
 
 	// Pick trap rooms (spawn/exit rooms are excluded).
 	trapRooms.clear();
@@ -398,6 +398,7 @@ bool GameLogic::init()
 	draggingStone = false;
 	droppedItems.clear();
 	summons.clear();
+	cameraShakeSystem.clear();
 
 	particlePostProcessRenderer.init();
 	minimapSystem.init();
@@ -1625,6 +1626,7 @@ bool GameLogic::update(float deltaTime,
 
 	zoom = glm::clamp(zoom, freeCameraZoomMin, freeCameraZoomMax);
 	renderer.currentCamera.zoom = zoom;
+	renderer.currentCamera.rotation = 0.0f;
 	if (freeCameraMode)
 	{
 		renderer.currentCamera.position = freeCameraPosition;
@@ -1635,6 +1637,11 @@ bool GameLogic::update(float deltaTime,
 			simDelta * 4.f, 0.00001, 0,
 			renderer.windowW, renderer.windowH);
 	}
+
+	cameraShakeSystem.update(simDelta);
+	auto shake = cameraShakeSystem.getCurrent();
+	renderer.currentCamera.position += shake.offset;
+	renderer.currentCamera.rotation += shake.rotation;
 
 	particlePostProcessRenderer.updateWindowMetrics(renderer);
 
@@ -2545,6 +2552,9 @@ bool GameLogic::update(float deltaTime,
 		return !exitDungeon;
 	}
 
+	// Ground projectiles (like thorns) render under entities.
+	projectiles.render(renderer, assetsManager, particlePostProcessRenderer);
+
 	// Render entities/player/doors sorted by Y for proper overlap.
 	struct RenderEntry
 	{
@@ -2786,7 +2796,7 @@ bool GameLogic::update(float deltaTime,
 	renderStatusIcons(player.physics.getAABB(), player.statusEffects);
 
 	standbyProjectiles.render(renderer, particlePostProcessRenderer);
-	projectiles.render(renderer, assetsManager, particlePostProcessRenderer);
+	projectiles.renderAfterEntities(renderer, assetsManager, particlePostProcessRenderer);
 
 	particleSystem.render(renderer, particlePostProcessRenderer, {});
 
@@ -2914,10 +2924,15 @@ bool GameLogic::update(float deltaTime,
 	if (mapViewerOpen)
 	{
 		const RoomLightingSystem *mapLighting = removeLightSystem ? nullptr : &roomLightingSystem;
-		minimapSystem.update(renderer, map, doorHolder, player.physics.getPos(), &floorInfo,
-			mapLighting,
-			&mapViewerCenter, &mapViewerViewSize);
-		minimapSystem.renderAt(renderer, {0, 0, (float)renderer.windowW, (float)renderer.windowH}, 0.84f);
+
+		// Fullscreen map viewer: darken gameplay first, then draw the map on top.
+		renderer.pushCamera();
+		renderer.renderRectangle({0, 0, (float)renderer.windowW, (float)renderer.windowH},
+			{0, 0, 0, 0.8f});
+		renderer.popCamera();
+
+		minimapSystem.renderFullscreenDirect(renderer, map, doorHolder, player.physics.getPos(), &floorInfo,
+			mapLighting, &mapViewerCenter, &mapViewerViewSize, 0.78f);
 	}
 	else
 	{
@@ -3618,6 +3633,11 @@ bool GameLogic::update(float deltaTime,
 
 	renderer.flush();
 	return !exitDungeon;
+}
+
+void GameLogic::addCameraShake(CameraShakeType type, float intensity, float duration)
+{
+	cameraShakeSystem.addShake(type, intensity, duration, rng);
 }
 
 void GameLogic::close()

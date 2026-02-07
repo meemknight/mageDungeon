@@ -68,7 +68,7 @@ namespace EnemyTypes
 			behavior.shootPatterns = ShootPattern_Single;
 			behavior.shootCooldown = 0.5f;
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
-			behavior.specialShootChance = 0.33f;
+			behavior.specialShootChance = 0.2f;
 			contactDamage = 2.0f;
 			renderOffsetY = PIXEL_SIZE * 14.0f;
 		}
@@ -83,7 +83,7 @@ namespace EnemyTypes
 			behavior.shootPatterns = ShootPattern_Single;
 			behavior.shootCooldown = 0.5f;
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
-			behavior.specialShootChance = 0.33f;
+			behavior.specialShootChance = 0.2f;
 			contactDamage = 2.0f;
 			element = Elements::Earth;
 			renderOffsetY = PIXEL_SIZE * 14.0f;
@@ -99,7 +99,7 @@ namespace EnemyTypes
 			behavior.shootPatterns = ShootPattern_Single;
 			behavior.shootCooldown = 0.5f;
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
-			behavior.specialShootChance = 0.33f;
+			behavior.specialShootChance = 0.2f;
 			contactDamage = 2.0f;
 			element = Elements::Fire;
 			renderOffsetY = PIXEL_SIZE * 14.0f;
@@ -115,7 +115,7 @@ namespace EnemyTypes
 			behavior.shootPatterns = ShootPattern_Single;
 			behavior.shootCooldown = 0.5f;
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
-			behavior.specialShootChance = 0.33f;
+			behavior.specialShootChance = 0.2f;
 			contactDamage = 2.0f;
 			element = Elements::Ice;
 			renderOffsetY = PIXEL_SIZE * 14.0f;
@@ -131,7 +131,7 @@ namespace EnemyTypes
 			behavior.shootPatterns = ShootPattern_Single;
 			behavior.shootCooldown = 0.5f;
 			behavior.specialShootPatterns = ShootPattern_RotatingCross;
-			behavior.specialShootChance = 0.33f;
+			behavior.specialShootChance = 0.2f;
 			contactDamage = 2.0f;
 			element = Elements::Water;
 			renderOffsetY = PIXEL_SIZE * 14.0f;

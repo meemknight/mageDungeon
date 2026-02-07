@@ -31,6 +31,8 @@ struct Projectile
 	PhysicalEntity physics;
 	ParticleSystem particleSystem;
 	float timeAlieve = 10;
+	// Ground projectiles can be rendered under entities.
+	bool renderBelowEntities = false;
 
 	glm::vec2 &getPos()
 	{
@@ -163,6 +165,18 @@ struct ProjectileHolder
 	{
 		for (auto &p : projectiles)
 		{
+			if (!p->renderBelowEntities) { continue; }
+			p->render(renderer, assetManager, particlePostProcessRenderer);
+		}
+	}
+
+	void renderAfterEntities(gl2d::Renderer2D &renderer,
+		AssetsManager &assetManager,
+		ParticlePostProcessRenderer &particlePostProcessRenderer)
+	{
+		for (auto &p : projectiles)
+		{
+			if (p->renderBelowEntities) { continue; }
 			p->render(renderer, assetManager, particlePostProcessRenderer);
 		}
 	}

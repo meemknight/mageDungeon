@@ -21,6 +21,7 @@
 #include <gameplay/trapWaves.h>
 #include <gameplay/minimapSystem.h>
 #include <gameplay/roomLightingSystem.h>
+#include <gameplay/cameraShakeSystem.h>
 
 //this is an instance of the game.
 //This shouldn't load things like textures, those should be load outside
@@ -143,6 +144,7 @@ struct GameLogic
 	ParticleSystem particleSystem;
 	ParticlePostProcessRenderer particlePostProcessRenderer;
 	MinimapSystem minimapSystem; // offscreen minimap renderer
+	CameraShakeSystem cameraShakeSystem;
 	gl2d::FrameBuffer gameFbo;
 	PaletteEffect paletteEffect;
 	bool inventoryOpen = false;
@@ -158,6 +160,7 @@ struct GameLogic
 	//returns false on fail
 	bool update(float deltaTime, gl2d::Renderer2D &renderer,
 		AssetsManager &assetsManager, platform::Input &input);
+	void addCameraShake(CameraShakeType type, float intensity, float duration);
 
 	void close();
 
