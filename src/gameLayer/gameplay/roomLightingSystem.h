@@ -26,11 +26,15 @@ struct RoomLightingSystem
 	std::vector<unsigned char> roomLit;
 
 	std::vector<int> corridorFloorComponentByTile;
+	std::vector<int> corridorComponentByTile;
 	std::vector<std::vector<int>> corridorRevealTiles;
 	std::vector<unsigned char> corridorLit;
 
 	float fadeSpeed = 7.0f; // how fast newly-lit tiles fade from black
 	bool enableLowLightLayer = false; // 0.8 alpha dark layer around revealed zones
+	bool enableSoftEdge = true; // soft transition from lit to dark tiles
+	float softEdgeNearAlpha = 0.22f;
+	float softEdgeFarAlpha = 0.10f;
 
 	void resetForFloor(Map &map, const FloorInfo &floorInfo);
 	void update(float deltaTime, Map &map, const FloorInfo &floorInfo,

@@ -1521,6 +1521,440 @@ struct EarthTrapSpell: public Spell
 	}
 };
 
+// Persistent trap that zaps nearby enemies with water-element lightning charges.
+struct StormTrapSpell: public Spell
+{
+	// **configuration variables**
+	float trapDuration = 45.0f;
+	int maxCharges = 5;
+	float trapRadius = 1.5f;
+	float zapDamage = 5.0f;
+	float zapCooldownMin = 0.35f;
+	float zapCooldownMax = 0.75f;
+	float zapRollInterval = 0.08f;
+	float zapChance = 0.56f;
+	float placementDistance = 3.0f;
+	float placementStep = 0.2f;
+	float ringEmitInterval = 0.12f;
+	float orbitEmitInterval = 0.18f;
+	float ringStep = 0.28f;
+	float randomLightningInterval = 0.12f;
+	int randomLightningBursts = 3;
+	int hitLightningBursts = 7;
+	int hitArcRepeats = 4;
+	float chainDamage = 0.0f;
+	float chainRange = 2.8f;
+	float particleSizeScale = 1.0f;
+	float particleCountScale = 1.0f;
+	float arcWaveAmplitude = PIXEL_SIZE * 2.1f;
+	float arcWaveFrequency = 2.2f;
+	float arcWaveSpeed = 3.2f;
+
+	// **state variables**
+	bool initialized = false;
+	bool trapDepleted = false;
+	int chargesLeft = 0;
+	float zapCooldownTimer = 0.0f;
+	float zapRollTimer = 0.0f;
+	float ringTimer = 0.0f;
+	float orbitTimer = 0.0f;
+	float randomLightningTimer = 0.0f;
+	float ringRotation = 0.0f;
+	float ringSpinSpeed = 0.0f;
+	float arcWaveTime = 0.0f;
+	glm::vec2 trapPos = {};
+	glm::vec2 trapDir = {1.0f, 0.0f};
+	ParticleSettings ringParticle;
+	ParticleSettings orbitParticle;
+	ParticleSettings zapTrailParticle;
+	ParticleSettings zapBurstParticle;
+	// Local particle pool so this spell does not fight the global cap.
+	ParticleSystem stormParticles;
+
+	StormTrapSpell()
+	{
+		continuousUpdate = true;
+		continuousUpdateTimer = trapDuration;
+		stormParticles.maxCount = 2800;
+	}
+
+	bool update(float deltaTime, Map &map, ParticleSystem &mainParticleSystem,
+		ProjectileHolder &projectileHolder, std::ranlux24_base &rng,
+		Player &player, EntityHolder &entityHolder, glm::vec2 currentAimDir) override
+	{
+		(void)projectileHolder;
+		(void)mainParticleSystem;
+
+		auto normalizeSafe = [](glm::vec2 v)
+		{
+			float l = glm::length(v);
+			if (l <= 0.0001f)
+			{
+				return glm::vec2(1.0f, 0.0f);
+			}
+			return v / l;
+		};
+
+		if (!initialized)
+		{
+			initialized = true;
+			trapDepleted = false;
+			continuousUpdateTimer = trapDuration;
+			chargesLeft = std::max(1, maxCharges);
+			stormParticles.particles.clear();
+			arcWaveTime = getRandomFloat(rng, 0.0f, 6.2831853f);
+
+			glm::vec2 aim = currentAimDir;
+			if (glm::length(aim) <= 0.0001f)
+			{
+				aim = createAimDir;
+			}
+			trapDir = normalizeSafe(aim);
+
+			// Keep storm center at player position on spawn.
+			trapPos = player.physics.getPos();
+
+			glm::vec4 waterStart = elementToSecondaryColor(Elements::Water);
+			glm::vec4 waterEnd = elementToColor(Elements::Water);
+			waterStart.a = 0.6f;
+			waterEnd.a = 0.35f;
+
+			glm::vec4 lightningStart = {0.72f, 1.0f, 1.0f, 0.95f};
+			glm::vec4 lightningEnd = {0.35f, 0.85f, 1.0f, 0.55f};
+
+			ringParticle = getOrbitParticle(waterStart, waterEnd);
+			ringParticle.onCreateCount = 3;
+			ringParticle.particleLifeTime = {0.2f, 0.38f};
+			ringParticle.velocityX = {0.0f, 0.0f};
+			ringParticle.velocityY = {0.0f, 0.0f};
+			ringParticle.dragX = {0.0f, 0.0f};
+			ringParticle.dragY = {0.0f, 0.0f};
+			ringParticle.createApearence.size = glm::vec2{1.25f, 3.05f} * PIXEL_SIZE;
+			ringParticle.endApearence.size = glm::vec2{0.5f, 1.4f} * PIXEL_SIZE;
+			ringParticle.animationScaleX = {PIXEL_SIZE * 2.45f, PIXEL_SIZE * 5.1f};
+			ringParticle.animationScaleY = {PIXEL_SIZE * 2.45f, PIXEL_SIZE * 5.1f};
+			ringParticle.animationSpeed = {-8.0f, 8.0f};
+			ringParticle.folowParent = false;
+
+			orbitParticle = getLightningZapParticle(lightningStart, lightningEnd);
+			orbitParticle.onCreateCount = 4;
+			orbitParticle.particleLifeTime = {0.08f, 0.15f};
+			orbitParticle.velocityX = glm::vec2{-15.0f, 15.0f} * PIXEL_SIZE;
+			orbitParticle.velocityY = glm::vec2{-15.0f, 15.0f} * PIXEL_SIZE;
+			orbitParticle.createApearence.size = glm::vec2{0.7f, 2.4f} * PIXEL_SIZE;
+			orbitParticle.endApearence.size = glm::vec2{0.25f, 0.9f} * PIXEL_SIZE;
+			orbitParticle.animationType = ParticleSettings::ANIMATION_TYPES::animationZigZag;
+			orbitParticle.animationSpeed = {-12.0f, 12.0f};
+			orbitParticle.animationScaleX = {PIXEL_SIZE * 1.2f, PIXEL_SIZE * 4.5f};
+			orbitParticle.animationScaleY = {PIXEL_SIZE * 1.2f, PIXEL_SIZE * 4.5f};
+			orbitParticle.folowParent = false;
+
+			zapTrailParticle = getLightningZapParticle(lightningStart, lightningEnd);
+			zapTrailParticle.onCreateCount = 2;
+			zapTrailParticle.particleLifeTime = {0.06f, 0.12f};
+			zapTrailParticle.velocityX = glm::vec2{-18.0f, 18.0f} * PIXEL_SIZE;
+			zapTrailParticle.velocityY = glm::vec2{-18.0f, 18.0f} * PIXEL_SIZE;
+			zapTrailParticle.createApearence.size = glm::vec2{0.75f, 2.8f} * PIXEL_SIZE;
+			zapTrailParticle.endApearence.size = glm::vec2{0.2f, 0.9f} * PIXEL_SIZE;
+			zapTrailParticle.animationType = ParticleSettings::ANIMATION_TYPES::animationZigZag;
+			zapTrailParticle.animationSpeed = {-14.0f, 14.0f};
+			zapTrailParticle.animationScaleX = {PIXEL_SIZE * 1.2f, PIXEL_SIZE * 4.6f};
+			zapTrailParticle.animationScaleY = {PIXEL_SIZE * 1.2f, PIXEL_SIZE * 4.6f};
+			zapTrailParticle.folowParent = false;
+
+			zapBurstParticle = getSparkBurstParticle(lightningStart, lightningEnd);
+			zapBurstParticle.onCreateCount = 14;
+			zapBurstParticle.particleLifeTime = {0.14f, 0.24f};
+			zapBurstParticle.velocityX = glm::vec2{-22.0f, 22.0f} * PIXEL_SIZE;
+			zapBurstParticle.velocityY = glm::vec2{-22.0f, 22.0f} * PIXEL_SIZE;
+			zapBurstParticle.createApearence.size = glm::vec2{0.8f, 2.2f} * PIXEL_SIZE;
+			zapBurstParticle.endApearence.size = glm::vec2{0.3f, 1.0f} * PIXEL_SIZE;
+			zapBurstParticle.texture = getAssetManager().particleCircle;
+			zapBurstParticle.folowParent = false;
+
+			auto scaleStormParticle = [&](ParticleSettings &p)
+			{
+				if (particleCountScale != 1.0f)
+				{
+					int count = (int)std::round((float)p.onCreateCount * particleCountScale);
+					p.onCreateCount = (short)std::max(1, count);
+				}
+				if (particleSizeScale != 1.0f)
+				{
+					p.createApearence.size *= particleSizeScale;
+					p.endApearence.size *= particleSizeScale;
+					p.animationScaleX *= particleSizeScale;
+					p.animationScaleY *= particleSizeScale;
+				}
+			};
+
+			scaleStormParticle(ringParticle);
+			scaleStormParticle(orbitParticle);
+			scaleStormParticle(zapTrailParticle);
+			scaleStormParticle(zapBurstParticle);
+
+			ringSpinSpeed = getRandomFloat(rng, 0.65f, 1.2f);
+			if (getRandomChance(rng, 0.5f)) { ringSpinSpeed *= -1.0f; }
+			ringTimer = getRandomFloat(rng, 0.0f, ringEmitInterval);
+			orbitTimer = getRandomFloat(rng, 0.0f, orbitEmitInterval);
+			randomLightningTimer = getRandomFloat(rng, 0.0f, randomLightningInterval);
+			zapRollTimer = getRandomFloat(rng, 0.0f, zapRollInterval);
+			zapCooldownTimer = 0.0f;
+
+			stormParticles.emitParticles(zapBurstParticle, trapPos, rng, trapPos);
+		}
+
+		if (trapDepleted)
+		{
+			stormParticles.update(deltaTime);
+			return !stormParticles.particles.empty();
+		}
+
+		arcWaveTime += deltaTime * arcWaveSpeed;
+
+		// Shared helper for arc-shaped lightning with a slow animated wave.
+		auto emitArcBetween = [&](glm::vec2 start, glm::vec2 end, float randomJitter)
+		{
+			glm::vec2 segment = end - start;
+			float segmentLength = glm::length(segment);
+			if (segmentLength <= 0.0001f)
+			{
+				return;
+			}
+
+			glm::vec2 segDir = segment / segmentLength;
+			glm::vec2 segPerp = {-segDir.y, segDir.x};
+			int segmentCount = std::max(3,
+				(int)std::ceil(segmentLength / (PIXEL_SIZE * 5.0f)));
+			float phaseOffset = getRandomFloat(rng, 0.0f, 6.2831853f);
+			for (int i = 0; i <= segmentCount; i++)
+			{
+				float t = (float)i / (float)segmentCount;
+				glm::vec2 p = glm::mix(start, end, t);
+				if (i != 0 && i != segmentCount)
+				{
+					float wave = std::sin(t * 6.2831853f * arcWaveFrequency
+						+ arcWaveTime + phaseOffset) * arcWaveAmplitude;
+					p += segPerp * wave;
+					p += segPerp * getRandomFloat(rng,
+						-PIXEL_SIZE * randomJitter, PIXEL_SIZE * randomJitter);
+				}
+				stormParticles.emitParticles(zapTrailParticle, p, rng, p);
+			}
+		};
+
+		ringRotation += ringSpinSpeed * deltaTime;
+
+		ringTimer -= deltaTime;
+		if (ringTimer <= 0.0f)
+		{
+			ringTimer += ringEmitInterval;
+			const float twoPi = 6.2831853f;
+			for (float i = 0.0f; i < twoPi; i += ringStep)
+			{
+				float angle = i + ringRotation;
+				glm::vec2 p = trapPos + glm::vec2(std::cos(angle), std::sin(angle)) * trapRadius;
+				if (HasLineOfSightGrid(map, trapPos, p))
+				{
+					stormParticles.emitParticles(ringParticle, p, rng, p);
+				}
+			}
+		}
+
+		orbitTimer -= deltaTime;
+		if (orbitTimer <= 0.0f)
+		{
+			orbitTimer += orbitEmitInterval;
+			stormParticles.emitParticles(orbitParticle, trapPos, rng, trapPos);
+		}
+
+		// Random interior lightning keeps the storm looking active even between zaps.
+		randomLightningTimer -= deltaTime;
+		while (randomLightningTimer <= 0.0f)
+		{
+			randomLightningTimer += randomLightningInterval;
+
+			for (int i = 0; i < randomLightningBursts; i++)
+			{
+				float angle = getRandomFloat(rng, 0.0f, 6.2831853f);
+				float radius = std::sqrt(getRandomFloat(rng, 0.0f, 1.0f)) * trapRadius * 0.95f;
+				glm::vec2 center = trapPos + glm::vec2(std::cos(angle), std::sin(angle)) * radius;
+
+				stormParticles.emitParticles(orbitParticle, center, rng, center);
+				if (getRandomChance(rng, 0.6f))
+				{
+					stormParticles.emitParticles(zapBurstParticle, center, rng, center);
+				}
+
+				float angle2 = getRandomFloat(rng, 0.0f, 6.2831853f);
+				float radius2 = std::sqrt(getRandomFloat(rng, 0.0f, 1.0f)) * trapRadius * 0.95f;
+				glm::vec2 end = trapPos + glm::vec2(std::cos(angle2), std::sin(angle2)) * radius2;
+				emitArcBetween(center, end, 1.2f);
+			}
+		}
+
+		if (zapCooldownTimer > 0.0f)
+		{
+			zapCooldownTimer -= deltaTime;
+		}
+
+		Entity *bestTarget = nullptr;
+		float bestDist2 = 999999.0f;
+		for (auto &e : entityHolder.entities)
+		{
+			if (e->dying) { continue; }
+			float maxDist = trapRadius + std::max(e->physics.transform.size.x,
+				e->physics.transform.size.y) * 0.45f;
+			float maxDist2 = maxDist * maxDist;
+			glm::vec2 diff = e->physics.getPos() - trapPos;
+			float dist2 = glm::dot(diff, diff);
+			if (dist2 > maxDist2) { continue; }
+			if (!HasLineOfSightGrid(map, trapPos, e->physics.getPos())) { continue; }
+			if (dist2 < bestDist2)
+			{
+				bestDist2 = dist2;
+				bestTarget = e.get();
+			}
+		}
+
+		if (bestTarget && chargesLeft > 0 && zapCooldownTimer <= 0.0f)
+		{
+			zapRollTimer -= deltaTime;
+			if (zapRollTimer <= 0.0f)
+			{
+				zapRollTimer += zapRollInterval;
+				if (getRandomChance(rng, zapChance))
+				{
+					glm::vec2 hitDir = bestTarget->physics.getPos() - trapPos;
+					if (glm::length2(hitDir) <= 0.0001f)
+					{
+						hitDir = trapDir;
+					}
+
+					HitStats hitStats;
+					hitStats.damage = zapDamage;
+					hitStats.pushBack = 0.0f;
+					glm::vec2 pushBack = {};
+					bestTarget->life.computeHit(hitStats, Elements::Water, bestTarget->element,
+						hitDir, pushBack);
+					if (hitStats.damage > 0.0f)
+					{
+						bestTarget->onDamaged(hitStats.damage);
+					}
+					bestTarget->physics.velocity += pushBack;
+
+					glm::vec2 damagePos = bestTarget->physics.getPos();
+					damagePos.y -= bestTarget->physics.transform.size.y * 0.6f;
+					getDamageViewerSystem().addDamage(hitStats.damage, damagePos);
+
+					stormParticles.emitParticles(zapBurstParticle, trapPos, rng, trapPos);
+					stormParticles.emitParticles(zapBurstParticle,
+						bestTarget->physics.getPos(), rng, bestTarget->physics.getPos());
+
+					// On hit, throw a lot of extra lightning around the victim.
+					for (int burst = 0; burst < hitLightningBursts; burst++)
+					{
+						glm::vec2 targetCenter = bestTarget->physics.getPos();
+						glm::vec2 burstPos = targetCenter + glm::vec2(
+							getRandomFloat(rng, -PIXEL_SIZE * 5.5f, PIXEL_SIZE * 5.5f),
+							getRandomFloat(rng, -PIXEL_SIZE * 5.5f, PIXEL_SIZE * 5.5f)
+						);
+						stormParticles.emitParticles(zapBurstParticle, burstPos, rng, burstPos);
+						if (getRandomChance(rng, 0.8f))
+						{
+							stormParticles.emitParticles(orbitParticle, burstPos, rng, burstPos);
+						}
+					}
+
+					glm::vec2 targetPos = bestTarget->physics.getPos();
+					for (int arc = 0; arc < hitArcRepeats; arc++)
+					{
+						glm::vec2 arcEnd = targetPos + glm::vec2(
+							getRandomFloat(rng, -PIXEL_SIZE * 3.0f, PIXEL_SIZE * 3.0f),
+							getRandomFloat(rng, -PIXEL_SIZE * 3.0f, PIXEL_SIZE * 3.0f)
+						);
+						emitArcBetween(trapPos, arcEnd, 1.4f);
+					}
+
+					// Optional secondary chain from primary victim to a nearby enemy.
+					if (chainDamage > 0.0f)
+					{
+						Entity *chainTarget = nullptr;
+						float bestChainDist2 = chainRange * chainRange;
+						for (auto &e : entityHolder.entities)
+						{
+							if (e->dying || e.get() == bestTarget) { continue; }
+							glm::vec2 diff = e->physics.getPos() - targetPos;
+							float dist2 = glm::dot(diff, diff);
+							if (dist2 > bestChainDist2) { continue; }
+							if (!HasLineOfSightGrid(map, targetPos, e->physics.getPos())) { continue; }
+							bestChainDist2 = dist2;
+							chainTarget = e.get();
+						}
+
+						if (chainTarget)
+						{
+							glm::vec2 chainDir = chainTarget->physics.getPos() - targetPos;
+							if (glm::length2(chainDir) <= 0.0001f)
+							{
+								chainDir = trapDir;
+							}
+
+							HitStats chainHit;
+							chainHit.damage = chainDamage;
+							chainHit.pushBack = 0.0f;
+							glm::vec2 chainPushBack = {};
+							chainTarget->life.computeHit(chainHit, Elements::Water, chainTarget->element,
+								chainDir, chainPushBack);
+							if (chainHit.damage > 0.0f)
+							{
+								chainTarget->onDamaged(chainHit.damage);
+							}
+							chainTarget->physics.velocity += chainPushBack;
+
+							glm::vec2 chainDamagePos = chainTarget->physics.getPos();
+							chainDamagePos.y -= chainTarget->physics.transform.size.y * 0.6f;
+							getDamageViewerSystem().addDamage(chainHit.damage, chainDamagePos);
+
+							stormParticles.emitParticles(zapBurstParticle, chainTarget->physics.getPos(),
+								rng, chainTarget->physics.getPos());
+							for (int arc = 0; arc < 3; arc++)
+							{
+								glm::vec2 chainEnd = chainTarget->physics.getPos() + glm::vec2(
+									getRandomFloat(rng, -PIXEL_SIZE * 2.6f, PIXEL_SIZE * 2.6f),
+									getRandomFloat(rng, -PIXEL_SIZE * 2.6f, PIXEL_SIZE * 2.6f)
+								);
+								emitArcBetween(targetPos, chainEnd, 1.3f);
+							}
+						}
+					}
+
+					chargesLeft--;
+					zapCooldownTimer = getRandomFloat(rng, zapCooldownMin, zapCooldownMax);
+				}
+			}
+		}
+		else if (!bestTarget)
+		{
+			zapRollTimer = 0.0f;
+		}
+
+		if (chargesLeft <= 0)
+		{
+			trapDepleted = true;
+			stormParticles.emitParticles(zapBurstParticle, trapPos, rng, trapPos);
+		}
+
+		stormParticles.update(deltaTime);
+		return true;
+	}
+
+	void renderBeforeEntities(gl2d::Renderer2D &renderer) override
+	{
+		stormParticles.render(renderer, getParticlePostProcessRenderer(), trapPos);
+	}
+};
+
 // Gradually adds spell healing with soft green particles.
 struct HealingSpell: public Spell
 {

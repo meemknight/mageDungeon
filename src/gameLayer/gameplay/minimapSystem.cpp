@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <unordered_set>
 
 namespace
 {
@@ -222,18 +223,17 @@ void MinimapSystem::update(gl2d::Renderer2D &renderer, Map &map, const DoorHolde
 			return !lightingSystem->isTileVisible(map, x, y);
 		};
 
-		auto sideHasUnknownAhead = [&](glm::ivec2 a, glm::ivec2 b, glm::ivec2 step)
+		auto unknownScoreAhead = [&](glm::ivec2 a, glm::ivec2 b, glm::ivec2 step)
 		{
+			int score = 0;
 			for (int i = 1; i <= 4; i++)
 			{
 				glm::ivec2 ta = a + step * i;
 				glm::ivec2 tb = b + step * i;
-				if (isUnknownExplorableTile(ta.x, ta.y) || isUnknownExplorableTile(tb.x, tb.y))
-				{
-					return true;
-				}
+				if (isUnknownExplorableTile(ta.x, ta.y)) { score++; }
+				if (tb != ta && isUnknownExplorableTile(tb.x, tb.y)) { score++; }
 			}
-			return false;
+			return score;
 		};
 
 		auto doorIsLit = [&](glm::ivec2 doorPos)
@@ -244,36 +244,49 @@ void MinimapSystem::update(gl2d::Renderer2D &renderer, Map &map, const DoorHolde
 				|| lightingSystem->isTileVisible(map, doorPos.x + 1, doorPos.y + 1);
 		};
 
+		std::unordered_set<glm::ivec2, DoorPosHash, DoorPosEqual> processedDoors;
 		for (const auto &room : floorInfo->rooms)
 		{
 			for (const auto &doorPos : room.doorPositions)
 			{
+				if (!processedDoors.insert(doorPos).second) { continue; }
 				if (!doorIsLit(doorPos)) { continue; }
 
-				bool unknownNorth = sideHasUnknownAhead(
+				int scoreNorth = unknownScoreAhead(
 					{doorPos.x, doorPos.y}, {doorPos.x + 1, doorPos.y}, {0, -1});
-				bool unknownSouth = sideHasUnknownAhead(
+				int scoreSouth = unknownScoreAhead(
 					{doorPos.x, doorPos.y + 1}, {doorPos.x + 1, doorPos.y + 1}, {0, 1});
-				bool unknownWest = sideHasUnknownAhead(
+				int scoreWest = unknownScoreAhead(
 					{doorPos.x, doorPos.y}, {doorPos.x, doorPos.y + 1}, {-1, 0});
-				bool unknownEast = sideHasUnknownAhead(
+				int scoreEast = unknownScoreAhead(
 					{doorPos.x + 1, doorPos.y}, {doorPos.x + 1, doorPos.y + 1}, {1, 0});
 
-				if (unknownNorth)
+				int bestScore = 0;
+				glm::vec2 bestMarker = {};
+				if (scoreNorth > bestScore)
 				{
-					unknownDoorMarkers.push_back({doorPos.x + 1.0f, doorPos.y - 4.0f});
+					bestScore = scoreNorth;
+					bestMarker = {doorPos.x + 1.0f, doorPos.y - 4.0f};
 				}
-				if (unknownSouth)
+				if (scoreSouth > bestScore)
 				{
-					unknownDoorMarkers.push_back({doorPos.x + 1.0f, doorPos.y + 5.0f});
+					bestScore = scoreSouth;
+					bestMarker = {doorPos.x + 1.0f, doorPos.y + 5.0f};
 				}
-				if (unknownWest)
+				if (scoreWest > bestScore)
 				{
-					unknownDoorMarkers.push_back({doorPos.x - 4.0f, doorPos.y + 1.0f});
+					bestScore = scoreWest;
+					bestMarker = {doorPos.x - 4.0f, doorPos.y + 1.0f};
 				}
-				if (unknownEast)
+				if (scoreEast > bestScore)
 				{
-					unknownDoorMarkers.push_back({doorPos.x + 5.0f, doorPos.y + 1.0f});
+					bestScore = scoreEast;
+					bestMarker = {doorPos.x + 5.0f, doorPos.y + 1.0f};
+				}
+
+				if (bestScore > 0)
+				{
+					unknownDoorMarkers.push_back(bestMarker);
 				}
 			}
 		}

@@ -201,7 +201,7 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 
 	std::vector<Rect> rooms;
 	int attempts = std::max(28, (sizeX * sizeY) / 140);
-	int minRoomSize = 16;
+	int minRoomSize = 14;
 	int maxRoomSize = 26;
 	int padding = 4;
 	int maxRoomConnections = 3;
@@ -4620,7 +4620,7 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 
 	// Final room flags for size and cover after all generation passes.
 	{
-		const int smallRoomAreaThreshold = 240;
+		const int smallRoomAreaThreshold = 220;
 		const float lowCoverThreshold = 0.05f;
 		for (int roomIndex = 0; roomIndex < (int)rooms.size(); roomIndex++)
 		{

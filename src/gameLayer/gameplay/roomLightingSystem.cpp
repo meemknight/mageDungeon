@@ -7,6 +7,7 @@
 #include <queue>
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 bool isInsideRoomTriggerBounds(const FloorRoom &room, const glm::vec4 &aabb, float inset)
 {
@@ -98,6 +99,39 @@ namespace
 		}
 		return false;
 	}
+
+	// Builds a small radial alpha texture used to soften light edges without shaders.
+	gl2d::Texture &getSoftEdgeGradientTexture()
+	{
+		static gl2d::Texture gradient;
+		if (gradient.isValid()) { return gradient; }
+
+		constexpr int size = 24;
+		std::vector<unsigned char> data(size * size * 4, 0);
+		float center = (size - 1) * 0.5f;
+		float maxDist = center * 1.12f;
+
+		for (int y = 0; y < size; y++)
+		{
+			for (int x = 0; x < size; x++)
+			{
+				float dx = (float)x - center;
+				float dy = (float)y - center;
+				float dist = std::sqrt(dx * dx + dy * dy);
+				float t = 1.0f - glm::clamp(dist / maxDist, 0.0f, 1.0f);
+				float a = t * t;
+
+				int idx = (x + y * size) * 4;
+				data[idx + 0] = 0;
+				data[idx + 1] = 0;
+				data[idx + 2] = 0;
+				data[idx + 3] = (unsigned char)glm::clamp(a * 255.0f, 0.0f, 255.0f);
+			}
+		}
+
+		gradient.createFromBuffer((const char *)data.data(), size, size, false, false);
+		return gradient;
+	}
 }
 
 int RoomLightingSystem::toIndex(int x, int y) const
@@ -141,7 +175,30 @@ void RoomLightingSystem::resetForFloor(Map &map, const FloorInfo &floorInfo)
 		}
 	}
 
+	// Spawn room starts visible so the player is never in darkness on floor load.
+	if (floorInfo.spawnRoomIndex && *floorInfo.spawnRoomIndex >= 0
+		&& *floorInfo.spawnRoomIndex < (int)floorInfo.rooms.size())
+	{
+		int roomIndex = *floorInfo.spawnRoomIndex;
+		roomLit[roomIndex] = 1;
+		const auto &room = floorInfo.rooms[roomIndex];
+		int minX = std::max(0, room.pos.x);
+		int minY = std::max(0, room.pos.y);
+		int maxX = std::min(size.x, room.pos.x + room.size.x);
+		int maxY = std::min(size.y, room.pos.y + room.size.y);
+		for (int y = minY; y < maxY; y++)
+		{
+			for (int x = minX; x < maxX; x++)
+			{
+				int idx = toIndex(x, y);
+				revealedTiles[idx] = 1;
+				revealFade[idx] = 0.0f;
+			}
+		}
+	}
+
 	corridorFloorComponentByTile.assign(count, -1);
+	corridorComponentByTile.assign(count, -1);
 	corridorRevealTiles.clear();
 	corridorLit.clear();
 
@@ -203,6 +260,11 @@ void RoomLightingSystem::resetForFloor(Map &map, const FloorInfo &floorInfo)
 					wallAdded[nIdx] = 1;
 					corridorRevealTiles[componentId].push_back(nIdx);
 				}
+			}
+
+			for (int tileIdx : corridorRevealTiles[componentId])
+			{
+				corridorComponentByTile[tileIdx] = componentId;
 			}
 		}
 	}
@@ -284,19 +346,27 @@ bool RoomLightingSystem::isTileVisible(Map &map, int x, int y) const
 		return true;
 	}
 
+	int roomIndex = roomByTile[idx];
+	bool isInUnexploredRoom = roomIndex >= 0 && roomIndex < (int)roomLit.size() && !roomLit[roomIndex];
+	int corridorIndex = corridorComponentByTile[idx];
+	bool isInUnexploredCorridor = corridorIndex >= 0 && corridorIndex < (int)corridorLit.size() && !corridorLit[corridorIndex];
+
 	// One-ring expansion: neighbors of revealed tiles are also lit.
-	for (int oy = -1; oy <= 1; oy++)
+	if (!isInUnexploredRoom && !isInUnexploredCorridor)
 	{
-		for (int ox = -1; ox <= 1; ox++)
+		for (int oy = -1; oy <= 1; oy++)
 		{
-			if (ox == 0 && oy == 0) { continue; }
-			int nx = x + ox;
-			int ny = y + oy;
-			if (!inBounds(size, nx, ny)) { continue; }
-			int nIdx = nx + ny * size.x;
-			if (revealedTiles[nIdx])
+			for (int ox = -1; ox <= 1; ox++)
 			{
-				return true;
+				if (ox == 0 && oy == 0) { continue; }
+				int nx = x + ox;
+				int ny = y + oy;
+				if (!inBounds(size, nx, ny)) { continue; }
+				int nIdx = nx + ny * size.x;
+				if (revealedTiles[nIdx])
+				{
+					return true;
+				}
 			}
 		}
 	}
@@ -321,6 +391,12 @@ bool RoomLightingSystem::isTileVisible(Map &map, int x, int y) const
 		}
 	}
 
+	if (isInUnexploredRoom || isInUnexploredCorridor)
+	{
+		// Keep unexplored rooms/corridors in shadow (except the explicit up-extension above).
+		return false;
+	}
+
 	return isDilationWallTileLit(*this, map, x, y);
 }
 
@@ -334,6 +410,26 @@ void RoomLightingSystem::renderOverlay(gl2d::Renderer2D &renderer, Map &map)
 	view.y = std::max(0, (int)std::floor(viewRect.y) - 2);
 	view.z = std::min(size.x - 1, (int)std::ceil(viewRect.x + viewRect.z) + 2);
 	view.w = std::min(size.y - 1, (int)std::ceil(viewRect.y + viewRect.w) + 2);
+
+	auto isDarkTile = [&](int x, int y)
+	{
+		if (!inBounds(size, x, y)) { return false; }
+		if (!hasTile(map, x, y)) { return false; }
+		return !isTileVisible(map, x, y);
+	};
+
+	auto hasDarkInRadius = [&](int x, int y, int radius)
+	{
+		for (int oy = -radius; oy <= radius; oy++)
+		{
+			for (int ox = -radius; ox <= radius; ox++)
+			{
+				if (ox == 0 && oy == 0) { continue; }
+				if (isDarkTile(x + ox, y + oy)) { return true; }
+			}
+		}
+		return false;
+	};
 
 	for (int y = view.y; y <= view.w; y++)
 	{
@@ -352,9 +448,18 @@ void RoomLightingSystem::renderOverlay(gl2d::Renderer2D &renderer, Map &map)
 			{
 				alpha = revealFade[idx];
 			}
+			else if (enableSoftEdge)
+			{
+				// Multi-segment penumbra using layered dark bands.
+				if (hasDarkInRadius(x, y, 1)) { alpha += softEdgeNearAlpha * 0.85f; }
+				if (hasDarkInRadius(x, y, 2)) { alpha += softEdgeFarAlpha * 0.90f; }
+				if (hasDarkInRadius(x, y, 3)) { alpha += softEdgeFarAlpha * 0.50f; }
+				alpha = glm::clamp(alpha, 0.0f, 0.50f);
+			}
 			if (alpha <= 0.0f) { continue; }
 
 			renderer.renderRectangle({(float)x, (float)y, 1.0f, 1.0f}, {0, 0, 0, alpha});
 		}
 	}
+
 }

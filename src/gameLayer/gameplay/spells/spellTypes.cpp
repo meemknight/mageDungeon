@@ -44,6 +44,8 @@ namespace SpellTypes
 			{Elements::Ice,Elements::Fire,Elements::Water},	//bigWaterTrap,
 			{Elements::Ice,Elements::Fire,Elements::Earth},	//bigEarthTrap,
 			{Elements::Ice,Elements::Water},//waterTrap,
+			{Elements::Earth,Elements::Ice,Elements::Water},	//stormTrap,
+			{Elements::Earth,Elements::Ice,Elements::Water,Elements::Water},	//bigStormTrap,
 			{Elements::Ice,Elements::Earth},	//earthTrap,
 			{Elements::Water,Elements::Fire},	//fireHomingMissle,
 			{Elements::Water,Elements::Earth},	//earthHomingMissle,
@@ -180,6 +182,8 @@ namespace SpellTypes
 			"Big Water Trap",
 			"Big Earth Trap",
 			"Water Trap",
+			"Storm Trap",
+			"Big Storm Trap",
 			"Earth Trap",
 			"Fire Homing",
 			"Earth Homing",
@@ -397,6 +401,14 @@ namespace SpellTypes
 
 		case waterTrap:
 		return std::make_unique<BasicMagicMissleSpell>(getTrapSpell(Elements::Water));
+		break;
+
+		case stormTrap:
+		return std::make_unique<StormTrapSpell>(getStormTrapSpell());
+		break;
+
+		case bigStormTrap:
+		return std::make_unique<StormTrapSpell>(getBigStormTrapSpell());
 		break;
 
 		case earthTrap:

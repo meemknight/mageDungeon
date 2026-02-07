@@ -262,6 +262,45 @@ namespace SpellTypes
 		return getBigTrapSpell(Elements::Water, 28.0f);
 	}
 
+	inline StormTrapSpell getStormTrapSpell()
+	{
+		StormTrapSpell ret;
+		ret.element = Elements::Water;
+		ret.maxFireCount = 1;
+		ret.triggerDelay = 0.0f;
+		ret.trapDuration = 45.0f;
+		ret.continuousUpdateTimer = ret.trapDuration;
+		ret.maxCharges = 5;
+		ret.zapDamage = 5.0f;
+		ret.zapCooldownMin = 0.35f;
+		ret.zapCooldownMax = 0.75f;
+		ret.zapRollInterval = 0.08f;
+		ret.zapChance = 0.56f;
+		ret.placementDistance = 3.0f;
+		ret.placementStep = 0.2f;
+		ret.trapRadius = 1.75f;
+		return ret;
+	}
+
+	inline StormTrapSpell getBigStormTrapSpell()
+	{
+		StormTrapSpell ret = getStormTrapSpell();
+		ret.maxCharges = 6;
+		ret.zapDamage = 7.0f;
+		ret.chainDamage = 6.0f;
+		ret.chainRange = 3.2f;
+		ret.trapRadius = 2.05f;
+		ret.randomLightningBursts = 5;
+		ret.hitLightningBursts = 10;
+		ret.hitArcRepeats = 5;
+		ret.particleSizeScale = 1.18f;
+		ret.particleCountScale = 1.45f;
+		ret.arcWaveAmplitude = PIXEL_SIZE * 2.6f;
+		ret.arcWaveFrequency = 2.0f;
+		ret.arcWaveSpeed = 2.4f;
+		return ret;
+	}
+
 	inline BasicMagicMissleSpell getHomingMissleSpell(int element)
 	{
 		BasicMagicMissleSpell ret;
@@ -701,7 +740,7 @@ namespace SpellTypes
 	{
 		HomingVolleySpell ret;
 		HitStats hitStats;
-		hitStats.damage = 5.0f;
+		hitStats.damage = 4.0f;
 		hitStats.pushBack = 5.2f;
 		ret.element = Elements::Fire;
 		ret.maxFireCount = 1;
@@ -950,7 +989,7 @@ namespace SpellTypes
 		ret.element = element;
 		ret.maxFireCount = 3;
 		ret.triggerDelay = 0.18f;
-		ret.bulletsPerWave = 16;
+		ret.bulletsPerWave = 32;
 		ret.throwVelocity = 8.0f;
 		ret.totalDamage = 70.0f;
 		if (element == Elements::Fire)
@@ -1054,6 +1093,8 @@ namespace SpellTypes
 		bigWaterTrap,
 		bigEarthTrap,
 		waterTrap,
+		stormTrap,
+		bigStormTrap,
 		earthTrap,
 		fireHomingMissle,
 		earthHomingMissle,

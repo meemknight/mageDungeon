@@ -39,9 +39,9 @@ namespace
 	{
 		switch (roomTier)
 		{
-			case 0: return getRandomInt(rng, 2, 3);
-			case 1: return getRandomInt(rng, 3, 5);
-			default: return getRandomInt(rng, 5, 8);
+			case 0: return getRandomInt(rng, 1, 2);
+			case 1: return getRandomInt(rng, 2, 4);
+			default: return getRandomInt(rng, 3, 5);
 		}
 	}
 
@@ -50,25 +50,26 @@ namespace
 		int waves = 1;
 		if (roomTier == 2)
 		{
-			if (getRandomChance(rng, 0.38f)) { waves = 2; }
-			if (waves == 2 && getRandomChance(rng, 0.25f)) { waves = 3; }
+			if (getRandomChance(rng, 0.24f)) { waves = 2; }
+			if (waves == 2 && getRandomChance(rng, 0.15f)) { waves = 3; }
 		}
 		else if (roomTier == 1)
 		{
-			if (getRandomChance(rng, 0.22f)) { waves = 2; }
+			if (getRandomChance(rng, 0.12f)) { waves = 2; }
 		}
 		return waves;
 	}
 
 	int getMinimumWaveCount(int difficulty, int roomTier)
 	{
-		int minCount = 2;
-		if (difficulty == 1) { minCount = 3; }
-		else if (difficulty == 2) { minCount = 5; }
-		else if (difficulty >= 3) { minCount = 6; }
+		// Keep trap rooms threatening, but reduce per-room crowding globally.
+		int minCount = 1;
+		if (difficulty == 1) { minCount = 2; }
+		else if (difficulty == 2) { minCount = 4; }
+		else if (difficulty >= 3) { minCount = 5; }
 		if (roomTier == 0)
 		{
-			minCount = std::max(2, minCount - 1);
+			minCount = std::max(1, minCount - 1);
 		}
 		return minCount;
 	}
@@ -235,7 +236,7 @@ TrapWavePlan buildTrapRoomWavePlan(const FloorRoom &room, int difficulty,
 		int waveCountLocal = baseCount;
 		if (waveIndex > 0)
 		{
-			waveCountLocal = std::max(2, baseCount - 1);
+			waveCountLocal = std::max(1, baseCount - 2);
 		}
 		waveCountLocal = std::max(1, waveCountLocal);
 		if (isSmallRoom)
