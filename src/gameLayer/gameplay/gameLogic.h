@@ -135,6 +135,14 @@ struct GameLogic
 	int draggingStoneIndex = -1;
 	glm::vec2 draggingStoneOffset = {};
 	bool draggingStone = false;
+	// Controller inventory navigation state for stone placement.
+	int controllerInventoryFocus = 0; // 0 = wand slots, 1 = stone list
+	int controllerInventoryWandSlot = 0;
+	int controllerInventoryStoneIndex = 0;
+	int controllerInventorySelectedStoneIndex = -1;
+	bool controllerInventoryHasSelectedStone = false;
+	bool controllerInventoryStickLockX = false;
+	bool controllerInventoryStickLockY = false;
 	int quickActionEditIndex = -1;
 	float wandHoverTimer = 0.0f;
 	DroppedItemSystem droppedItems; // dropped items like wands and chests

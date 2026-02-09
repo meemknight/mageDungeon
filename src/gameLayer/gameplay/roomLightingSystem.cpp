@@ -12,13 +12,32 @@
 
 bool isInsideRoomTriggerBounds(const FloorRoom &room, const glm::vec4 &aabb, float inset)
 {
-	float minX = room.pos.x + inset;
-	float minY = room.pos.y + inset;
-	float maxX = room.pos.x + room.size.x - inset;
-	float maxY = room.pos.y + room.size.y - inset;
-	if (maxX <= minX || maxY <= minY) { return false; }
-	return aabb.x >= minX && aabb.y >= minY
-		&& (aabb.x + aabb.z) <= maxX && (aabb.y + aabb.w) <= maxY;
+	float clampedInset = std::max(0.0f, inset);
+	float minX = room.pos.x + clampedInset;
+	float minY = room.pos.y + clampedInset;
+	float maxX = room.pos.x + room.size.x - clampedInset;
+	float maxY = room.pos.y + room.size.y - clampedInset;
+
+	if (maxX > minX && maxY > minY)
+	{
+		if (aabb.x >= minX && aabb.y >= minY
+			&& (aabb.x + aabb.z) <= maxX && (aabb.y + aabb.w) <= maxY)
+		{
+			return true;
+		}
+	}
+
+	// Fallback for doorway-edge entries: center must be inside the room interior
+	// (past the wall/door rim), so trigger cannot happen before passing the door.
+	float centerMinX = room.pos.x + 1.0f;
+	float centerMinY = room.pos.y + 1.0f;
+	float centerMaxX = room.pos.x + room.size.x - 1.0f;
+	float centerMaxY = room.pos.y + room.size.y - 1.0f;
+	if (centerMaxX <= centerMinX || centerMaxY <= centerMinY) { return false; }
+
+	glm::vec2 center = {aabb.x + aabb.z * 0.5f, aabb.y + aabb.w * 0.5f};
+	return center.x >= centerMinX && center.x <= centerMaxX
+		&& center.y >= centerMinY && center.y <= centerMaxY;
 }
 
 namespace

@@ -396,6 +396,13 @@ bool GameLogic::init()
 	draggingStoneIndex = -1;
 	draggingStoneOffset = {};
 	draggingStone = false;
+	controllerInventoryFocus = 0;
+	controllerInventoryWandSlot = 0;
+	controllerInventoryStoneIndex = 0;
+	controllerInventorySelectedStoneIndex = -1;
+	controllerInventoryHasSelectedStone = false;
+	controllerInventoryStickLockX = false;
+	controllerInventoryStickLockY = false;
 	droppedItems.clear();
 	summons.clear();
 	cameraShakeSystem.clear();
@@ -787,7 +794,12 @@ bool GameLogic::update(float deltaTime,
 	{
 		auto *slot = getWandSlot(wands[wandIndex], slotIndex);
 		if (!slot) { return false; }
-		if (slot->type != WandSlotType::Empty) { return false; }
+		bool replacingStone = wandStoneSlots[wandIndex][slotIndex].hasStone;
+		if (!replacingStone && slot->type != WandSlotType::Empty) { return false; }
+		if (replacingStone)
+		{
+			stoneInventory.push_back(wandStoneSlots[wandIndex][slotIndex].stone);
+		}
 		wandStoneSlots[wandIndex][slotIndex].hasStone = true;
 		wandStoneSlots[wandIndex][slotIndex].stone = stone;
 		slot->type = WandSlotType::Element;
@@ -846,15 +858,28 @@ bool GameLogic::update(float deltaTime,
 		}
 	};
 
+	// Resets in-inventory stone drag/select interactions.
+	auto resetInventoryStoneInteraction = [&]()
+	{
+		draggingStoneIndex = -1;
+		draggingStoneOffset = {};
+		draggingStone = false;
+		controllerInventoryFocus = 0;
+		controllerInventoryWandSlot = 0;
+		controllerInventoryStoneIndex = 0;
+		controllerInventorySelectedStoneIndex = -1;
+		controllerInventoryHasSelectedStone = false;
+		controllerInventoryStickLockX = false;
+		controllerInventoryStickLockY = false;
+	};
+
 	auto switchActiveWand = [&](int newIndex, bool pauseManaCharge)
 	{
 		if (newIndex < 0 || newIndex > 1) { return; }
 		if (!hasWand[newIndex]) { return; }
 		if (newIndex == activeWandIndex) { return; }
 		int oldIndex = activeWandIndex;
-		draggingStoneIndex = -1;
-		draggingStoneOffset = {};
-		draggingStone = false;
+		resetInventoryStoneInteraction();
 		activeWandIndex = newIndex;
 		spellSelectionLogic[oldIndex].resetSelectionForWand(
 			wands[oldIndex], spellRecepies[oldIndex], false);
@@ -884,6 +909,7 @@ bool GameLogic::update(float deltaTime,
 		if (mapViewerOpen)
 		{
 			inventoryOpen = false;
+			resetInventoryStoneInteraction();
 			mapViewerCenter = player.physics.getPos();
 			mapViewerViewSize = minimapSystem.viewSize;
 		}
@@ -893,12 +919,11 @@ bool GameLogic::update(float deltaTime,
 		input.controller.buttons[platform::Controller::Start].pressed))
 	{
 		inventoryOpen = !inventoryOpen;
+		resetInventoryStoneInteraction();
 	}
-	if (!inventoryOpen && draggingStone)
+	if (!inventoryOpen && (draggingStone || controllerInventoryHasSelectedStone))
 	{
-		draggingStoneIndex = -1;
-		draggingStoneOffset = {};
-		draggingStone = false;
+		resetInventoryStoneInteraction();
 	}
 	if (!inventoryOpen && !mapViewerOpen)
 	{
@@ -2511,6 +2536,7 @@ bool GameLogic::update(float deltaTime,
 		}
 		stoneInventory = state.stoneInventory;
 		inventoryOpen = false;
+		resetInventoryStoneInteraction();
 
 		if (floorInfo.playerSpawnPos)
 		{
@@ -3215,11 +3241,268 @@ bool GameLogic::update(float deltaTime,
 				{0.9f, 0.9f, 0.9f, alpha}, textSize, 4, 3, false);
 		};
 
+		auto scaledRect = [](glm::vec4 rect, float scale)
+		{
+			glm::vec2 center = {rect.x + rect.z * 0.5f, rect.y + rect.w * 0.5f};
+			glm::vec2 size = {rect.z * scale, rect.w * scale};
+			return glm::vec4{center.x - size.x * 0.5f, center.y - size.y * 0.5f, size.x, size.y};
+		};
+
+		Wand &inventoryWand = wands[activeWandIndex];
+
 		if (draggingStone && (draggingStoneIndex < 0 || draggingStoneIndex >= (int)stoneInventory.size()))
 		{
 			draggingStoneIndex = -1;
 			draggingStoneOffset = {};
 			draggingStone = false;
+		}
+
+		if (!usesController)
+		{
+			controllerInventoryStickLockX = false;
+			controllerInventoryStickLockY = false;
+		}
+
+		if (controllerInventoryWandSlot < -1 || controllerInventoryWandSlot > 3)
+		{
+			controllerInventoryWandSlot = 0;
+		}
+
+		auto isWandSlotRemovable = [&](int slotIndex)
+		{
+			if (slotIndex < 0 || slotIndex > 3) { return false; }
+			return wandStoneSlots[activeWandIndex][slotIndex].hasStone;
+		};
+
+		auto isWandSlotPlaceable = [&](int slotIndex)
+		{
+			if (slotIndex < 0 || slotIndex > 3) { return false; }
+			auto *slot = getWandSlot(inventoryWand, slotIndex);
+			if (!slot) { return false; }
+			if (wandStoneSlots[activeWandIndex][slotIndex].hasStone)
+			{
+				return true;
+			}
+			return slot->type == WandSlotType::Empty;
+		};
+
+		auto isWandSlotSelectable = [&](int slotIndex)
+		{
+			if (controllerInventoryHasSelectedStone)
+			{
+				return isWandSlotPlaceable(slotIndex);
+			}
+			return isWandSlotRemovable(slotIndex);
+		};
+
+		auto findFirstSelectableWandSlot = [&]()
+		{
+			for (int i = 0; i < 4; i++)
+			{
+				if (isWandSlotSelectable(i)) { return i; }
+			}
+			return -1;
+		};
+
+		if (controllerInventoryHasSelectedStone)
+		{
+			if (controllerInventorySelectedStoneIndex < 0
+				|| controllerInventorySelectedStoneIndex >= (int)stoneInventory.size())
+			{
+				controllerInventoryHasSelectedStone = false;
+				controllerInventorySelectedStoneIndex = -1;
+			}
+		}
+
+		if (stoneInventory.empty())
+		{
+			controllerInventoryStoneIndex = 0;
+			if (!controllerInventoryHasSelectedStone && controllerInventoryFocus == 1)
+			{
+				controllerInventoryFocus = 0;
+			}
+		}
+		else
+		{
+			controllerInventoryStoneIndex = glm::clamp(controllerInventoryStoneIndex,
+				0, (int)stoneInventory.size() - 1);
+		}
+
+		int firstSelectableWandSlot = findFirstSelectableWandSlot();
+		if (firstSelectableWandSlot < 0)
+		{
+			controllerInventoryWandSlot = -1;
+		}
+		else if (!isWandSlotSelectable(controllerInventoryWandSlot))
+		{
+			controllerInventoryWandSlot = firstSelectableWandSlot;
+		}
+
+		// Controller-only wand/stone navigation and placement flow.
+		bool controllerInventoryActive = usesController && quickActionEditIndex == -1 && !draggingStone;
+		if (usesController && input.controller.buttons[platform::Controller::B].pressed)
+		{
+			controllerInventoryHasSelectedStone = false;
+			controllerInventorySelectedStoneIndex = -1;
+			if (quickActionEditIndex == -1)
+			{
+				controllerInventoryFocus = 0;
+			}
+		}
+		if (controllerInventoryActive)
+		{
+			int navX = 0;
+			int navY = 0;
+			const float stickDeadzone = 0.62f;
+			float stickX = input.controller.LStick.x;
+			float stickY = input.controller.LStick.y;
+
+			if (std::abs(stickX) <= stickDeadzone)
+			{
+				controllerInventoryStickLockX = false;
+			}
+			else if (!controllerInventoryStickLockX)
+			{
+				navX = stickX > 0.0f ? 1 : -1;
+				controllerInventoryStickLockX = true;
+			}
+
+			if (std::abs(stickY) <= stickDeadzone)
+			{
+				controllerInventoryStickLockY = false;
+			}
+			else if (!controllerInventoryStickLockY)
+			{
+				navY = stickY > 0.0f ? -1 : 1;
+				controllerInventoryStickLockY = true;
+			}
+
+			if (controllerInventoryFocus == 0)
+			{
+				if (controllerInventoryWandSlot < 0)
+				{
+					controllerInventoryWandSlot = firstSelectableWandSlot;
+				}
+				if (navY < 0)
+				{
+					if (isWandSlotSelectable(0)) { controllerInventoryWandSlot = 0; }
+				}
+				if (navY > 0)
+				{
+					if (isWandSlotSelectable(1)) { controllerInventoryWandSlot = 1; }
+				}
+				if (navX < 0)
+				{
+					if (isWandSlotSelectable(2)) { controllerInventoryWandSlot = 2; }
+				}
+				if (navX > 0)
+				{
+					if (!controllerInventoryHasSelectedStone && !stoneInventory.empty())
+					{
+						if (controllerInventoryWandSlot == 3 || !isWandSlotSelectable(3))
+						{
+							controllerInventoryFocus = 1;
+						}
+						else
+						{
+							controllerInventoryWandSlot = 3;
+						}
+					}
+					else if (isWandSlotSelectable(3))
+					{
+						controllerInventoryWandSlot = 3;
+					}
+				}
+			}
+			else
+			{
+				if (stoneInventory.empty())
+				{
+					controllerInventoryFocus = 0;
+				}
+				else
+				{
+					if (navY != 0)
+					{
+						controllerInventoryStoneIndex = glm::clamp(
+							controllerInventoryStoneIndex + navY,
+							0, (int)stoneInventory.size() - 1);
+					}
+					if (navX < 0)
+					{
+						if (firstSelectableWandSlot >= 0)
+						{
+							controllerInventoryFocus = 0;
+							if (!isWandSlotSelectable(controllerInventoryWandSlot))
+							{
+								controllerInventoryWandSlot = firstSelectableWandSlot;
+							}
+						}
+					}
+				}
+			}
+
+			if (input.controller.buttons[platform::Controller::A].pressed)
+			{
+				if (controllerInventoryFocus == 1 && !controllerInventoryHasSelectedStone)
+				{
+					if (!stoneInventory.empty())
+					{
+						controllerInventoryHasSelectedStone = true;
+						controllerInventorySelectedStoneIndex = controllerInventoryStoneIndex;
+						controllerInventoryFocus = 0;
+						controllerInventoryWandSlot = firstSelectableWandSlot;
+					}
+				}
+				else if (controllerInventoryFocus == 0)
+				{
+					if (controllerInventoryHasSelectedStone)
+					{
+						int selectedIndex = controllerInventorySelectedStoneIndex;
+						if (selectedIndex >= 0 && selectedIndex < (int)stoneInventory.size())
+						{
+							MagicStone stone = stoneInventory[selectedIndex];
+							if (isWandSlotPlaceable(controllerInventoryWandSlot)
+								&& applyStoneToSlot(activeWandIndex, controllerInventoryWandSlot, stone))
+							{
+								stoneInventory.erase(stoneInventory.begin() + selectedIndex);
+								spellSelectionLogic[activeWandIndex].resetSelectionForWand(
+									wands[activeWandIndex], spellRecepies[activeWandIndex], false);
+								controllerInventoryHasSelectedStone = false;
+								controllerInventorySelectedStoneIndex = -1;
+								if (stoneInventory.empty())
+								{
+									controllerInventoryStoneIndex = 0;
+									controllerInventoryFocus = 0;
+								}
+								else
+								{
+									controllerInventoryStoneIndex = glm::clamp(controllerInventoryStoneIndex,
+										0, (int)stoneInventory.size() - 1);
+								}
+							}
+						}
+						else
+						{
+							controllerInventoryHasSelectedStone = false;
+							controllerInventorySelectedStoneIndex = -1;
+						}
+					}
+					else if (isWandSlotRemovable(controllerInventoryWandSlot))
+					{
+						MagicStone stone = wandStoneSlots[activeWandIndex][controllerInventoryWandSlot].stone;
+						wandStoneSlots[activeWandIndex][controllerInventoryWandSlot] = {};
+						if (auto *slot = getWandSlot(inventoryWand, controllerInventoryWandSlot))
+						{
+							clearWandSlot(*slot);
+						}
+						stoneInventory.push_back(stone);
+						controllerInventoryStoneIndex = (int)stoneInventory.size() - 1;
+						spellSelectionLogic[activeWandIndex].resetSelectionForWand(
+							wands[activeWandIndex], spellRecepies[activeWandIndex], false);
+					}
+				}
+			}
 		}
 
 		for (int i = 0; i < (int)stoneInventory.size(); i++)
@@ -3229,9 +3512,23 @@ bool GameLogic::update(float deltaTime,
 			{
 				continue;
 			}
-			renderStone(stoneRect, stoneInventory[i], 1.0f);
+			bool focusedStone = controllerInventoryActive && controllerInventoryFocus == 1
+				&& i == controllerInventoryStoneIndex && !controllerInventoryHasSelectedStone;
+			bool selectedStone = controllerInventoryHasSelectedStone && i == controllerInventorySelectedStoneIndex;
+			glm::vec4 drawStoneRect = selectedStone ? scaledRect(stoneRect, 1.16f) : stoneRect;
+			renderStone(drawStoneRect, stoneInventory[i], 1.0f);
+			if (focusedStone)
+			{
+				float outlineWidth = PIXEL_SIZE * 0.8f * uiZoom;
+				glm::vec4 outlineColor = {0.9f, 0.12f, 0.12f, 0.95f};
+				renderer.renderRectangleOutline(drawStoneRect, outlineColor, outlineWidth);
+			}
 			if (!draggingStone && input.lMouse.pressed && isInsideRect(stoneRect, cursorPos))
 			{
+				controllerInventoryHasSelectedStone = false;
+				controllerInventorySelectedStoneIndex = -1;
+				controllerInventoryFocus = 1;
+				controllerInventoryStoneIndex = i;
 				draggingStone = true;
 				draggingStoneIndex = i;
 				draggingStoneOffset = cursorPos - glm::vec2(stoneRect.x, stoneRect.y);
@@ -3266,8 +3563,7 @@ bool GameLogic::update(float deltaTime,
 				quickActionEditIndex = -1;
 			}
 		}
-
-		Wand &inventoryWand = wands[activeWandIndex];
+		controllerInventoryActive = usesController && quickActionEditIndex == -1 && !draggingStone;
 
 		// wand stats ring (right side)
 		{
@@ -3277,6 +3573,8 @@ bool GameLogic::update(float deltaTime,
 				{
 					if (!wandStoneSlots[activeWandIndex][slotIndex].hasStone) { continue; }
 					if (!isInsideRect(ringSlotRects[slotIndex], cursorPos)) { continue; }
+					controllerInventoryHasSelectedStone = false;
+					controllerInventorySelectedStoneIndex = -1;
 					MagicStone stone = wandStoneSlots[activeWandIndex][slotIndex].stone;
 					wandStoneSlots[activeWandIndex][slotIndex] = {};
 					if (auto *slot = getWandSlot(inventoryWand, slotIndex))
@@ -3494,6 +3792,19 @@ bool GameLogic::update(float deltaTime,
 			renderRingIcon(inventoryWand.down, downRemaining, 1, downSelectable);
 			renderRingIcon(inventoryWand.left, leftRemaining, 2, leftSelectable);
 			renderRingIcon(inventoryWand.right, rightRemaining, 3, rightSelectable);
+
+			if (controllerInventoryActive
+				&& (controllerInventoryFocus == 0 || controllerInventoryHasSelectedStone)
+				&& controllerInventoryWandSlot >= 0
+				&& isWandSlotSelectable(controllerInventoryWandSlot))
+			{
+				int selectedSlot = controllerInventoryWandSlot;
+				float outlineWidth = PIXEL_SIZE * 0.9f * uiZoom;
+				glm::vec4 outlineColor = controllerInventoryHasSelectedStone
+					? glm::vec4{1.0f, 0.5f, 0.28f, 0.95f}
+					: glm::vec4{0.9f, 0.12f, 0.12f, 0.95f};
+				renderer.renderRectangleOutline(ringSlotRects[selectedSlot], outlineColor, outlineWidth);
+			}
 
 			if (inventoryWand.alwaysCast.type == WandSlotType::Element)
 			{

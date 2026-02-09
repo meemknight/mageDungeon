@@ -1544,6 +1544,22 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 	{
 		const Rect &room = rooms[roomIndex];
 		glm::ivec2 center = room.center();
+		auto keepDoorOffCorners = [&](glm::ivec2 p)
+		{
+			int minX = room.x + 1;
+			int maxX = room.x2() - 3;
+			int minY = room.y + 1;
+			int maxY = room.y2() - 3;
+			if (p.y == room.y || p.y == room.y2() - 2)
+			{
+				p.x = std::clamp(p.x, minX, maxX);
+			}
+			if (p.x == room.x || p.x == room.x2() - 2)
+			{
+				p.y = std::clamp(p.y, minY, maxY);
+			}
+			return p;
+		};
 		int dx = targetCenter.x - center.x;
 		int dy = targetCenter.y - center.y;
 		if (std::abs(dx) >= std::abs(dy))
@@ -1556,7 +1572,7 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 			pos.y = (dy >= 0) ? (room.y2() - 2) : room.y;
 			pos.x = std::clamp(pos.x, room.x, room.x2() - 2);
 		}
-		return pos;
+		return keepDoorOffCorners(pos);
 	};
 
 	auto getDoorOutsidePos = [&](int roomIndex, glm::ivec2 doorPos)
@@ -1596,6 +1612,18 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 		{
 			pos.x = std::clamp(pos.x, room.x, room.x2() - 2);
 			pos.y = std::clamp(pos.y, room.y, room.y2() - 2);
+			int minX = room.x + 1;
+			int maxX = room.x2() - 3;
+			int minY = room.y + 1;
+			int maxY = room.y2() - 3;
+			if (pos.y == room.y || pos.y == room.y2() - 2)
+			{
+				pos.x = std::clamp(pos.x, minX, maxX);
+			}
+			if (pos.x == room.x || pos.x == room.x2() - 2)
+			{
+				pos.y = std::clamp(pos.y, minY, maxY);
+			}
 			return pos;
 		};
 
@@ -1607,14 +1635,14 @@ void FloorGenerator::generateDungeonFloor(int sizeX, int sizeY, Map &map, int se
 			{
 				int x = dir.x > 0 ? room.x2() - 2 : room.x;
 				int offset = getRandomInt(rng, -room.h / 3, room.h / 3);
-				int y = std::clamp(center.y + offset, room.y, room.y2() - 2);
+				int y = std::clamp(center.y + offset, room.y + 1, room.y2() - 3);
 				best = {x, y};
 			}
 			else
 			{
 				int y = dir.y > 0 ? room.y2() - 2 : room.y;
 				int offset = getRandomInt(rng, -room.w / 3, room.w / 3);
-				int x = std::clamp(center.x + offset, room.x, room.x2() - 2);
+				int x = std::clamp(center.x + offset, room.x + 1, room.x2() - 3);
 				best = {x, y};
 			}
 

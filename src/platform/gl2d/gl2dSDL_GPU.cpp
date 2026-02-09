@@ -1,6 +1,6 @@
 #include "gl2d/gl2d.h"
 
-#if !GL2D_USE_SDL_GPU
+#if GL2D_USE_SDL_GPU
 
 #include <gameLayer.h>
 #include <cmath>
