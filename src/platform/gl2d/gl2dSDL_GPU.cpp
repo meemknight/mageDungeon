@@ -112,6 +112,10 @@
 #include <sstream>
 #include <algorithm>
 #include <iostream>
+#include <cstring>
+#include <cstdint>
+#include <cstdlib>
+#include <string>
 
 //if you are not using visual studio make shure you link to "Opengl32.lib"
 #ifdef _MSC_VER
@@ -148,6 +152,665 @@ namespace gl2d
 		auto a = errorFunc;
 		errorFunc = newFunc;
 		return a;
+	}
+
+	namespace
+	{
+		// Active renderer pointer used by FrameBuffer bind/unbind hooks.
+		Renderer2D *activeRendererInstance = nullptr;
+		// Global GPU device used by texture/framebuffer helpers.
+		SDL_GPUDevice *globalGpuDevice = nullptr;
+		// Owned devices are released on gl2d::cleanup after texture cleanup.
+		SDL_GPUDevice *deferredOwnedGpuDevice = nullptr;
+		// Last clear color used by framebuffer clear() helper.
+		Color4f lastFrameBufferClearColor = {};
+
+		struct BatchVertex
+		{
+			float pos[2] = {};
+			float uv[2] = {};
+			Uint8 color[4] = {};
+		};
+
+		static inline Uint8 floatToU8(float v)
+		{
+			v = std::clamp(v, 0.0f, 1.0f);
+			return static_cast<Uint8>(v * 255.0f + 0.5f);
+		}
+
+		static inline bool rectEquals(const SDL_Rect &a, const SDL_Rect &b)
+		{
+			return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
+		}
+
+		bool readBinaryFile(const char *path, std::vector<Uint8> &outData)
+		{
+			outData.clear();
+			if (!path) { return false; }
+
+			std::ifstream file(path, std::ios::binary | std::ios::ate);
+			if (!file.is_open()) { return false; }
+
+			auto size = file.tellg();
+			if (size <= 0) { return false; }
+			file.seekg(0, std::ios::beg);
+
+			outData.resize(static_cast<size_t>(size));
+			file.read(reinterpret_cast<char *>(outData.data()), size);
+			return file.good();
+		}
+
+		void runDevelopmentShaderCompileScriptOnce()
+		{
+		#if defined(_WIN32) && defined(DEVELOPLEMT_BUILD) && (DEVELOPLEMT_BUILD == 1)
+			static bool hasTriedCompile = false;
+			if (hasTriedCompile)
+			{
+				return;
+			}
+			hasTriedCompile = true;
+
+			// In development builds we auto-compile all local shader sources at startup.
+			std::string scriptPath = std::string(RESOURCES_PATH) + "shaders/compile_all_shaders.bat";
+			for (char &c : scriptPath)
+			{
+				if (c == '/')
+				{
+					c = '\\';
+				}
+			}
+			std::ifstream scriptFile(scriptPath);
+			if (!scriptFile.is_open())
+			{
+				errorFunc("Missing shader compile script at resources/shaders/compile_all_shaders.bat", userDefinedData);
+				return;
+			}
+
+			const std::string command = std::string("cmd.exe /C call \"") + scriptPath + "\"";
+			const int result = std::system(command.c_str());
+			if (result != 0)
+			{
+				errorFunc("Failed to run resources/shaders/compile_all_shaders.bat", userDefinedData);
+			}
+		#endif
+		}
+
+		bool isVulkanGpuDevice(SDL_GPUDevice *device)
+		{
+			if (!device)
+			{
+				return false;
+			}
+
+			const char *driver = SDL_GetGPUDeviceDriver(device);
+			return driver && strcmp(driver, "vulkan") == 0;
+		}
+
+		bool uploadRGBA8Texture(SDL_GPUDevice *device, SDL_GPUTexture *texture,
+			const char *imageData, int width, int height)
+		{
+			if (!device || !texture || !imageData || width <= 0 || height <= 0)
+			{
+				return false;
+			}
+
+			const uint32_t uploadBytes = static_cast<uint32_t>(width * height * 4);
+			SDL_GPUTransferBufferCreateInfo transferInfo = {};
+			transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+			transferInfo.size = uploadBytes;
+			SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
+			if (!transfer)
+			{
+				errorFunc("Failed to create SDL GPU transfer buffer for texture upload", userDefinedData);
+				return false;
+			}
+
+			void *mapped = SDL_MapGPUTransferBuffer(device, transfer, true);
+			if (!mapped)
+			{
+				errorFunc("Failed to map SDL GPU transfer buffer for texture upload", userDefinedData);
+				SDL_ReleaseGPUTransferBuffer(device, transfer);
+				return false;
+			}
+
+			std::memcpy(mapped, imageData, uploadBytes);
+			SDL_UnmapGPUTransferBuffer(device, transfer);
+
+			SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(device);
+			if (!cmd)
+			{
+				errorFunc("Failed to acquire SDL GPU command buffer for texture upload", userDefinedData);
+				SDL_ReleaseGPUTransferBuffer(device, transfer);
+				return false;
+			}
+
+			SDL_GPUCopyPass *copyPass = SDL_BeginGPUCopyPass(cmd);
+			if (!copyPass)
+			{
+				errorFunc("Failed to begin SDL GPU copy pass for texture upload", userDefinedData);
+				SDL_CancelGPUCommandBuffer(cmd);
+				SDL_ReleaseGPUTransferBuffer(device, transfer);
+				return false;
+			}
+
+			SDL_GPUTextureTransferInfo src = {};
+			src.transfer_buffer = transfer;
+			src.offset = 0;
+			src.pixels_per_row = static_cast<uint32_t>(width);
+			src.rows_per_layer = static_cast<uint32_t>(height);
+
+			SDL_GPUTextureRegion dst = {};
+			dst.texture = texture;
+			dst.mip_level = 0;
+			dst.layer = 0;
+			dst.x = 0;
+			dst.y = 0;
+			dst.z = 0;
+			dst.w = static_cast<uint32_t>(width);
+			dst.h = static_cast<uint32_t>(height);
+			dst.d = 1;
+
+			SDL_UploadToGPUTexture(copyPass, &src, &dst, false);
+			SDL_EndGPUCopyPass(copyPass);
+
+			const bool submitted = SDL_SubmitGPUCommandBuffer(cmd);
+			SDL_ReleaseGPUTransferBuffer(device, transfer);
+			if (!submitted)
+			{
+				errorFunc("Failed to submit SDL GPU texture upload command buffer", userDefinedData);
+				return false;
+			}
+
+			return true;
+		}
+
+		bool clearGpuTextureTarget(SDL_GPUDevice *device, SDL_GPUTexture *target, const Color4f &color)
+		{
+			if (!device || !target)
+			{
+				return false;
+			}
+
+			SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(device);
+			if (!cmd)
+			{
+				return false;
+			}
+
+			SDL_GPUColorTargetInfo colorTarget = {};
+			colorTarget.texture = target;
+			colorTarget.clear_color = SDL_FColor{color.r, color.g, color.b, color.a};
+			colorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
+			colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+
+			SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, nullptr);
+			if (!pass)
+			{
+				SDL_CancelGPUCommandBuffer(cmd);
+				return false;
+			}
+
+			SDL_EndGPURenderPass(pass);
+			if (!SDL_SubmitGPUCommandBuffer(cmd))
+			{
+				return false;
+			}
+
+			return true;
+		}
+
+		bool clearGpuSwapchainTarget(SDL_GPUDevice *device, SDL_Window *window, const Color4f &color)
+		{
+			if (!device || !window)
+			{
+				return false;
+			}
+
+			SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(device);
+			if (!cmd)
+			{
+				return false;
+			}
+
+			SDL_GPUTexture *swapchainTexture = nullptr;
+			Uint32 textureW = 0;
+			Uint32 textureH = 0;
+			if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmd, window, &swapchainTexture, &textureW, &textureH))
+			{
+				SDL_CancelGPUCommandBuffer(cmd);
+				return false;
+			}
+
+			if (!swapchainTexture)
+			{
+				SDL_CancelGPUCommandBuffer(cmd);
+				return true;
+			}
+
+			SDL_GPUColorTargetInfo colorTarget = {};
+			colorTarget.texture = swapchainTexture;
+			colorTarget.clear_color = SDL_FColor{color.r, color.g, color.b, color.a};
+			colorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
+			colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+
+			SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, nullptr);
+			if (!pass)
+			{
+				SDL_CancelGPUCommandBuffer(cmd);
+				return false;
+			}
+
+			SDL_EndGPURenderPass(pass);
+			if (!SDL_SubmitGPUCommandBuffer(cmd))
+			{
+				return false;
+			}
+
+			return true;
+		}
+
+		void releaseRendererGpuResources(Renderer2D &renderer)
+		{
+			if (!renderer.gpuDevice) { return; }
+
+			if (renderer.vertexBuffer)
+			{
+				SDL_ReleaseGPUBuffer(renderer.gpuDevice, renderer.vertexBuffer);
+				renderer.vertexBuffer = nullptr;
+			}
+			if (renderer.vertexTransferBuffer)
+			{
+				SDL_ReleaseGPUTransferBuffer(renderer.gpuDevice, renderer.vertexTransferBuffer);
+				renderer.vertexTransferBuffer = nullptr;
+			}
+			renderer.vertexBufferSize = 0;
+
+			if (renderer.pipelineSwapchain)
+			{
+				SDL_ReleaseGPUGraphicsPipeline(renderer.gpuDevice, renderer.pipelineSwapchain);
+				renderer.pipelineSwapchain = nullptr;
+			}
+			if (renderer.pipelineOffscreen)
+			{
+				SDL_ReleaseGPUGraphicsPipeline(renderer.gpuDevice, renderer.pipelineOffscreen);
+				renderer.pipelineOffscreen = nullptr;
+			}
+			renderer.pipelineSwapchainFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+			renderer.pipelineOffscreenFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+
+			if (renderer.defaultVertexShader)
+			{
+				SDL_ReleaseGPUShader(renderer.gpuDevice, renderer.defaultVertexShader);
+				renderer.defaultVertexShader = nullptr;
+			}
+			if (renderer.defaultFragmentShader)
+			{
+				SDL_ReleaseGPUShader(renderer.gpuDevice, renderer.defaultFragmentShader);
+				renderer.defaultFragmentShader = nullptr;
+			}
+
+			if (renderer.samplerLinear)
+			{
+				SDL_ReleaseGPUSampler(renderer.gpuDevice, renderer.samplerLinear);
+				renderer.samplerLinear = nullptr;
+			}
+			if (renderer.samplerNearest)
+			{
+				SDL_ReleaseGPUSampler(renderer.gpuDevice, renderer.samplerNearest);
+				renderer.samplerNearest = nullptr;
+			}
+		}
+
+		bool ensureDefaultSamplers(Renderer2D &renderer)
+		{
+			if (!renderer.gpuDevice) { return false; }
+
+			if (!renderer.samplerLinear)
+			{
+				SDL_GPUSamplerCreateInfo sampler = {};
+				sampler.min_filter = SDL_GPU_FILTER_LINEAR;
+				sampler.mag_filter = SDL_GPU_FILTER_LINEAR;
+				sampler.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+				sampler.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+				sampler.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+				sampler.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+				renderer.samplerLinear = SDL_CreateGPUSampler(renderer.gpuDevice, &sampler);
+				if (!renderer.samplerLinear)
+				{
+					errorFunc("Failed to create SDL GPU linear sampler", userDefinedData);
+					return false;
+				}
+			}
+
+			if (!renderer.samplerNearest)
+			{
+				SDL_GPUSamplerCreateInfo sampler = {};
+				sampler.min_filter = SDL_GPU_FILTER_NEAREST;
+				sampler.mag_filter = SDL_GPU_FILTER_NEAREST;
+				sampler.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+				sampler.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+				sampler.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+				sampler.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+				renderer.samplerNearest = SDL_CreateGPUSampler(renderer.gpuDevice, &sampler);
+				if (!renderer.samplerNearest)
+				{
+					errorFunc("Failed to create SDL GPU nearest sampler", userDefinedData);
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		bool ensureDefaultShaders(Renderer2D &renderer)
+		{
+			if (!renderer.gpuDevice) { return false; }
+			if (renderer.defaultVertexShader && renderer.defaultFragmentShader) { return true; }
+
+			const char *driver = SDL_GetGPUDeviceDriver(renderer.gpuDevice);
+			if (!driver || strcmp(driver, "vulkan") != 0)
+			{
+				errorFunc("gl2d SDL GPU backend is configured for Vulkan/SPIR-V only", userDefinedData);
+				return false;
+			}
+
+			const char *vertexPath = RESOURCES_PATH "shaders/gl2d_batch.vert.spv";
+			const char *fragmentPath = RESOURCES_PATH "shaders/gl2d_batch.frag.spv";
+			const SDL_GPUShaderFormat shaderFormat = SDL_GPU_SHADERFORMAT_SPIRV;
+
+			std::vector<Uint8> vertexCode;
+			std::vector<Uint8> fragmentCode;
+			if (!readBinaryFile(vertexPath, vertexCode) || !readBinaryFile(fragmentPath, fragmentCode))
+			{
+				errorFunc("Missing gl2d SDL GPU shader binaries in resources/shaders (compile .vert/.frag with compile_all_shaders.bat)", userDefinedData);
+				return false;
+			}
+
+			SDL_GPUShaderCreateInfo vertexInfo = {};
+			vertexInfo.code_size = vertexCode.size();
+			vertexInfo.code = vertexCode.data();
+			vertexInfo.entrypoint = "main";
+			vertexInfo.format = shaderFormat;
+			vertexInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+			vertexInfo.num_samplers = 0;
+			vertexInfo.num_storage_textures = 0;
+			vertexInfo.num_storage_buffers = 0;
+			vertexInfo.num_uniform_buffers = 0;
+
+			SDL_GPUShaderCreateInfo fragmentInfo = {};
+			fragmentInfo.code_size = fragmentCode.size();
+			fragmentInfo.code = fragmentCode.data();
+			fragmentInfo.entrypoint = "main";
+			fragmentInfo.format = shaderFormat;
+			fragmentInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+			fragmentInfo.num_samplers = 1;
+			fragmentInfo.num_storage_textures = 0;
+			fragmentInfo.num_storage_buffers = 0;
+			fragmentInfo.num_uniform_buffers = 0;
+
+			renderer.defaultVertexShader = SDL_CreateGPUShader(renderer.gpuDevice, &vertexInfo);
+			renderer.defaultFragmentShader = SDL_CreateGPUShader(renderer.gpuDevice, &fragmentInfo);
+
+			if (!renderer.defaultVertexShader || !renderer.defaultFragmentShader)
+			{
+				errorFunc("Failed to create SDL GPU shaders for gl2d", userDefinedData);
+				if (renderer.defaultVertexShader)
+				{
+					SDL_ReleaseGPUShader(renderer.gpuDevice, renderer.defaultVertexShader);
+					renderer.defaultVertexShader = nullptr;
+				}
+				if (renderer.defaultFragmentShader)
+				{
+					SDL_ReleaseGPUShader(renderer.gpuDevice, renderer.defaultFragmentShader);
+					renderer.defaultFragmentShader = nullptr;
+				}
+				return false;
+			}
+
+			renderer.shaderFormat = shaderFormat;
+			return true;
+		}
+
+		SDL_GPUGraphicsPipeline *createPipelineForFormat(Renderer2D &renderer, SDL_GPUTextureFormat targetFormat)
+		{
+			if (!renderer.gpuDevice || !renderer.defaultVertexShader || !renderer.defaultFragmentShader)
+			{
+				return nullptr;
+			}
+
+			SDL_GPUVertexBufferDescription vertexBufferDesc[1] = {};
+			vertexBufferDesc[0].slot = 0;
+			vertexBufferDesc[0].pitch = sizeof(BatchVertex);
+			vertexBufferDesc[0].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+			vertexBufferDesc[0].instance_step_rate = 0;
+
+			SDL_GPUVertexAttribute vertexAttributes[3] = {};
+			vertexAttributes[0].location = 0;
+			vertexAttributes[0].buffer_slot = 0;
+			vertexAttributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+			vertexAttributes[0].offset = offsetof(BatchVertex, pos);
+
+			vertexAttributes[1].location = 1;
+			vertexAttributes[1].buffer_slot = 0;
+			vertexAttributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+			vertexAttributes[1].offset = offsetof(BatchVertex, uv);
+
+			vertexAttributes[2].location = 2;
+			vertexAttributes[2].buffer_slot = 0;
+			vertexAttributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM;
+			vertexAttributes[2].offset = offsetof(BatchVertex, color);
+
+			SDL_GPUVertexInputState vertexInput = {};
+			vertexInput.vertex_buffer_descriptions = vertexBufferDesc;
+			vertexInput.num_vertex_buffers = 1;
+			vertexInput.vertex_attributes = vertexAttributes;
+			vertexInput.num_vertex_attributes = 3;
+
+			SDL_GPURasterizerState rasterizer = {};
+			rasterizer.fill_mode = SDL_GPU_FILLMODE_FILL;
+			rasterizer.cull_mode = SDL_GPU_CULLMODE_NONE;
+			rasterizer.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+			rasterizer.enable_depth_clip = false;
+
+			SDL_GPUMultisampleState multisample = {};
+			multisample.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+			SDL_GPUDepthStencilState depthStencil = {};
+			depthStencil.enable_depth_test = false;
+			depthStencil.enable_depth_write = false;
+			depthStencil.enable_stencil_test = false;
+
+			SDL_GPUColorTargetBlendState blend = {};
+			blend.enable_blend = true;
+			blend.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+			blend.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+			blend.color_blend_op = SDL_GPU_BLENDOP_ADD;
+			blend.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+			blend.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+			blend.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+			blend.color_write_mask = SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G |
+				SDL_GPU_COLORCOMPONENT_B | SDL_GPU_COLORCOMPONENT_A;
+
+			SDL_GPUColorTargetDescription colorTargetDesc[1] = {};
+			colorTargetDesc[0].format = targetFormat;
+			colorTargetDesc[0].blend_state = blend;
+
+			SDL_GPUGraphicsPipelineTargetInfo targetInfo = {};
+			targetInfo.num_color_targets = 1;
+			targetInfo.color_target_descriptions = colorTargetDesc;
+			targetInfo.has_depth_stencil_target = false;
+
+			SDL_GPUGraphicsPipelineCreateInfo pipelineInfo = {};
+			pipelineInfo.vertex_shader = renderer.defaultVertexShader;
+			pipelineInfo.fragment_shader = renderer.defaultFragmentShader;
+			pipelineInfo.vertex_input_state = vertexInput;
+			pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+			pipelineInfo.rasterizer_state = rasterizer;
+			pipelineInfo.multisample_state = multisample;
+			pipelineInfo.depth_stencil_state = depthStencil;
+			pipelineInfo.target_info = targetInfo;
+
+			return SDL_CreateGPUGraphicsPipeline(renderer.gpuDevice, &pipelineInfo);
+		}
+
+		SDL_GPUGraphicsPipeline *ensurePipelineForTarget(Renderer2D &renderer,
+			SDL_GPUTextureFormat targetFormat,
+			bool swapchainTarget)
+		{
+			if (!ensureDefaultShaders(renderer)) { return nullptr; }
+
+			if (swapchainTarget)
+			{
+				if (renderer.pipelineSwapchain && renderer.pipelineSwapchainFormat == targetFormat)
+				{
+					return renderer.pipelineSwapchain;
+				}
+
+				if (renderer.pipelineSwapchain)
+				{
+					SDL_ReleaseGPUGraphicsPipeline(renderer.gpuDevice, renderer.pipelineSwapchain);
+					renderer.pipelineSwapchain = nullptr;
+				}
+
+				renderer.pipelineSwapchain = createPipelineForFormat(renderer, targetFormat);
+				renderer.pipelineSwapchainFormat = targetFormat;
+				return renderer.pipelineSwapchain;
+			}
+
+			if (renderer.pipelineOffscreen && renderer.pipelineOffscreenFormat == targetFormat)
+			{
+				return renderer.pipelineOffscreen;
+			}
+
+			if (renderer.pipelineOffscreen)
+			{
+				SDL_ReleaseGPUGraphicsPipeline(renderer.gpuDevice, renderer.pipelineOffscreen);
+				renderer.pipelineOffscreen = nullptr;
+			}
+
+			renderer.pipelineOffscreen = createPipelineForFormat(renderer, targetFormat);
+			renderer.pipelineOffscreenFormat = targetFormat;
+			return renderer.pipelineOffscreen;
+		}
+
+		bool ensureVertexBufferCapacity(Renderer2D &renderer, uint32_t requiredBytes)
+		{
+			if (!renderer.gpuDevice) { return false; }
+			if (requiredBytes == 0) { return true; }
+
+			if (renderer.vertexBuffer && renderer.vertexTransferBuffer && renderer.vertexBufferSize >= requiredBytes)
+			{
+				return true;
+			}
+
+			if (renderer.vertexBuffer)
+			{
+				SDL_ReleaseGPUBuffer(renderer.gpuDevice, renderer.vertexBuffer);
+				renderer.vertexBuffer = nullptr;
+			}
+			if (renderer.vertexTransferBuffer)
+			{
+				SDL_ReleaseGPUTransferBuffer(renderer.gpuDevice, renderer.vertexTransferBuffer);
+				renderer.vertexTransferBuffer = nullptr;
+			}
+
+			renderer.vertexBufferSize = std::max(requiredBytes, static_cast<uint32_t>(64 * 1024));
+
+			SDL_GPUBufferCreateInfo bufferInfo = {};
+			bufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+			bufferInfo.size = renderer.vertexBufferSize;
+			renderer.vertexBuffer = SDL_CreateGPUBuffer(renderer.gpuDevice, &bufferInfo);
+			if (!renderer.vertexBuffer)
+			{
+				errorFunc("Failed to create SDL GPU vertex buffer", userDefinedData);
+				return false;
+			}
+
+			SDL_GPUTransferBufferCreateInfo transferInfo = {};
+			transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+			transferInfo.size = renderer.vertexBufferSize;
+			renderer.vertexTransferBuffer = SDL_CreateGPUTransferBuffer(renderer.gpuDevice, &transferInfo);
+			if (!renderer.vertexTransferBuffer)
+			{
+				errorFunc("Failed to create SDL GPU transfer buffer", userDefinedData);
+				SDL_ReleaseGPUBuffer(renderer.gpuDevice, renderer.vertexBuffer);
+				renderer.vertexBuffer = nullptr;
+				return false;
+			}
+
+			return true;
+		}
+
+		bool tryInitGpuBackend(Renderer2D &renderer)
+		{
+			if (!renderer.sdlRenderer) { return false; }
+			renderer.gpuDevice = nullptr;
+
+			SDL_PropertiesID rendererProps = SDL_GetRendererProperties(renderer.sdlRenderer);
+			if (rendererProps)
+			{
+				SDL_GPUDevice *rendererDevice = static_cast<SDL_GPUDevice *>(
+					SDL_GetPointerProperty(rendererProps, SDL_PROP_RENDERER_GPU_DEVICE_POINTER, nullptr));
+				if (isVulkanGpuDevice(rendererDevice))
+				{
+					renderer.gpuDevice = rendererDevice;
+				}
+			}
+
+			renderer.ownsGpuDevice = false;
+			if (!renderer.gpuDevice && isVulkanGpuDevice(globalGpuDevice))
+			{
+				renderer.gpuDevice = globalGpuDevice;
+			}
+			if (!renderer.gpuDevice)
+			{
+				// Vulkan-only backend, shaders are loaded from SPIR-V binaries.
+				renderer.gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, "vulkan");
+				renderer.ownsGpuDevice = renderer.gpuDevice != nullptr;
+			}
+
+			if (!renderer.gpuDevice)
+			{
+				errorFunc("Failed to initialize Vulkan SDL GPU device, falling back to SDL_Renderer path", userDefinedData);
+				return false;
+			}
+
+			renderer.gpuWindow = SDL_GetRenderWindow(renderer.sdlRenderer);
+			if (!renderer.gpuWindow)
+			{
+				errorFunc("Failed to get SDL window from renderer for SDL GPU", userDefinedData);
+				if (renderer.ownsGpuDevice)
+				{
+					SDL_DestroyGPUDevice(renderer.gpuDevice);
+				}
+				renderer.gpuDevice = nullptr;
+				renderer.ownsGpuDevice = false;
+				return false;
+			}
+
+			if (SDL_ClaimWindowForGPUDevice(renderer.gpuDevice, renderer.gpuWindow))
+			{
+				renderer.claimedWindow = true;
+				SDL_SetGPUSwapchainParameters(renderer.gpuDevice, renderer.gpuWindow,
+					SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC);
+			}
+			else
+			{
+				// If the device came from SDL_Renderer the window might already be claimed.
+				renderer.claimedWindow = false;
+				if (renderer.ownsGpuDevice)
+				{
+					errorFunc("Failed to claim window for Vulkan SDL GPU device", userDefinedData);
+					SDL_DestroyGPUDevice(renderer.gpuDevice);
+					renderer.gpuDevice = nullptr;
+					renderer.ownsGpuDevice = false;
+					return false;
+				}
+			}
+
+			globalGpuDevice = renderer.gpuDevice;
+			return true;
+		}
 	}
 
 	namespace internal
@@ -229,6 +892,12 @@ namespace gl2d
 	void cleanup()
 	{
 		white1pxSquareTexture.cleanup();
+		if (deferredOwnedGpuDevice)
+		{
+			SDL_DestroyGPUDevice(deferredOwnedGpuDevice);
+			deferredOwnedGpuDevice = nullptr;
+		}
+		globalGpuDevice = nullptr;
 		hasInitialized = false;
 	}
 
@@ -486,17 +1155,333 @@ namespace gl2d
 	//won't bind any fbo
 	void internalFlush(gl2d::Renderer2D &renderer, bool clearDrawData)
 	{
+		if (!renderer.gpuDevice)
+		{
+			if (clearDrawData) { renderer.clearDrawData(); }
+			return;
+		}
 
+		const bool hasBatchedQuads = !renderer.spritePositions.empty() && !renderer.spriteTextures.empty();
+		const bool hasSwapchainCallback = renderer.gpuPassCallback != nullptr && renderer.boundFrameBuffer == nullptr;
+
+		if (!hasBatchedQuads && !hasSwapchainCallback)
+		{
+			if (!renderer.boundFrameBuffer && renderer.pendingScreenClear)
+			{
+				clearGpuSwapchainTarget(renderer.gpuDevice, renderer.gpuWindow, renderer.pendingScreenClearColor);
+				renderer.pendingScreenClear = false;
+			}
+			if (clearDrawData) { renderer.clearDrawData(); }
+			return;
+		}
+
+		uint32_t quadCount = 0;
+		uint32_t vertexCount = 0;
+		uint32_t uploadBytes = 0;
+		if (hasBatchedQuads)
+		{
+			quadCount = static_cast<uint32_t>(renderer.spriteTextures.size());
+			if (renderer.spritePositions.size() != renderer.spriteColors.size() ||
+				renderer.spritePositions.size() != renderer.texturePositions.size() ||
+				renderer.spriteScissorRects.size() != quadCount ||
+				renderer.spriteScissorEnabled.size() != quadCount ||
+				renderer.spritePositions.size() != static_cast<size_t>(quadCount) * 6)
+			{
+				errorFunc("Corrupted gl2d SDL GPU batch data", userDefinedData);
+				if (clearDrawData) { renderer.clearDrawData(); }
+				return;
+			}
+
+			if (!ensureDefaultSamplers(renderer))
+			{
+				if (clearDrawData) { renderer.clearDrawData(); }
+				return;
+			}
+
+			vertexCount = static_cast<uint32_t>(renderer.spritePositions.size());
+			uploadBytes = vertexCount * static_cast<uint32_t>(sizeof(BatchVertex));
+			if (!ensureVertexBufferCapacity(renderer, uploadBytes))
+			{
+				if (clearDrawData) { renderer.clearDrawData(); }
+				return;
+			}
+
+			BatchVertex *mappedVertices = static_cast<BatchVertex *>(
+				SDL_MapGPUTransferBuffer(renderer.gpuDevice, renderer.vertexTransferBuffer, true));
+			if (!mappedVertices)
+			{
+				errorFunc("Failed to map SDL GPU transfer buffer", userDefinedData);
+				if (clearDrawData) { renderer.clearDrawData(); }
+				return;
+			}
+
+			for (uint32_t i = 0; i < vertexCount; ++i)
+			{
+				auto &dst = mappedVertices[i];
+				const auto &pos = renderer.spritePositions[i];
+				const auto &uv = renderer.texturePositions[i];
+				const auto &col = renderer.spriteColors[i];
+
+				dst.pos[0] = pos.x;
+				dst.pos[1] = pos.y;
+				dst.uv[0] = uv.x;
+				dst.uv[1] = uv.y;
+				dst.color[0] = floatToU8(col.r);
+				dst.color[1] = floatToU8(col.g);
+				dst.color[2] = floatToU8(col.b);
+				dst.color[3] = floatToU8(col.a);
+			}
+
+			SDL_UnmapGPUTransferBuffer(renderer.gpuDevice, renderer.vertexTransferBuffer);
+		}
+
+		SDL_GPUCommandBuffer *commandBuffer = SDL_AcquireGPUCommandBuffer(renderer.gpuDevice);
+		if (!commandBuffer)
+		{
+			errorFunc("Failed to acquire SDL GPU command buffer", userDefinedData);
+			if (clearDrawData) { renderer.clearDrawData(); }
+			return;
+		}
+
+		if (hasBatchedQuads)
+		{
+			SDL_GPUCopyPass *copyPass = SDL_BeginGPUCopyPass(commandBuffer);
+			if (!copyPass)
+			{
+				errorFunc("Failed to begin SDL GPU copy pass", userDefinedData);
+				SDL_CancelGPUCommandBuffer(commandBuffer);
+				if (clearDrawData) { renderer.clearDrawData(); }
+				return;
+			}
+
+			SDL_GPUTransferBufferLocation srcLocation = {};
+			srcLocation.transfer_buffer = renderer.vertexTransferBuffer;
+			srcLocation.offset = 0;
+
+			SDL_GPUBufferRegion dstRegion = {};
+			dstRegion.buffer = renderer.vertexBuffer;
+			dstRegion.offset = 0;
+			dstRegion.size = uploadBytes;
+
+			SDL_UploadToGPUBuffer(copyPass, &srcLocation, &dstRegion, true);
+			SDL_EndGPUCopyPass(copyPass);
+		}
+
+		SDL_GPUTexture *targetTexture = nullptr;
+		Uint32 targetW = 0;
+		Uint32 targetH = 0;
+		SDL_GPUTextureFormat targetFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+		bool swapchainTarget = false;
+
+		if (renderer.boundFrameBuffer && renderer.boundFrameBuffer->texture.gpuTexture)
+		{
+			targetTexture = renderer.boundFrameBuffer->texture.gpuTexture;
+			targetW = std::max(renderer.boundFrameBuffer->w, 0);
+			targetH = std::max(renderer.boundFrameBuffer->h, 0);
+			targetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+		}
+		else
+		{
+			swapchainTarget = true;
+			if (!renderer.gpuWindow)
+			{
+				errorFunc("SDL GPU window is not available", userDefinedData);
+				SDL_CancelGPUCommandBuffer(commandBuffer);
+				if (clearDrawData) { renderer.clearDrawData(); }
+				return;
+			}
+
+			if (!SDL_WaitAndAcquireGPUSwapchainTexture(commandBuffer, renderer.gpuWindow,
+				&targetTexture, &targetW, &targetH))
+			{
+				errorFunc("Failed to acquire SDL GPU swapchain texture", userDefinedData);
+				SDL_CancelGPUCommandBuffer(commandBuffer);
+				if (clearDrawData) { renderer.clearDrawData(); }
+				return;
+			}
+
+			if (!targetTexture)
+			{
+				// Window can be minimized; not an error.
+				SDL_CancelGPUCommandBuffer(commandBuffer);
+				if (clearDrawData) { renderer.clearDrawData(); }
+				return;
+			}
+
+			targetFormat = SDL_GetGPUSwapchainTextureFormat(renderer.gpuDevice, renderer.gpuWindow);
+		}
+
+		if (targetW == 0 || targetH == 0)
+		{
+			SDL_CancelGPUCommandBuffer(commandBuffer);
+			if (clearDrawData) { renderer.clearDrawData(); }
+			return;
+		}
+
+		if (swapchainTarget && renderer.gpuPassCallback)
+		{
+			// Prepare uploads required by extra pass callback (e.g. ImGui buffers).
+			renderer.gpuPassCallback(commandBuffer, nullptr, renderer.gpuPassCallbackUserData);
+		}
+
+		SDL_GPUGraphicsPipeline *pipeline = nullptr;
+		if (hasBatchedQuads)
+		{
+			pipeline = ensurePipelineForTarget(renderer, targetFormat, swapchainTarget);
+		}
+		if (hasBatchedQuads && !pipeline)
+		{
+			errorFunc("Failed to create SDL GPU graphics pipeline", userDefinedData);
+			SDL_CancelGPUCommandBuffer(commandBuffer);
+			if (clearDrawData) { renderer.clearDrawData(); }
+			return;
+		}
+
+		SDL_GPUColorTargetInfo colorTarget = {};
+		colorTarget.texture = targetTexture;
+		colorTarget.mip_level = 0;
+		colorTarget.layer_or_depth_plane = 0;
+		colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+		if (swapchainTarget && renderer.pendingScreenClear)
+		{
+			colorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
+			colorTarget.clear_color = SDL_FColor{
+				renderer.pendingScreenClearColor.r,
+				renderer.pendingScreenClearColor.g,
+				renderer.pendingScreenClearColor.b,
+				renderer.pendingScreenClearColor.a};
+		}
+		else
+		{
+			colorTarget.load_op = SDL_GPU_LOADOP_LOAD;
+		}
+
+		SDL_GPURenderPass *renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTarget, 1, nullptr);
+		if (!renderPass)
+		{
+			errorFunc("Failed to begin SDL GPU render pass", userDefinedData);
+			SDL_CancelGPUCommandBuffer(commandBuffer);
+			if (clearDrawData) { renderer.clearDrawData(); }
+			return;
+		}
+
+		if (hasBatchedQuads)
+		{
+			SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
+
+			SDL_GPUViewport viewport = {};
+			viewport.x = 0;
+			viewport.y = 0;
+			viewport.w = static_cast<float>(targetW);
+			viewport.h = static_cast<float>(targetH);
+			viewport.min_depth = 0.f;
+			viewport.max_depth = 1.f;
+			SDL_SetGPUViewport(renderPass, &viewport);
+
+			SDL_Rect fullTargetScissor = {};
+			fullTargetScissor.x = 0;
+			fullTargetScissor.y = 0;
+			fullTargetScissor.w = static_cast<int>(targetW);
+			fullTargetScissor.h = static_cast<int>(targetH);
+
+			SDL_GPUBufferBinding vertexBinding = {};
+			vertexBinding.buffer = renderer.vertexBuffer;
+			vertexBinding.offset = 0;
+			SDL_BindGPUVertexBuffers(renderPass, 0, &vertexBinding, 1);
+
+			uint32_t firstVertex = 0;
+			uint32_t i = 0;
+			while (i < quadCount)
+			{
+				Texture t = renderer.spriteTextures[i];
+				SDL_GPUTexture *runTexture = t.gpuTexture ? t.gpuTexture : white1pxSquareTexture.gpuTexture;
+				if (!runTexture)
+				{
+					i++;
+					firstVertex += 6;
+					continue;
+				}
+
+				const bool runNearest = t.pixelated;
+				const bool runScissorEnabled = renderer.spriteScissorEnabled[i] != 0;
+				const SDL_Rect runScissorRect = runScissorEnabled
+					? renderer.spriteScissorRects[i]
+					: fullTargetScissor;
+				uint32_t runQuads = 1;
+				while (i + runQuads < quadCount)
+				{
+					Texture next = renderer.spriteTextures[i + runQuads];
+					SDL_GPUTexture *nextTexture = next.gpuTexture ? next.gpuTexture : white1pxSquareTexture.gpuTexture;
+					const bool nextScissorEnabled = renderer.spriteScissorEnabled[i + runQuads] != 0;
+					if (nextTexture != runTexture || next.pixelated != runNearest ||
+						nextScissorEnabled != runScissorEnabled)
+					{
+						break;
+					}
+
+					if (runScissorEnabled &&
+						!rectEquals(renderer.spriteScissorRects[i + runQuads], runScissorRect))
+					{
+						break;
+					}
+
+					runQuads++;
+				}
+
+				SDL_SetGPUScissor(renderPass, &runScissorRect);
+
+				SDL_GPUTextureSamplerBinding textureBinding = {};
+				textureBinding.texture = runTexture;
+				textureBinding.sampler = runNearest ? renderer.samplerNearest : renderer.samplerLinear;
+				SDL_BindGPUFragmentSamplers(renderPass, 0, &textureBinding, 1);
+
+				SDL_DrawGPUPrimitives(renderPass, runQuads * 6, 1, firstVertex, 0);
+
+				firstVertex += runQuads * 6;
+				i += runQuads;
+			}
+		}
+
+		if (swapchainTarget && renderer.gpuPassCallback)
+		{
+			renderer.gpuPassCallback(commandBuffer, renderPass, renderer.gpuPassCallbackUserData);
+		}
+
+		SDL_EndGPURenderPass(renderPass);
+
+		if (!SDL_SubmitGPUCommandBuffer(commandBuffer))
+		{
+			errorFunc("Failed to submit SDL GPU command buffer", userDefinedData);
+		}
+
+		if (swapchainTarget)
+		{
+			renderer.pendingScreenClear = false;
+		}
+
+		if (clearDrawData)
+		{
+			renderer.clearDrawData();
+		}
 	}
 
 	void gl2d::Renderer2D::flush(bool clearDrawData)
 	{
-
+		internalFlush(*this, clearDrawData);
 	}
 
 	void Renderer2D::flushFBO(FrameBuffer frameBuffer, bool clearDrawData)
 	{
+		if (!gpuDevice || !frameBuffer.texture.gpuTexture)
+		{
+			internalFlush(*this, clearDrawData);
+			return;
+		}
 
+		FrameBuffer *oldTarget = boundFrameBuffer;
+		boundFrameBuffer = &frameBuffer;
+		internalFlush(*this, clearDrawData);
+		boundFrameBuffer = oldTarget;
 	}
 
 	void Renderer2D::renderFrameBufferToTheEntireScreen(gl2d::FrameBuffer fbo, gl2d::FrameBuffer screen)
@@ -533,8 +1518,21 @@ namespace gl2d
 
 	void Renderer2D::renderTextureToTheEntireScreen(gl2d::Texture t, gl2d::FrameBuffer screen)
 	{
+		float drawW = static_cast<float>(windowW);
+		float drawH = static_cast<float>(windowH);
+		if (drawW <= 0 || drawH <= 0)
+		{
+			auto s = t.GetSize();
+			drawW = static_cast<float>(std::max(s.x, 0));
+			drawH = static_cast<float>(std::max(s.y, 0));
+		}
 
+		auto oldCamera = currentCamera;
+		currentCamera = {};
+		renderRectangle({0, 0, drawW, drawH}, t, Colors_White, {}, 0, {0, 0, 1, 1});
+		currentCamera = oldCamera;
 
+		flushFBO(screen, true);
 	}
 
 	void Renderer2D::flushPostProcess(const std::vector<ShaderProgram> &postProcesses,
@@ -773,40 +1771,51 @@ namespace gl2d
 			v4 = scaleAroundPoint(v4, cameraCenter, currentCamera.zoom);
 		}
 
-		RenderPreparedQuad(sdlRenderer, v1, v2, v3, v4, colors, texture, textureCoords);
+		if (!gpuDevice)
+		{
+			RenderPreparedQuad(sdlRenderer, v1, v2, v3, v4, colors, textureCopy, textureCoords);
+			return;
+		}
 
-		//v1.x = internal::positionToScreenCoordsX(v1.x, (float)windowW);
-		//v2.x = internal::positionToScreenCoordsX(v2.x, (float)windowW);
-		//v3.x = internal::positionToScreenCoordsX(v3.x, (float)windowW);
-		//v4.x = internal::positionToScreenCoordsX(v4.x, (float)windowW);
-		//v1.y = internal::positionToScreenCoordsY(v1.y, (float)windowH);
-		//v2.y = internal::positionToScreenCoordsY(v2.y, (float)windowH);
-		//v3.y = internal::positionToScreenCoordsY(v3.y, (float)windowH);
-		//v4.y = internal::positionToScreenCoordsY(v4.y, (float)windowH);
+		if (windowW <= 0 || windowH <= 0)
+		{
+			return;
+		}
 
-		//spritePositions.push_back(glm::vec4{v1.x, v1.y, positionZ, 1});
-		//spritePositions.push_back(glm::vec4{v2.x, v2.y, positionZ, 1});
-		//spritePositions.push_back(glm::vec4{v4.x, v4.y, positionZ, 1});
-		//
-		//spritePositions.push_back(glm::vec4{v2.x, v2.y, positionZ, 1});
-		//spritePositions.push_back(glm::vec4{v3.x, v3.y, positionZ, 1});
-		//spritePositions.push_back(glm::vec4{v4.x, v4.y, positionZ, 1});
-		//
-		//spriteColors.push_back(colors[0]);
-		//spriteColors.push_back(colors[1]);
-		//spriteColors.push_back(colors[3]);
-		//spriteColors.push_back(colors[1]);
-		//spriteColors.push_back(colors[2]);
-		//spriteColors.push_back(colors[3]);
-		//
-		//texturePositions.push_back(glm::vec2{textureCoords.x, textureCoords.y}); //1
-		//texturePositions.push_back(glm::vec2{textureCoords.x, textureCoords.w}); //2
-		//texturePositions.push_back(glm::vec2{textureCoords.z, textureCoords.y}); //4
-		//texturePositions.push_back(glm::vec2{textureCoords.x, textureCoords.w}); //2
-		//texturePositions.push_back(glm::vec2{textureCoords.z, textureCoords.w}); //3
-		//texturePositions.push_back(glm::vec2{textureCoords.z, textureCoords.y}); //4
-		//
-		//spriteTextures.push_back(textureCopy);
+		v1.x = internal::positionToScreenCoordsX(v1.x, (float)windowW);
+		v2.x = internal::positionToScreenCoordsX(v2.x, (float)windowW);
+		v3.x = internal::positionToScreenCoordsX(v3.x, (float)windowW);
+		v4.x = internal::positionToScreenCoordsX(v4.x, (float)windowW);
+		v1.y = internal::positionToScreenCoordsY(v1.y, (float)windowH);
+		v2.y = internal::positionToScreenCoordsY(v2.y, (float)windowH);
+		v3.y = internal::positionToScreenCoordsY(v3.y, (float)windowH);
+		v4.y = internal::positionToScreenCoordsY(v4.y, (float)windowH);
+
+		spritePositions.push_back(glm::vec4{v1.x, v1.y, positionZ, 1});
+		spritePositions.push_back(glm::vec4{v2.x, v2.y, positionZ, 1});
+		spritePositions.push_back(glm::vec4{v4.x, v4.y, positionZ, 1});
+
+		spritePositions.push_back(glm::vec4{v2.x, v2.y, positionZ, 1});
+		spritePositions.push_back(glm::vec4{v3.x, v3.y, positionZ, 1});
+		spritePositions.push_back(glm::vec4{v4.x, v4.y, positionZ, 1});
+
+		spriteColors.push_back(colors[0]);
+		spriteColors.push_back(colors[1]);
+		spriteColors.push_back(colors[3]);
+		spriteColors.push_back(colors[1]);
+		spriteColors.push_back(colors[2]);
+		spriteColors.push_back(colors[3]);
+
+		texturePositions.push_back(glm::vec2{textureCoords.x, textureCoords.y}); //1
+		texturePositions.push_back(glm::vec2{textureCoords.x, textureCoords.w}); //2
+		texturePositions.push_back(glm::vec2{textureCoords.z, textureCoords.y}); //4
+		texturePositions.push_back(glm::vec2{textureCoords.x, textureCoords.w}); //2
+		texturePositions.push_back(glm::vec2{textureCoords.z, textureCoords.w}); //3
+		texturePositions.push_back(glm::vec2{textureCoords.z, textureCoords.y}); //4
+
+		spriteTextures.push_back(textureCopy);
+		spriteScissorRects.push_back(gpuScissorRect);
+		spriteScissorEnabled.push_back(gpuScissorEnabled ? 1 : 0);
 	}
 
 	void Renderer2D::renderRectangle(const Rect transforms, const Color4f colors[4], const glm::vec2 origin, const float rotation, float positionZ)
@@ -1226,12 +2235,35 @@ namespace gl2d
 		}
 
 		this->sdlRenderer = sdlRenderer;
+		activeRendererInstance = this;
 
 		clearDrawData();
-		//spritePositions.reserve(quadCount * 6);
-		//spriteColors.reserve(quadCount * 6);
-		//texturePositions.reserve(quadCount * 6);
-		//spriteTextures.reserve(quadCount);
+
+		spritePositions.reserve(quadCount * 6);
+		spriteColors.reserve(quadCount * 6);
+		texturePositions.reserve(quadCount * 6);
+		spriteTextures.reserve(quadCount);
+		spriteScissorRects.reserve(quadCount);
+		spriteScissorEnabled.reserve(quadCount);
+
+		gpuScissorEnabled = false;
+		gpuScissorRect = {};
+		pendingScreenClear = false;
+		pendingScreenClearColor = {};
+		boundFrameBuffer = nullptr;
+		gpuPassCallback = nullptr;
+		gpuPassCallbackUserData = nullptr;
+
+		if (tryInitGpuBackend(*this))
+		{
+			runDevelopmentShaderCompileScriptOnce();
+
+			// Ensure the default texture also has a GPU copy once a device exists.
+			if (!white1pxSquareTexture.gpuTexture)
+			{
+				white1pxSquareTexture.create1PxSquare();
+			}
+		}
 
 		this->resetCameraAndShader();
 
@@ -1240,6 +2272,48 @@ namespace gl2d
 
 	void Renderer2D::cleanup()
 	{
+		if (gpuDevice)
+		{
+			if (!spritePositions.empty() && !spriteTextures.empty())
+			{
+				flush(true);
+			}
+
+			releaseRendererGpuResources(*this);
+
+			if (claimedWindow && gpuWindow)
+			{
+				SDL_ReleaseWindowFromGPUDevice(gpuDevice, gpuWindow);
+			}
+
+			if (ownsGpuDevice)
+			{
+				deferredOwnedGpuDevice = gpuDevice;
+			}
+		}
+
+		if (activeRendererInstance == this)
+		{
+			activeRendererInstance = nullptr;
+		}
+
+		if (globalGpuDevice == gpuDevice && !ownsGpuDevice)
+		{
+			globalGpuDevice = nullptr;
+		}
+
+		gpuDevice = nullptr;
+		gpuWindow = nullptr;
+		ownsGpuDevice = false;
+		claimedWindow = false;
+		shaderFormat = SDL_GPU_SHADERFORMAT_INVALID;
+		boundFrameBuffer = nullptr;
+		pendingScreenClear = false;
+		gpuScissorEnabled = false;
+		gpuPassCallback = nullptr;
+		gpuPassCallbackUserData = nullptr;
+
+		clearDrawData();
 
 		postProcessFbo1.cleanup();
 		postProcessFbo2.cleanup();
@@ -1352,6 +2426,33 @@ namespace gl2d
 
 	void Renderer2D::schisor(const glm::vec4 &rect)
 	{
+		if (gpuDevice)
+		{
+			SDL_Rect clip = {};
+			clip.x = (int)std::round(rect.x);
+			clip.y = (int)std::round(rect.y);
+			clip.w = (int)std::round(rect.z);
+			clip.h = (int)std::round(rect.w);
+			if (clip.w < 0)
+			{
+				clip.x += clip.w;
+				clip.w = -clip.w;
+			}
+			if (clip.h < 0)
+			{
+				clip.y += clip.h;
+				clip.h = -clip.h;
+			}
+			clip.w = std::max(0, clip.w);
+			clip.h = std::max(0, clip.h);
+
+			// The scissor state is snapped per quad while batching.
+
+			gpuScissorEnabled = true;
+			gpuScissorRect = clip;
+			return;
+		}
+
 		if (!sdlRenderer) { return; }
 		SDL_Rect clip = {};
 		clip.x = (int)std::round(rect.x);
@@ -1375,6 +2476,13 @@ namespace gl2d
 
 	void Renderer2D::stopSchisor()
 	{
+		if (gpuDevice)
+		{
+			gpuScissorEnabled = false;
+			gpuScissorRect = {};
+			return;
+		}
+
 		if (!sdlRenderer) { return; }
 		SDL_SetRenderClipRect(sdlRenderer, nullptr);
 	}
@@ -1833,6 +2941,30 @@ namespace gl2d
 
 	void Renderer2D::clearScreen(const Color4f color)
 	{
+		lastFrameBufferClearColor = color;
+
+		if (gpuDevice)
+		{
+			if (boundFrameBuffer && boundFrameBuffer->texture.gpuTexture)
+			{
+				if (!spritePositions.empty() && !spriteTextures.empty())
+				{
+					flush(true);
+				}
+				clearGpuTextureTarget(gpuDevice, boundFrameBuffer->texture.gpuTexture, color);
+				return;
+			}
+
+			if (!spritePositions.empty() && !spriteTextures.empty())
+			{
+				flush(true);
+			}
+
+			pendingScreenClear = true;
+			pendingScreenClearColor = color;
+			return;
+		}
+
 		SDL_SetRenderDrawColor(
 			sdlRenderer, f2u8(color.r), f2u8(color.g), f2u8(color.b), f2u8(color.a)
 		);
@@ -1864,6 +2996,11 @@ namespace gl2d
 
 	glm::ivec2 Texture::GetSize() const
 	{
+		if (cachedSize.x > 0 && cachedSize.y > 0)
+		{
+			return cachedSize;
+		}
+
 		if (!tex) return {0, 0};
 
 		float w = 0, h = 0;
@@ -1876,6 +3013,43 @@ namespace gl2d
 	{
 
 		if (!image_data || width <= 0 || height <= 0) { return; }
+		cleanup();
+		this->pixelated = pixelated;
+		cachedSize = {width, height};
+
+		if (globalGpuDevice)
+		{
+			SDL_GPUTextureCreateInfo textureInfo = {};
+			textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
+			textureInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+			textureInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+			textureInfo.width = static_cast<uint32_t>(width);
+			textureInfo.height = static_cast<uint32_t>(height);
+			textureInfo.layer_count_or_depth = 1;
+			textureInfo.num_levels = 1;
+			textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+			gpuTexture = SDL_CreateGPUTexture(globalGpuDevice, &textureInfo);
+			if (!gpuTexture)
+			{
+				errorFunc("Failed to create SDL GPU texture", userDefinedData);
+				cachedSize = {};
+				return;
+			}
+
+			gpuDevice = globalGpuDevice;
+			if (!uploadRGBA8Texture(globalGpuDevice, gpuTexture, image_data, width, height))
+			{
+				SDL_ReleaseGPUTexture(globalGpuDevice, gpuTexture);
+				gpuTexture = nullptr;
+				gpuDevice = nullptr;
+				cachedSize = {};
+				return;
+			}
+
+			(void)useMipMaps;
+			return;
+		}
 
 		tex = nullptr;
 
@@ -1884,7 +3058,11 @@ namespace gl2d
 		// If your channels look swapped, try SDL_PIXELFORMAT_RGBA8888 instead.
 		tex = SDL_CreateTexture(platform::getSdlRenderer(), SDL_PIXELFORMAT_ABGR8888,
 			SDL_TEXTUREACCESS_STATIC, width, height);
-		if (!tex) { return; } // SDL_GetError()
+		if (!tex)
+		{
+			cachedSize = {};
+			return;
+		} // SDL_GetError()
 
 		// Upload pixels
 		const int pitch = width * 4;
@@ -1894,7 +3072,7 @@ namespace gl2d
 		SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
 
 		// Filtering (zoom)
-		SDL_SetTextureScaleMode( tex, pixelated ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR );
+		SDL_SetTextureScaleMode(tex, pixelated ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
 
 		// Mipmaps: not available via SDL_Renderer textures
 		(void)useMipMaps; // (you'd need SDL_gpu or a backend-specific workaround)
@@ -2165,6 +3343,10 @@ namespace gl2d
 
 	void Texture::cleanup()
 	{
+		if (gpuTexture && gpuDevice)
+		{
+			SDL_ReleaseGPUTexture(gpuDevice, gpuTexture);
+		}
 		if (tex) SDL_DestroyTexture(tex);
 		*this = {};
 	}
@@ -2278,10 +3460,44 @@ namespace gl2d
 
 	void FrameBuffer::create(int w, int h, bool nearestFilter)
 	{
-		*this = {};
+		cleanup();
 
 		this->w = w;
 		this->h = h;
+
+		if (w <= 0 || h <= 0)
+		{
+			this->w = 0;
+			this->h = 0;
+			return;
+		}
+
+		if (globalGpuDevice)
+		{
+			texture.pixelated = nearestFilter;
+			texture.cachedSize = {w, h};
+			texture.gpuDevice = globalGpuDevice;
+
+			SDL_GPUTextureCreateInfo textureInfo = {};
+			textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
+			textureInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+			textureInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+			textureInfo.width = static_cast<uint32_t>(w);
+			textureInfo.height = static_cast<uint32_t>(h);
+			textureInfo.layer_count_or_depth = 1;
+			textureInfo.num_levels = 1;
+			textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+			texture.gpuTexture = SDL_CreateGPUTexture(globalGpuDevice, &textureInfo);
+			if (!texture.gpuTexture)
+			{
+				errorFunc("Failed to create SDL GPU framebuffer texture", userDefinedData);
+				this->w = 0;
+				this->h = 0;
+				texture = {};
+			}
+			return;
+		}
 
 		texture.tex = SDL_CreateTexture(
 			platform::getSdlRenderer(),
@@ -2292,7 +3508,9 @@ namespace gl2d
 
 		if (!texture.tex)
 		{
-			w = h = 0;
+			this->w = 0;
+			this->h = 0;
+			texture.cachedSize = {};
 			return;
 		}
 
@@ -2310,23 +3528,25 @@ namespace gl2d
 
 		if (this->w == w && this->h == h) return;
 
-		clear();
+		cleanup();
 		create(w, h);
 
 	}
 
 	void FrameBuffer::cleanup()
 	{
-		if (texture.tex)
-		{
-			SDL_DestroyTexture(texture.tex);
-			texture.tex = nullptr;
-		}
+		texture.cleanup();
 		w = h = 0;
 	}
 
 	void FrameBuffer::clear()
 	{
+		if (texture.gpuTexture && texture.gpuDevice)
+		{
+			clearGpuTextureTarget(texture.gpuDevice, texture.gpuTexture, lastFrameBufferClearColor);
+			return;
+		}
+
 		// Bind this framebuffer
 		SDL_SetRenderTarget(platform::getSdlRenderer(), texture.tex);
 
@@ -2340,11 +3560,31 @@ namespace gl2d
 
 	void FrameBuffer::bind()
 	{
+		if (activeRendererInstance && activeRendererInstance->gpuDevice && texture.gpuTexture)
+		{
+			if (!activeRendererInstance->spritePositions.empty() && !activeRendererInstance->spriteTextures.empty())
+			{
+				activeRendererInstance->flush(true);
+			}
+			activeRendererInstance->boundFrameBuffer = this;
+			return;
+		}
+
 		SDL_SetRenderTarget(platform::getSdlRenderer(), texture.tex);
 	}
 
 	void FrameBuffer::unbind()
 	{
+		if (activeRendererInstance && activeRendererInstance->gpuDevice)
+		{
+			if (!activeRendererInstance->spritePositions.empty() && !activeRendererInstance->spriteTextures.empty())
+			{
+				activeRendererInstance->flush(true);
+			}
+			activeRendererInstance->boundFrameBuffer = nullptr;
+			return;
+		}
+
 		SDL_SetRenderTarget(platform::getSdlRenderer(), nullptr);
 	}
 

@@ -9,9 +9,16 @@ set(CMAKE_CXX_STANDARD 17)
 #set this to true to ship the game!
 #basically this will change the RESOURCES_PATH to be the local path
 #! ! ! ! ! ! !
-#DELETE THE OUT FOLDER AFTER CHANGING THIS BECAUSE VISUAL STUDIO DOESN'T SEEM TO RECOGNIZE THIS CHANGE AND REBUILD!
-option(PRODUCTION_BUILD "Make this a production build" OFF)
-#DELETE THE OUT FOLDER AFTER CHANGING THIS BECAUSE VISUAL STUDIO DOESN'T SEEM TO RECOGNIZE THIS CHANGE AND REBUILD!
+# These are forced in cache so manual ON/OFF edits in this file always apply.
+set(PRODUCTION_BUILD OFF CACHE BOOL "Make this a production build" FORCE)
+
+# Enables the new SDL_gpu batching path in gl2d.
+set(GL2D_USE_SDL_GPU ON CACHE BOOL "Use SDL_gpu backend for gl2d" FORCE)
+if(GL2D_USE_SDL_GPU)
+  set(GL2D_USE_SDL_GPU_VALUE 1)
+else()
+  set(GL2D_USE_SDL_GPU_VALUE 0)
+endif()
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Release>:Release>")
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -45,6 +52,8 @@ add_executable("${CMAKE_PROJECT_NAME}")
 set_property(TARGET "${CMAKE_PROJECT_NAME}" PROPERTY CXX_STANDARD 17)
 
 target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC GLFW_INCLUDE_NONE=1)
+target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC GL2D_USE_SDL_GPU=${GL2D_USE_SDL_GPU_VALUE})
+target_compile_definitions(imgui PUBLIC GL2D_USE_SDL_GPU=${GL2D_USE_SDL_GPU_VALUE})
 
 
 if(EMSCRIPTEN)

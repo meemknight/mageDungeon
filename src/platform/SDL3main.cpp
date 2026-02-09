@@ -18,6 +18,9 @@
 #include "imgui.h"
 #include "backends/imgui_impl_sdl3.h"
 #include "backends/imgui_impl_sdlrenderer3.h"
+#if GL2D_USE_SDL_GPU
+#include "backends/imgui_impl_sdlgpu3.h"
+#endif
 #include "imguiThemes.h"
 #include "IconsForkAwesome.h"
 #endif
@@ -40,7 +43,74 @@ int mouseMovedFlag = 0;
 
 static bool gShouldQuit = false;
 static std::chrono::high_resolution_clock::time_point gLast;
+#if REMOVE_IMGUI == 0
+static bool gUseImguiGpuRenderer = false;
+#endif
 #pragma endregion
+
+static SDL_Renderer *createRendererPreferVulkan(SDL_Window *window)
+{
+	if (!window) { return nullptr; }
+
+#if !GL2D_USE_SDL_GPU
+	// Legacy gl2d backend keeps SDL renderer default selection.
+	return SDL_CreateRenderer(window, nullptr);
+#else
+
+	// Prefer Vulkan so the gl2d GPU path can reuse the renderer's Vulkan device.
+	int driverCount = SDL_GetNumRenderDrivers();
+	for (int i = 0; i < driverCount; i++)
+	{
+		const char *driverName = SDL_GetRenderDriver(i);
+		if (driverName && SDL_strcmp(driverName, "vulkan") == 0)
+		{
+			auto renderer = SDL_CreateRenderer(window, "vulkan");
+			if (renderer)
+			{
+				return renderer;
+			}
+
+			std::cout << "SDL Vulkan renderer init failed, falling back: "
+				<< SDL_GetError() << "\n";
+			break;
+		}
+	}
+
+	return SDL_CreateRenderer(window, nullptr);
+#endif
+}
+
+static bool isGl2dGpuBackendActive()
+{
+#if GL2D_USE_SDL_GPU
+	// gl2d presents through SDL_gpu when a GPU device is available.
+	return getRenderer().gpuDevice != nullptr;
+#else
+	return false;
+#endif
+}
+
+#if REMOVE_IMGUI == 0 && GL2D_USE_SDL_GPU
+static void renderImguiInGpuPass(SDL_GPUCommandBuffer *commandBuffer,
+	SDL_GPURenderPass *renderPass,
+	void *)
+{
+	if (!gUseImguiGpuRenderer || !commandBuffer) { return; }
+
+	ImDrawData *drawData = ImGui::GetDrawData();
+	if (!drawData) { return; }
+
+	// Prepare runs before pass (renderPass == nullptr), render runs inside pass.
+	if (!renderPass)
+	{
+		ImGui_ImplSDLGPU3_PrepareDrawData(drawData, commandBuffer);
+	}
+	else
+	{
+		ImGui_ImplSDLGPU3_RenderDrawData(drawData, commandBuffer, renderPass);
+	}
+}
+#endif
 
 namespace platform
 {
@@ -230,8 +300,19 @@ static bool tickOneFrame()
 	gLast = now;
 	dt = std::min(dt, 1.f / 10.f);
 
+	bool gl2dGpuBackendActive = isGl2dGpuBackendActive();
+
 #if REMOVE_IMGUI == 0
-	ImGui_ImplSDLRenderer3_NewFrame();
+	#if GL2D_USE_SDL_GPU
+	if (gUseImguiGpuRenderer)
+	{
+		ImGui_ImplSDLGPU3_NewFrame();
+	}
+	else
+	#endif
+	{
+		ImGui_ImplSDLRenderer3_NewFrame();
+	}
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
 
@@ -258,8 +339,11 @@ static bool tickOneFrame()
 		input.controllers[i] = platform::getControllerButtonsAtIndex(i);
 	}
 
-	SDL_SetRenderDrawColor(sdlRenderer, 0, 0, 0, 255);
-	SDL_RenderClear(sdlRenderer);
+	if (!gl2dGpuBackendActive)
+	{
+		SDL_SetRenderDrawColor(sdlRenderer, 0, 0, 0, 255);
+		SDL_RenderClear(sdlRenderer);
+	}
 
 	if (!gameLogic(dt, input, sdlRenderer))
 	{
@@ -272,11 +356,20 @@ static bool tickOneFrame()
 
 #if REMOVE_IMGUI == 0
 	ImGui::Render();
-	ImGui_ImplSDLRenderer3_RenderDrawData(
-		ImGui::GetDrawData(), sdlRenderer);
+	if (!gUseImguiGpuRenderer)
+	{
+		ImGui_ImplSDLRenderer3_RenderDrawData(
+			ImGui::GetDrawData(), sdlRenderer);
+	}
 #endif
 
-	SDL_RenderPresent(sdlRenderer);
+	// Submit all queued gl2d GPU work after ImGui has finalized its draw data.
+	getRenderer().flush();
+
+	if (!gl2dGpuBackendActive)
+	{
+		SDL_RenderPresent(sdlRenderer);
+	}
 
 	if (gShouldQuit) return false;
 
@@ -293,7 +386,16 @@ static void mainLoop()
 		closeGame();
 
 	#if REMOVE_IMGUI == 0
-		ImGui_ImplSDLRenderer3_Shutdown();
+		if (gUseImguiGpuRenderer)
+		{
+		#if GL2D_USE_SDL_GPU
+			ImGui_ImplSDLGPU3_Shutdown();
+		#endif
+		}
+		else
+		{
+			ImGui_ImplSDLRenderer3_Shutdown();
+		}
 		ImGui_ImplSDL3_Shutdown();
 		ImGui::DestroyContext();
 	#endif
@@ -318,7 +420,7 @@ int main(int, char **)
 
 	permaAssertComment(window, "SDL window creation failed");
 
-	sdlRenderer = SDL_CreateRenderer(window, nullptr);
+	sdlRenderer = createRendererPreferVulkan(window);
 
 	permaAssertComment(sdlRenderer, "SDL renderer creation failed");
 
@@ -336,9 +438,6 @@ int main(int, char **)
 	ImGuiStyle &style = ImGui::GetStyle();
 	style.Colors[ImGuiCol_WindowBg].w = 0.5f;
 	style.FontScaleMain = 3;
-
-	ImGui_ImplSDL3_InitForSDLRenderer(window, sdlRenderer);
-	ImGui_ImplSDLRenderer3_Init(sdlRenderer);
 
 	if (1)
 	{
@@ -358,8 +457,6 @@ int main(int, char **)
 
 		static const ImWchar icon_ranges[] = {ICON_MIN_FK, ICON_MAX_FK, 0};
 		io.Fonts->AddFontFromFileTTF(RESOURCES_PATH "font/fontawesome-webfont.ttf", 16.0f, &config, icon_ranges);
-
-		io.Fonts->Build();
 	}
 #endif
 
@@ -367,6 +464,37 @@ int main(int, char **)
 	{
 		return 0;
 	}
+
+#if REMOVE_IMGUI == 0
+	gUseImguiGpuRenderer = false;
+#if GL2D_USE_SDL_GPU
+	gUseImguiGpuRenderer = isGl2dGpuBackendActive();
+#endif
+
+	if (gUseImguiGpuRenderer)
+	{
+	#if GL2D_USE_SDL_GPU
+		permaAssertComment(ImGui_ImplSDL3_InitForSDLGPU(window),
+			"ImGui SDL3 platform init for SDL_gpu failed");
+
+		ImGui_ImplSDLGPU3_InitInfo initInfo = {};
+		initInfo.Device = getRenderer().gpuDevice;
+		initInfo.ColorTargetFormat = SDL_GetGPUSwapchainTextureFormat(getRenderer().gpuDevice, window);
+
+		permaAssertComment(ImGui_ImplSDLGPU3_Init(&initInfo),
+			"ImGui SDL_gpu renderer init failed");
+
+		getRenderer().setGpuPassCallback(renderImguiInGpuPass, nullptr);
+	#endif
+	}
+	else
+	{
+		permaAssertComment(ImGui_ImplSDL3_InitForSDLRenderer(window, sdlRenderer),
+			"ImGui SDL3 platform init for SDL renderer failed");
+		permaAssertComment(ImGui_ImplSDLRenderer3_Init(sdlRenderer),
+			"ImGui SDL renderer init failed");
+	}
+#endif
 
 	gLast = std::chrono::high_resolution_clock::now();
 
@@ -385,7 +513,16 @@ int main(int, char **)
 	closeGame();
 
 #if REMOVE_IMGUI == 0
-	ImGui_ImplSDLRenderer3_Shutdown();
+	if (gUseImguiGpuRenderer)
+	{
+	#if GL2D_USE_SDL_GPU
+		ImGui_ImplSDLGPU3_Shutdown();
+	#endif
+	}
+	else
+	{
+		ImGui_ImplSDLRenderer3_Shutdown();
+	}
 	ImGui_ImplSDL3_Shutdown();
 	ImGui::DestroyContext();
 #endif

@@ -312,7 +312,12 @@ bool gameLogic(float deltaTime, platform::Input &input, SDL_Renderer *sdlRendere
 			platform::getTypedInput(), deltaTime);
 
 
-		renderer.flush();
+		#if GL2D_USE_SDL_GPU
+		if (!renderer.gpuDevice)
+		#endif
+		{
+			renderer.flush();
+		}
 
 	}
 

@@ -1,4 +1,3 @@
-
 //THIS IS A SDL PORT OF GL2D
 
 //////////////////////////////////////////////////
@@ -54,6 +53,14 @@
 #include <vector>
 #include <SDL3/SDL.h>
 
+#ifndef GL2D_USE_SDL_GPU
+#define GL2D_USE_SDL_GPU 1
+#endif
+
+#if GL2D_USE_SDL_GPU
+#include <SDL3/SDL_gpu.h>
+#endif
+
 namespace gl2d
 {
 
@@ -84,6 +91,12 @@ namespace gl2d
 
 	struct ShaderProgram
 	{
+	#if GL2D_USE_SDL_GPU
+		SDL_GPUShader *vertexShader = nullptr;
+		SDL_GPUShader *fragmentShader = nullptr;
+		SDL_GPUGraphicsPipeline *pipeline = nullptr;
+		SDL_GPUTextureFormat targetFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+	#endif
 
 		void bind() { };
 
@@ -153,7 +166,20 @@ namespace gl2d
 	{
 		
 		SDL_Texture *tex = nullptr;
-		bool isValid() const { return tex != nullptr; }
+	#if GL2D_USE_SDL_GPU
+		SDL_GPUTexture *gpuTexture = nullptr;
+		SDL_GPUDevice *gpuDevice = nullptr;
+	#endif
+		glm::ivec2 cachedSize = {};
+		bool pixelated = GL2D_DEFAULT_TEXTURE_LOAD_MODE_PIXELATED;
+		bool isValid() const
+		{
+		#if GL2D_USE_SDL_GPU
+			return tex != nullptr || gpuTexture != nullptr;
+		#else
+			return tex != nullptr;
+		#endif
+		}
 
 
 		Texture() {};
@@ -465,16 +491,53 @@ namespace gl2d
 		//std::vector<glm::vec4>spriteColors;
 		//std::vector<glm::vec2>texturePositions;
 		//std::vector<Texture>spriteTextures;
+	#if GL2D_USE_SDL_GPU
+		// Batched draw data. Each quad writes 6 vertices in these arrays.
+		std::vector<glm::vec4> spritePositions;
+		std::vector<glm::vec4> spriteColors;
+		std::vector<glm::vec2> texturePositions;
+		std::vector<Texture> spriteTextures;
+		// Per-quad scissor snapshot to avoid forcing mid-frame flushes.
+		std::vector<SDL_Rect> spriteScissorRects;
+		std::vector<Uint8> spriteScissorEnabled;
 
-		//glm::vec2 spritePositions[GL2D_Renderer2D_Max_Triangle_Capacity * 6];
-		//glm::vec4 spriteColors[GL2D_Renderer2D_Max_Triangle_Capacity * 6];
-		//glm::vec2 texturePositions[GL2D_Renderer2D_Max_Triangle_Capacity * 6];
-		//Texture   spriteTextures[GL2D_Renderer2D_Max_Triangle_Capacity * 6];
+		// SDL GPU runtime objects used by the batching backend.
+		SDL_GPUDevice *gpuDevice = nullptr;
+		SDL_Window *gpuWindow = nullptr;
+		bool ownsGpuDevice = false;
+		bool claimedWindow = false;
+		SDL_GPUShader *defaultVertexShader = nullptr;
+		SDL_GPUShader *defaultFragmentShader = nullptr;
+		SDL_GPUGraphicsPipeline *pipelineSwapchain = nullptr;
+		SDL_GPUGraphicsPipeline *pipelineOffscreen = nullptr;
+		SDL_GPUTextureFormat pipelineSwapchainFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+		SDL_GPUTextureFormat pipelineOffscreenFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+		SDL_GPUShaderFormat shaderFormat = SDL_GPU_SHADERFORMAT_INVALID;
+		SDL_GPUSampler *samplerLinear = nullptr;
+		SDL_GPUSampler *samplerNearest = nullptr;
+		SDL_GPUBuffer *vertexBuffer = nullptr;
+		SDL_GPUTransferBuffer *vertexTransferBuffer = nullptr;
+		uint32_t vertexBufferSize = 0;
+		bool gpuScissorEnabled = false;
+		SDL_Rect gpuScissorRect = {};
+		bool pendingScreenClear = false;
+		Color4f pendingScreenClearColor = {};
+		FrameBuffer *boundFrameBuffer = nullptr;
 
-		//int spritePositionsCount = 0;
-		//int spriteColorsCount = 0;
-		//int texturePositionsCount = 0;
-		//int spriteTexturesCount = 0;
+		// Optional callback that can draw extra things in the swapchain render pass
+		// (used for ImGui SDL_gpu rendering after world sprites are batched).
+		typedef void(*GpuPassCallback)(SDL_GPUCommandBuffer *commandBuffer,
+			SDL_GPURenderPass *renderPass,
+			void *userData);
+		GpuPassCallback gpuPassCallback = nullptr;
+		void *gpuPassCallbackUserData = nullptr;
+		void setGpuPassCallback(GpuPassCallback callback, void *userData = nullptr)
+		{
+			gpuPassCallback = callback;
+			gpuPassCallbackUserData = userData;
+		}
+	#endif
+
 
 		SDL_Renderer *sdlRenderer = nullptr;
 
@@ -507,6 +570,14 @@ namespace gl2d
 		//clears the things that are to be drawn when calling flush
 		inline void clearDrawData()
 		{
+		#if GL2D_USE_SDL_GPU
+			spritePositions.clear();
+			spriteColors.clear();
+			texturePositions.clear();
+			spriteTextures.clear();
+			spriteScissorRects.clear();
+			spriteScissorEnabled.clear();
+		#endif
 
 
 			//spritePositionsCount = 0;
@@ -646,4 +717,3 @@ namespace gl2d
 
 
 };
-

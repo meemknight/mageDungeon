@@ -1670,6 +1670,17 @@ bool GameLogic::update(float deltaTime,
 
 	particlePostProcessRenderer.updateWindowMetrics(renderer);
 
+	const RoomLightingSystem *mapLighting = removeLightSystem ? nullptr : &roomLightingSystem;
+	if (!mapViewerOpen)
+	{
+		// Build minimap texture before main world batching to avoid a mid-frame swapchain flush.
+		minimapSystem.update(renderer, map, doorHolder, player.physics.getPos(), &floorInfo,
+			mapLighting);
+	}
+
+	// Render particles into the post-process FBO early so FBO binds do not force a swapchain submit.
+	particleSystem.render(renderer, particlePostProcessRenderer, {});
+
 #pragma region rendering
 	bool paletteGame = paletteEffect.enabledGame && paletteEffect.hasPalette();
 	bool paletteParticles = paletteEffect.enabledParticles && paletteEffect.hasPalette() && !paletteGame;
@@ -2824,8 +2835,6 @@ bool GameLogic::update(float deltaTime,
 	standbyProjectiles.render(renderer, particlePostProcessRenderer);
 	projectiles.renderAfterEntities(renderer, assetsManager, particlePostProcessRenderer);
 
-	particleSystem.render(renderer, particlePostProcessRenderer, {});
-
 	if (paletteParticles)
 	{
 		if (paletteEffect.applyToTexture(renderer, particlePostProcessRenderer.fbo.texture,
@@ -2949,8 +2958,6 @@ bool GameLogic::update(float deltaTime,
 
 	if (mapViewerOpen)
 	{
-		const RoomLightingSystem *mapLighting = removeLightSystem ? nullptr : &roomLightingSystem;
-
 		// Fullscreen map viewer: darken gameplay first, then draw the map on top.
 		renderer.pushCamera();
 		renderer.renderRectangle({0, 0, (float)renderer.windowW, (float)renderer.windowH},
@@ -2962,9 +2969,6 @@ bool GameLogic::update(float deltaTime,
 	}
 	else
 	{
-		const RoomLightingSystem *mapLighting = removeLightSystem ? nullptr : &roomLightingSystem;
-		minimapSystem.update(renderer, map, doorHolder, player.physics.getPos(), &floorInfo,
-			mapLighting);
 		minimapSystem.render(renderer);
 	}
 
@@ -3942,7 +3946,12 @@ bool GameLogic::update(float deltaTime,
 		projectiles, rng, player, entityHolder, fireDirection);
 
 
-	renderer.flush();
+	#if GL2D_USE_SDL_GPU
+	if (!renderer.gpuDevice)
+	#endif
+	{
+		renderer.flush();
+	}
 	return !exitDungeon;
 }
 
