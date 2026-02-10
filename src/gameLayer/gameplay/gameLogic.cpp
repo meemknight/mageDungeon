@@ -51,8 +51,37 @@ bool renderColliders()
 	return renderCollidersFlag;
 }
 
+// Global color grading settings are kept outside gameplay state resets.
+// We reuse the same struct so default values stay in gameHdrPostProcess.h.
+static GameHdrPostProcess globalHdrToneMapSettings;
+
 namespace
 {
+	void copyHdrToneMapSettings(GameHdrPostProcess &to, const GameHdrPostProcess &from)
+	{
+		to.enabled = from.enabled;
+		to.toneMapper = from.toneMapper;
+		to.exposure = from.exposure;
+		to.saturation = from.saturation;
+		to.vibrance = from.vibrance;
+		to.gamma = from.gamma;
+		to.shadowBoost = from.shadowBoost;
+		to.highlightBoost = from.highlightBoost;
+		to.vignette = from.vignette;
+		to.lift = from.lift;
+		to.gain = from.gain;
+	}
+
+	void applyGlobalHdrToneMapSettings(GameHdrPostProcess &hdrPost)
+	{
+		copyHdrToneMapSettings(hdrPost, globalHdrToneMapSettings);
+	}
+
+	void storeGlobalHdrToneMapSettings(const GameHdrPostProcess &hdrPost)
+	{
+		copyHdrToneMapSettings(globalHdrToneMapSettings, hdrPost);
+	}
+
 	int getFloorDifficulty(int floorIndex)
 	{
 		int tier = floorIndex - 1;
@@ -414,7 +443,11 @@ bool GameLogic::init()
 	particlePostProcessRenderer.init();
 	particlePostProcessRenderer.bloomEnabled = !disableParticleBloom;
 	gameHdrPostProcess.init();
-	gameHdrPostProcess.enabled = !disableGameHdrTonemap;
+	applyGlobalHdrToneMapSettings(gameHdrPostProcess);
+	if (disableGameHdrTonemap)
+	{
+		gameHdrPostProcess.enabled = false;
+	}
 	minimapSystem.init();
 	gameFbo.create(1, 1, true);
 	paletteEffect.loadPalette();
@@ -1278,6 +1311,7 @@ bool GameLogic::update(float deltaTime,
 		ImGui::DragFloat("Grading Gamma", &gameHdrPostProcess.gamma, 0.01f, 0.1f, 4.0f, "%.2f");
 		ImGui::DragFloat("Shadow Boost", &gameHdrPostProcess.shadowBoost, 0.01f, -1.0f, 2.0f, "%.2f");
 		ImGui::DragFloat("Highlight Boost", &gameHdrPostProcess.highlightBoost, 0.01f, -1.0f, 2.0f, "%.2f");
+		ImGui::DragFloat("Vignette", &gameHdrPostProcess.vignette, 0.01f, 0.0f, 1.0f, "%.2f");
 		// Compact color controls (no large picker popup) for lift/gain grading.
 		const ImGuiColorEditFlags liftGainColorFlags = ImGuiColorEditFlags_Float
 			| ImGuiColorEditFlags_HDR
@@ -1285,6 +1319,7 @@ bool GameLogic::update(float deltaTime,
 		ImGui::ColorEdit3("Lift", &gameHdrPostProcess.lift[0], liftGainColorFlags);
 		ImGui::ColorEdit3("Gain", &gameHdrPostProcess.gain[0], liftGainColorFlags);
 	}
+	storeGlobalHdrToneMapSettings(gameHdrPostProcess);
 
 	ImGui::Separator();
 	if (ImGui::CollapsingHeader("Enemy Projectiles"))
@@ -4022,6 +4057,7 @@ void GameLogic::close()
 	bool keepForceTrap = forceTrapDifficulty;
 	int keepFloorIndex = currentFloorIndex;
 	bool keepFloor = keepFloorOnClose;
+	storeGlobalHdrToneMapSettings(gameHdrPostProcess);
 
 	// Release particle post-process resources before resetting gameplay state.
 	particlePostProcessRenderer.cleanup();

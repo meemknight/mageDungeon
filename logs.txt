@@ -1,1 +1,6 @@
-#2026-02-10 16:18:58: Hot reloaded shaders
+#2026-02-10 17:01:22[error]: Shader reload failed: compile_all_shaders.bat returned an error
+#2026-02-10 17:01:57[error]: Shader reload failed: compile_all_shaders.bat returned an error
+#2026-02-10 17:02:30[error]: Shader reload failed: compile_all_shaders.bat returned an error
+#2026-02-10 17:02:39[error]: Shader reload failed: compile_all_shaders.bat returned an error
+#2026-02-10 17:02:49[error]: Shader reload failed: compile_all_shaders.bat returned an error
+#2026-02-10 17:02:52[error]: Shader reload failed: compile_all_shaders.bat returned an error

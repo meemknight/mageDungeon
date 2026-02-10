@@ -21,14 +21,15 @@ struct GameHdrPostProcess
 	};
 
 	int toneMapper = ToneMapper_PBRNeutral;
-	float exposure = 1.3f;
+	float exposure = 1.35f;
 
 	// Extra pre-tonemap color grading controls.
 	float saturation = 1.0f;
-	float vibrance = 1.0f;
+	float vibrance = 0.95f;
 	float gamma = 1.0f;
-	float shadowBoost = 0.0f;
-	float highlightBoost = 0.0f;
+	float shadowBoost = -0.5f;
+	float highlightBoost = 0.15f;
+	float vignette = 0.15f;
 	glm::vec3 lift = {0.0f, 0.0f, 0.0f};
 	glm::vec3 gain = {1.0f, 1.0f, 1.0f};
 

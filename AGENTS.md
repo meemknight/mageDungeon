@@ -9,6 +9,8 @@ General Instructions:
 
 - Prefer using existing helpers and patterns (elementToColor, getRandomFloat/getRandomInt, PIXEL_SIZE).
 
+- Prefer resetting struct state with `*this = {};` and then setting only non-default overrides; avoid duplicating member default values in init code.
+
 
 Coding Guidelines:
 

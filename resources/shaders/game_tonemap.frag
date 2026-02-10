@@ -54,6 +54,11 @@ float getHighlightBoost()
 	return uGradingData.z;
 }
 
+float getVignette()
+{
+	return clamp(uGradingData.w, 0.0, 1.0);
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////
 // ACES
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -402,6 +407,24 @@ vec3 toGammaSpace(vec3 a)
 	return fromLinearSRGB(a);
 }
 
+//https://www.shadertoy.com/view/lsKSWR
+vec3 applyVignette(vec3 color, float intensity, vec2 uv)
+{
+	uv *= 1.0 - uv.yx;
+
+	float vig = uv.x * uv.y * 15.0;
+	vig = pow(vig, mix(0.25, 1.0, intensity));
+
+	return mix(color, color * vig, intensity);
+}
+
+/* Gradient noise from Jorge Jimenez's presentation: */
+/* http://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare */
+float gradientNoise(in vec2 uv)
+{
+	return fract(52.9829189 * fract(dot(uv, vec2(0.06711056, 0.00583715))));
+}
+
 void main()
 {
 	vec2 clampedUV = clamp(inUV, vec2(0.0), vec2(1.0));
@@ -420,6 +443,11 @@ void main()
 		uGain.xyz);
 	vec3 toneMapped = tonemapFunction(linearColor);
 	vec3 outRgb = toGammaSpace(max(toneMapped, vec3(0.0)));
+
+	float strength = 1;
+	outRgb.rgb += (strength * 1.0 / 255.0) * gradientNoise(gl_FragCoord.xy) - (strength * 0.5 / 255.0);
+
+	outRgb.rgb = applyVignette(outRgb.rgb, getVignette(), clampedUV);
 
 	outColor = vec4(clamp(outRgb, vec3(0.0), vec3(1.0)), 1.0);
 }

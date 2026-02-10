@@ -95,21 +95,14 @@ namespace
 void GameHdrPostProcess::init()
 {
 	#if GL2D_USE_SDL_GPU
+	// Reset to struct defaults so tone/grading values stay defined in one place.
+	*this = {};
+
 	// Main scene target in HDR format for wide luminance range.
 	hdrFbo.gpuTextureFormat = SDL_GPU_TEXTUREFORMAT_R11G11B10_UFLOAT;
 
 	// Tone mapped output stays in regular LDR for final sprite compose.
 	toneMappedFbo.gpuTextureFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-	toneMapper = ToneMapper_PBRNeutral;
-	exposure = 1.3f;
-	saturation = 1.0f;
-	vibrance = 1.0f;
-	gamma = 1.0f;
-	shadowBoost = 0.0f;
-	highlightBoost = 0.0f;
-	lift = {0.0f, 0.0f, 0.0f};
-	gain = {1.0f, 1.0f, 1.0f};
-	frameActive = false;
 	#endif
 }
 
@@ -389,6 +382,7 @@ bool GameHdrPostProcess::applyToneMapping(gl2d::Renderer2D &renderer)
 	toneMapUniform.gradingData[0] = std::max(gamma, 0.001f);
 	toneMapUniform.gradingData[1] = shadowBoost;
 	toneMapUniform.gradingData[2] = highlightBoost;
+	toneMapUniform.gradingData[3] = std::clamp(vignette, 0.0f, 1.0f);
 	toneMapUniform.lift[0] = lift.x;
 	toneMapUniform.lift[1] = lift.y;
 	toneMapUniform.lift[2] = lift.z;
