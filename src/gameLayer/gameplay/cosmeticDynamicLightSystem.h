@@ -35,7 +35,7 @@ struct CosmeticDynamicLightSystem
 {
 	bool enabled = true;
 	// Extra global light added on top of the normal world brightness.
-	float ambientLight = 0.0f;
+	float ambientLight = 0.1f;
 	float playerLightRadius = 12.0f;
 	float playerLightIntensity = 0.54f; 
 	float playerLightFalloffPower = 0.4f; //lower means stronger light at the edges

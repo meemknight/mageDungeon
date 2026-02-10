@@ -853,10 +853,6 @@ void CosmeticDynamicLightSystem::renderMask(gl2d::Renderer2D &renderer, Map &map
 			{
 				if (!isWallAt(map, x, y)) { continue; }
 				renderer.renderRectangle({(float)x, (float)y, 1.0f, 1.0f}, {0, 0, 0, 1});
-				if (y > 0)
-				{
-					renderer.renderRectangle({(float)x, (float)y - 1.0f, 1.0f, 1.0f}, {0, 0, 0, 1});
-				}
 			}
 		}
 
