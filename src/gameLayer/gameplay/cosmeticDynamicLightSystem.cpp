@@ -226,7 +226,15 @@ bool CosmeticDynamicLightSystem::isWallAt(Map &map, int x, int y) const
 bool CosmeticDynamicLightSystem::isOccluderAt(Map &map, int x, int y) const
 {
 	if (!inBounds(x, y)) { return false; }
-	return map.isCollidableAtPosSafe(x, y);
+	if (!map.isCollidableAtPosSafe(x, y)) { return false; }
+
+	// Ignore the visual top-of-wall projection row as a shadow caster.
+	if (!isWallAt(map, x, y) && isWallAt(map, x, y + 1))
+	{
+		return false;
+	}
+
+	return true;
 }
 
 void CosmeticDynamicLightSystem::init()
@@ -267,7 +275,7 @@ void CosmeticDynamicLightSystem::beginFrame(Map &map)
 }
 
 void CosmeticDynamicLightSystem::addLight(glm::vec2 position, float radius, float intensity,
-	float falloffPower, bool castsShadows, glm::vec3 color)
+	float falloffPower, bool castsShadows, glm::vec3 color, bool forceShadowCasting)
 {
 	if (!enabled) { return; }
 	if (radius <= 0.05f) { return; }
@@ -279,6 +287,7 @@ void CosmeticDynamicLightSystem::addLight(glm::vec2 position, float radius, floa
 	light.intensity = intensity;
 	light.falloffPower = std::max(falloffPower, 0.05f);
 	light.castsShadows = castsShadows;
+	light.forceShadowCasting = forceShadowCasting;
 	light.color = glm::max(color, glm::vec3(0.0f));
 	lights.push_back(light);
 }
@@ -290,8 +299,27 @@ void CosmeticDynamicLightSystem::buildLightMask(Map &map)
 	if (!enabled) { return; }
 	if (lights.empty()) { return; }
 
-	for (const auto &light : lights)
+	// Keep heavy shadow ray casting bounded for projectile storms.
+	int shadowCastersUsed = 0;
+	constexpr int shadowCasterLimit = 25;
+
+	for (const auto &sourceLight : lights)
 	{
+		CosmeticDynamicLight light = sourceLight;
+
+		if (light.castsShadows)
+		{
+			if (shadowCastersUsed >= shadowCasterLimit && !light.forceShadowCasting)
+			{
+				light.castsShadows = false;
+			}
+
+			if (light.castsShadows)
+			{
+				shadowCastersUsed++;
+			}
+		}
+
 		float radius = std::max(light.radius, 0.05f);
 		float radiusPad = radius + 1.5f;
 

@@ -16,6 +16,7 @@ struct CosmeticDynamicLight
 	float falloffPower = 1.6f;
 	glm::vec3 color = {1.0f, 1.0f, 1.0f};
 	bool castsShadows = true;
+	bool forceShadowCasting = false;
 };
 
 // Shared defaults used by projectile lights unless a projectile overrides behavior.
@@ -51,7 +52,7 @@ struct CosmeticDynamicLightSystem
 	void beginFrame(Map &map);
 	void addLight(glm::vec2 position, float radius, float intensity,
 		float falloffPower = 1.6f, bool castsShadows = true,
-		glm::vec3 color = {1.0f, 1.0f, 1.0f});
+		glm::vec3 color = {1.0f, 1.0f, 1.0f}, bool forceShadowCasting = false);
 	void buildLightMask(Map &map);
 
 	void updateWindowMetrics(gl2d::Renderer2D &renderer);

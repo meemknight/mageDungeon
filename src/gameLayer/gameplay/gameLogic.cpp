@@ -1795,6 +1795,8 @@ bool GameLogic::update(float deltaTime,
 			cosmeticDynamicLightSystem.playerLightRadius,
 			cosmeticDynamicLightSystem.playerLightIntensity,
 			cosmeticDynamicLightSystem.playerLightFalloffPower,
+			true,
+			{1.0f, 1.0f, 1.0f},
 			true);
 		projectiles.addCosmeticLights(cosmeticDynamicLightSystem);
 		standbyProjectiles.addCosmeticLights(cosmeticDynamicLightSystem);

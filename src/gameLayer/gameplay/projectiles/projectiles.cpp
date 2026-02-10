@@ -1462,6 +1462,12 @@ void ThornProjectile::render(gl2d::Renderer2D &renderer, AssetsManager &assetMan
 	physics.renderCollider(renderer);
 }
 
+void ThornProjectile::addCosmeticLight(CosmeticDynamicLightSystem &lightSystem) const
+{
+	// Thorn decals stay unlit to avoid floor spike clutter in the cosmetic light pass.
+	(void)lightSystem;
+}
+
 void ThornProjectile::onDestroy(std::ranlux24_base &rng)
 {
 }

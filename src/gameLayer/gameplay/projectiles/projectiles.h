@@ -467,6 +467,7 @@ struct ThornProjectile: public CloneableProjectile<ThornProjectile>
 		std::ranlux24_base &rng, EntityHolder &entityHolder) override;
 	void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager,
 		ParticlePostProcessRenderer &particlePostProcessRenderer) override;
+	void addCosmeticLight(CosmeticDynamicLightSystem &lightSystem) const override;
 	void onDestroy(std::ranlux24_base &rng) override;
 };
 
