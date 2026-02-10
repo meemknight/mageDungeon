@@ -9,6 +9,14 @@
 struct DoorHolder;
 struct WorldTextSystem;
 
+struct WallFaceGradientSettings
+{
+	bool enabled = true;
+	float topRimStrength = 0.07f;
+	float bottomShadeStrength = 0.23f;
+	float gradientSpan = 0.25f;
+};
+
 // Hash helper for using glm::vec2 in unordered containers.
 struct Vec2Hash
 {
@@ -51,7 +59,8 @@ struct MapLayer
 	//for rendering tall walls and stuff
 	void renderMapAfterEntities(gl2d::Renderer2D &renderer,
 		AssetsManager &assetManager, const DoorHolder *doorHolder = nullptr,
-		WorldTextSystem *textSystem = nullptr, bool usesController = false);
+		WorldTextSystem *textSystem = nullptr, bool usesController = false,
+		const WallFaceGradientSettings *wallFaceGradientSettings = nullptr);
 };
 
 struct Map
@@ -64,6 +73,7 @@ struct Map
 	MapLayer secondLayer;
 	glm::ivec2 size = {};
 	std::unordered_map<glm::vec2, std::string, Vec2Hash, Vec2Equal> textAnnotations; // world-space text notes
+	WallFaceGradientSettings wallFaceGradientSettings = {};
 
 	
 	bool isCollidableAtPosSafe(int x, int y)

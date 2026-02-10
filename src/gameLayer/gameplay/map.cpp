@@ -249,8 +249,10 @@ void Map::renderMapAfterEntities(gl2d::Renderer2D &renderer, AssetsManager &asse
 	const DoorHolder *doorHolder, WorldTextSystem *textSystem, bool usesController)
 {
 
-	firstLayer.renderMapAfterEntities(renderer, assetManager, doorHolder);
-	secondLayer.renderMapAfterEntities(renderer, assetManager, nullptr);
+	firstLayer.renderMapAfterEntities(renderer, assetManager, doorHolder,
+		nullptr, false, &wallFaceGradientSettings);
+	secondLayer.renderMapAfterEntities(renderer, assetManager, nullptr,
+		nullptr, false, &wallFaceGradientSettings);
 
 	if (!textAnnotations.empty())
 	{
@@ -863,7 +865,8 @@ void MapLayer::renderMap(gl2d::Renderer2D &renderer,
 
 void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 	AssetsManager &assetManager, const DoorHolder *doorHolder,
-	WorldTextSystem *textSystem, bool usesController)
+	WorldTextSystem *textSystem, bool usesController,
+	const WallFaceGradientSettings *wallFaceGradientSettings)
 {
 	(void)textSystem;
 	(void)usesController;
@@ -1175,9 +1178,44 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 						0,
 						wall.atlas.get(4, 1)
 					);
-			}
+				}
 
-		
+				if (wallFaceGradientSettings && wallFaceGradientSettings->enabled && !bottom)
+				{
+					float topStrength = glm::clamp(wallFaceGradientSettings->topRimStrength, 0.0f, 1.0f);
+					float bottomStrength = glm::clamp(wallFaceGradientSettings->bottomShadeStrength, 0.0f, 1.0f);
+					float span = glm::clamp(wallFaceGradientSettings->gradientSpan, 0.05f, 1.0f);
+
+					auto oldBlend = renderer.getBlendMode();
+
+					if (topStrength > 0.0001f)
+					{
+						renderer.setBlendMode(gl2d::Renderer2D::BlendMode_Additive);
+						gl2d::Color4f topColors[4] = {
+							{topStrength, topStrength, topStrength, topStrength},
+							{0.0f, 0.0f, 0.0f, 0.0f},
+							{0.0f, 0.0f, 0.0f, 0.0f},
+							{topStrength, topStrength, topStrength, topStrength},
+						};
+						// Wall faces render at y-1, so gradient overlays the same face tile.
+						renderer.renderRectangle({(float)x, (float)y - 1.0f, 1.0f, span}, topColors);
+					}
+
+					if (bottomStrength > 0.0001f)
+					{
+						renderer.setBlendMode(gl2d::Renderer2D::BlendMode_Alpha);
+						gl2d::Color4f bottomColors[4] = {
+							{0.0f, 0.0f, 0.0f, 0.0f},
+							{0.0f, 0.0f, 0.0f, bottomStrength},
+							{0.0f, 0.0f, 0.0f, bottomStrength},
+							{0.0f, 0.0f, 0.0f, 0.0f},
+						};
+						renderer.renderRectangle({(float)x, (float)y - span, 1.0f, span}, bottomColors);
+					}
+
+					renderer.setBlendMode(oldBlend);
+				}
+			}
 
 		}
 

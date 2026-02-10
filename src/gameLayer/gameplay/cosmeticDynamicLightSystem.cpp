@@ -837,7 +837,7 @@ void CosmeticDynamicLightSystem::renderMask(gl2d::Renderer2D &renderer, Map &map
 			maskFbo.unbind();
 		}
 
-		// Walls are excluded from cosmetic lighting by writing black after the additive pass.
+		// Keep stacked/interior wall tiles unlit, but allow exposed wall tops to receive light.
 		maskFbo.bind();
 		auto oldBlend = renderer.getBlendMode();
 		renderer.setBlendMode(gl2d::Renderer2D::BlendMode_Alpha);
@@ -852,6 +852,7 @@ void CosmeticDynamicLightSystem::renderMask(gl2d::Renderer2D &renderer, Map &map
 			for (int x = tileMinX; x < tileMaxX; x++)
 			{
 				if (!isWallAt(map, x, y)) { continue; }
+				if (!isWallAt(map, x, y + 1)) { continue; }
 				renderer.renderRectangle({(float)x, (float)y, 1.0f, 1.0f}, {0, 0, 0, 1});
 			}
 		}

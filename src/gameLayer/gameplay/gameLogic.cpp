@@ -1081,12 +1081,12 @@ bool GameLogic::update(float deltaTime,
 	{
 		ImGui::Begin("Game Debug");
 
-	if (ImGui::CollapsingHeader("Player", ImGuiTreeNodeFlags_DefaultOpen))
+	if (ImGui::CollapsingHeader("Player"))
 	{
 		ImGui::DragFloat2("Position", &player.physics.getPos()[0], 0.01);
 		ImGui::DragFloat("zoom", &zoom);
 	}
-	if (ImGui::CollapsingHeader("World", ImGuiTreeNodeFlags_DefaultOpen))
+	if (ImGui::CollapsingHeader("World"))
 	{
 		ImGui::Text("World Seed: %d", worldSeed);
 		ImGui::Text("Floor: %d / %d", currentFloorIndex, maxCombatFloors);
@@ -1101,7 +1101,7 @@ bool GameLogic::update(float deltaTime,
 			resetWorld = true;
 		}
 	}
-	if (ImGui::CollapsingHeader("Wands", ImGuiTreeNodeFlags_DefaultOpen))
+	if (ImGui::CollapsingHeader("Wands"))
 	{
 		static int randomWandTier = 1;
 		ImGui::SliderInt("Random Wand Tier", &randomWandTier, 0, 5);
@@ -1347,6 +1347,19 @@ bool GameLogic::update(float deltaTime,
 			0.01f, 0.05f, 6.0f, "%.2f");
 		ImGui::DragFloat("Projectile Color Scale", &cosmeticDynamicLightSystem.projectileLightDefaults.colorScale,
 			0.01f, 0.0f, 3.0f, "%.2f");
+	}
+
+	ImGui::Separator();
+	if (ImGui::CollapsingHeader("Wall Face Gradient"))
+	{
+		auto &wallGradient = map.wallFaceGradientSettings;
+		ImGui::Checkbox("Enable Wall Face Gradient", &wallGradient.enabled);
+		ImGui::DragFloat("Top Rim Strength", &wallGradient.topRimStrength,
+			0.01f, 0.0f, 1.0f, "%.2f");
+		ImGui::DragFloat("Bottom Shade Strength", &wallGradient.bottomShadeStrength,
+			0.01f, 0.0f, 1.0f, "%.2f");
+		ImGui::DragFloat("Gradient", &wallGradient.gradientSpan,
+			0.01f, 0.05f, 1.0f, "%.2f");
 	}
 
 	ImGui::Separator();
