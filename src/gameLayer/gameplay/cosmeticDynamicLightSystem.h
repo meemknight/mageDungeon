@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <vector>
 #include <glm/glm.hpp>
 #include <gl2d/gl2d.h>
@@ -13,6 +14,7 @@ struct CosmeticDynamicLight
 	float radius = 9.0f;
 	float intensity = 1.0f;
 	float falloffPower = 1.6f;
+	glm::vec3 color = {1.0f, 1.0f, 1.0f};
 	bool castsShadows = true;
 };
 
@@ -36,7 +38,8 @@ struct CosmeticDynamicLightSystem
 
 	void beginFrame(Map &map);
 	void addLight(glm::vec2 position, float radius, float intensity,
-		float falloffPower = 1.6f, bool castsShadows = true);
+		float falloffPower = 1.6f, bool castsShadows = true,
+		glm::vec3 color = {1.0f, 1.0f, 1.0f});
 	void buildLightMask(Map &map);
 
 	void updateWindowMetrics(gl2d::Renderer2D &renderer);
@@ -58,4 +61,18 @@ struct CosmeticDynamicLightSystem
 	bool hasTileAt(Map &map, int x, int y) const;
 	bool isWallAt(Map &map, int x, int y) const;
 	bool isOccluderAt(Map &map, int x, int y) const;
+
+	#if GL2D_USE_SDL_GPU
+		SDL_GPUShader *vertexShader = nullptr;
+		SDL_GPUShader *fragmentShader = nullptr;
+		SDL_GPUGraphicsPipeline *pipeline = nullptr;
+		SDL_GPUBuffer *vertexBuffer = nullptr;
+		SDL_GPUTransferBuffer *vertexTransferBuffer = nullptr;
+		uint32_t vertexBufferSize = 0;
+		SDL_GPUTextureFormat pipelineFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+
+		bool ensureResources(gl2d::Renderer2D &renderer);
+		bool ensureVertexBufferCapacity(gl2d::Renderer2D &renderer, uint32_t requiredBytes);
+		void releaseGpuResources();
+	#endif
 };

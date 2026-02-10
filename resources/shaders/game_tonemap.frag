@@ -443,8 +443,8 @@ void main()
 	vec3 linearColor = toLinear(hdrColor);
 	if (hasCosmeticLightMask() > 0.5)
 	{
-		float lightMask = max(texture(uLightMaskTexture, clampedUV).r, 0.0);
-		linearColor *= (1.0 + lightMask);
+		vec3 lightMask = max(texture(uLightMaskTexture, clampedUV).rgb, vec3(0.0));
+		linearColor *= (vec3(1.0) + lightMask);
 	}
 	linearColor = adjustColor(linearColor,
 		getSaturation(),
