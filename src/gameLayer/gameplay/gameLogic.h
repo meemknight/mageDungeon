@@ -17,6 +17,7 @@
 #include <gameplay/wand.h>
 #include <gameplay/droppedItems.h>
 #include <gameplay/spellbookPage.h>
+#include <gameplay/gameHdrPostProcess.h>
 #include "spellSelectionInputLogic.h"
 #include <gameplay/trapWaves.h>
 #include <gameplay/minimapSystem.h>
@@ -154,6 +155,7 @@ struct GameLogic
 	MinimapSystem minimapSystem; // offscreen minimap renderer
 	CameraShakeSystem cameraShakeSystem;
 	gl2d::FrameBuffer gameFbo;
+	GameHdrPostProcess gameHdrPostProcess;
 	PaletteEffect paletteEffect;
 	bool inventoryOpen = false;
 

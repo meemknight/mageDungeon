@@ -169,6 +169,7 @@ namespace gl2d
 	#if GL2D_USE_SDL_GPU
 		SDL_GPUTexture *gpuTexture = nullptr;
 		SDL_GPUDevice *gpuDevice = nullptr;
+		SDL_GPUTextureFormat gpuFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
 	#endif
 		glm::ivec2 cachedSize = {};
 		bool pixelated = GL2D_DEFAULT_TEXTURE_LOAD_MODE_PIXELATED;
@@ -438,6 +439,13 @@ namespace gl2d
 
 		int w = 0;
 		int h = 0;
+
+	#if GL2D_USE_SDL_GPU
+		// Desired texture format for SDL_gpu framebuffer creation.
+		SDL_GPUTextureFormat gpuTextureFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+		// Tracks the previous target so nested bind/unbind restores correctly.
+		FrameBuffer *previousBoundFrameBuffer = nullptr;
+	#endif
 
 		void create(int w, int h, bool nearestFilter = 1);
 		void resize(int w, int h);

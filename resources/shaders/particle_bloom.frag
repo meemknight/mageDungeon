@@ -15,8 +15,8 @@ layout(location = 0) out vec4 outColor;
 const int BLOOM_RADIUS = 4;
 const float BLOOM_THRESHOLD = 0.28;
 const float BLOOM_SOFT_KNEE = 0.08;
-const float BLOOM_INTENSITY = 1.20;
-const float BLOOM_SATURATION = 1.12;
+const float BLOOM_INTENSITY = 1.10;
+const float BLOOM_SATURATION = 1.10;
 
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 

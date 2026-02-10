@@ -32,6 +32,8 @@ static bool removeLightSystem = false;
 static bool disableSecondLightLayer = true;
 // Debug toggle: disable particle bloom while investigating visual issues.
 static bool disableParticleBloom = false;
+// Debug toggle for fullscreen HDR tone mapping post process.
+static bool disableGameHdrTonemap = false;
 static const bool skipTutorialFloor = true;
 static const float trapRoomChance = 0.80f;
 static const float trapRoomTriggerMargin = 1.5f;
@@ -411,6 +413,8 @@ bool GameLogic::init()
 
 	particlePostProcessRenderer.init();
 	particlePostProcessRenderer.bloomEnabled = !disableParticleBloom;
+	gameHdrPostProcess.init();
+	gameHdrPostProcess.enabled = !disableGameHdrTonemap;
 	minimapSystem.init();
 	gameFbo.create(1, 1, true);
 	paletteEffect.loadPalette();
@@ -1247,6 +1251,42 @@ bool GameLogic::update(float deltaTime,
 	}
 
 	ImGui::Separator();
+	if (ImGui::CollapsingHeader("HDR Tonemap"))
+	{
+		// Runtime controls for the fullscreen HDR tone mapping pass.
+		ImGui::Checkbox("Enable HDR Tonemap", &gameHdrPostProcess.enabled);
+
+		const char *tonemapperNames[GameHdrPostProcess::ToneMapper_Count] = {
+			"ACES Fitted",
+			"AGX",
+			"ZCAM",
+			"Uncharted2",
+			"PBR Neutral"
+		};
+
+		int tonemapper = std::clamp(gameHdrPostProcess.toneMapper, 0,
+			GameHdrPostProcess::ToneMapper_Count - 1);
+		if (ImGui::Combo("Tonemapper", &tonemapper,
+			tonemapperNames, GameHdrPostProcess::ToneMapper_Count))
+		{
+			gameHdrPostProcess.toneMapper = tonemapper;
+		}
+
+		ImGui::DragFloat("Exposure", &gameHdrPostProcess.exposure, 0.01f, 0.0f, 8.0f, "%.2f");
+		ImGui::DragFloat("Saturation", &gameHdrPostProcess.saturation, 0.01f, 0.0f, 2.5f, "%.2f");
+		ImGui::DragFloat("Vibrance", &gameHdrPostProcess.vibrance, 0.01f, 0.0f, 2.5f, "%.2f");
+		ImGui::DragFloat("Grading Gamma", &gameHdrPostProcess.gamma, 0.01f, 0.1f, 4.0f, "%.2f");
+		ImGui::DragFloat("Shadow Boost", &gameHdrPostProcess.shadowBoost, 0.01f, -1.0f, 2.0f, "%.2f");
+		ImGui::DragFloat("Highlight Boost", &gameHdrPostProcess.highlightBoost, 0.01f, -1.0f, 2.0f, "%.2f");
+		// Compact color controls (no large picker popup) for lift/gain grading.
+		const ImGuiColorEditFlags liftGainColorFlags = ImGuiColorEditFlags_Float
+			| ImGuiColorEditFlags_HDR
+			| ImGuiColorEditFlags_NoPicker;
+		ImGui::ColorEdit3("Lift", &gameHdrPostProcess.lift[0], liftGainColorFlags);
+		ImGui::ColorEdit3("Gain", &gameHdrPostProcess.gain[0], liftGainColorFlags);
+	}
+
+	ImGui::Separator();
 	if (ImGui::CollapsingHeader("Enemy Projectiles"))
 	{
 		if (ImGui::Button("Shoot Enemy Orb"))
@@ -1687,6 +1727,13 @@ bool GameLogic::update(float deltaTime,
 #pragma region rendering
 	bool paletteGame = paletteEffect.enabledGame && paletteEffect.hasPalette();
 	bool paletteParticles = paletteEffect.enabledParticles && paletteEffect.hasPalette() && !paletteGame;
+	bool hdrGameTonemap = gameHdrPostProcess.beginScene(renderer);
+	if (hdrGameTonemap)
+	{
+		// HDR path owns the main scene target, so we skip legacy palette readback.
+		paletteGame = false;
+		paletteParticles = paletteEffect.enabledParticles && paletteEffect.hasPalette();
+	}
 	if (paletteGame)
 	{
 		gameFbo.resize(renderer.windowW, renderer.windowH);
@@ -3944,6 +3991,11 @@ bool GameLogic::update(float deltaTime,
 	}
 
 
+	if (hdrGameTonemap)
+	{
+		gameHdrPostProcess.endScene(renderer);
+	}
+
 	//we want the first frame of the spell to happen in the same frame it was cast
 	spellsHolder.update(simDelta, map, particleSystem,
 		projectiles, rng, player, entityHolder, fireDirection);
@@ -3973,6 +4025,7 @@ void GameLogic::close()
 
 	// Release particle post-process resources before resetting gameplay state.
 	particlePostProcessRenderer.cleanup();
+	gameHdrPostProcess.cleanup();
 	gameFbo.cleanup();
 
 	*this = {};

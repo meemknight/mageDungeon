@@ -57,6 +57,7 @@ static void tryHotReloadShaders()
 	}
 
 	renderer.reloadGpuShaders();
+	game.gameHdrPostProcess.reloadShaders();
 	game.particlePostProcessRenderer.bloom.reloadShaders();
 	if (spellPreviewContext)
 	{

@@ -1338,7 +1338,11 @@ namespace gl2d
 			targetTexture = renderer.boundFrameBuffer->texture.gpuTexture;
 			targetW = std::max(renderer.boundFrameBuffer->w, 0);
 			targetH = std::max(renderer.boundFrameBuffer->h, 0);
-			targetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+			targetFormat = renderer.boundFrameBuffer->texture.gpuFormat;
+			if (targetFormat == SDL_GPU_TEXTUREFORMAT_INVALID)
+			{
+				targetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+			}
 		}
 		else
 		{
@@ -3175,11 +3179,13 @@ namespace gl2d
 			}
 
 			gpuDevice = globalGpuDevice;
+			gpuFormat = textureInfo.format;
 			if (!uploadRGBA8Texture(globalGpuDevice, gpuTexture, image_data, width, height))
 			{
 				SDL_ReleaseGPUTexture(globalGpuDevice, gpuTexture);
 				gpuTexture = nullptr;
 				gpuDevice = nullptr;
+				gpuFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
 				cachedSize = {};
 				return;
 			}
@@ -3614,11 +3620,27 @@ namespace gl2d
 			texture.pixelated = nearestFilter;
 			texture.cachedSize = {w, h};
 			texture.gpuDevice = globalGpuDevice;
+			texture.gpuFormat = gpuTextureFormat;
+
+			SDL_GPUTextureFormat selectedFormat = gpuTextureFormat;
+			if (selectedFormat == SDL_GPU_TEXTUREFORMAT_INVALID)
+			{
+				selectedFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+			}
+
+			const SDL_GPUTextureUsageFlags usage =
+				SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+			if (!SDL_GPUTextureSupportsFormat(globalGpuDevice, selectedFormat,
+				SDL_GPU_TEXTURETYPE_2D, usage))
+			{
+				selectedFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+			}
+			texture.gpuFormat = selectedFormat;
 
 			SDL_GPUTextureCreateInfo textureInfo = {};
 			textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
-			textureInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-			textureInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+			textureInfo.format = selectedFormat;
+			textureInfo.usage = usage;
 			textureInfo.width = static_cast<uint32_t>(w);
 			textureInfo.height = static_cast<uint32_t>(h);
 			textureInfo.layer_count_or_depth = 1;
@@ -3674,6 +3696,7 @@ namespace gl2d
 	{
 		texture.cleanup();
 		w = h = 0;
+		previousBoundFrameBuffer = nullptr;
 	}
 
 	void FrameBuffer::clear()
@@ -3703,6 +3726,14 @@ namespace gl2d
 			{
 				activeRendererInstance->flush(true);
 			}
+
+			if (activeRendererInstance->boundFrameBuffer == this)
+			{
+				return;
+			}
+
+			// Preserve current target so unbind can return to it (nested offscreen passes).
+			previousBoundFrameBuffer = activeRendererInstance->boundFrameBuffer;
 			activeRendererInstance->boundFrameBuffer = this;
 			return;
 		}
@@ -3718,7 +3749,12 @@ namespace gl2d
 			{
 				activeRendererInstance->flush(true);
 			}
-			activeRendererInstance->boundFrameBuffer = nullptr;
+
+			if (activeRendererInstance->boundFrameBuffer == this)
+			{
+				activeRendererInstance->boundFrameBuffer = previousBoundFrameBuffer;
+				previousBoundFrameBuffer = nullptr;
+			}
 			return;
 		}
 
