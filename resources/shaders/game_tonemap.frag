@@ -2,16 +2,19 @@
 #version 450
 
 layout(set = 2, binding = 0) uniform sampler2D uHdrTexture;
+layout(set = 2, binding = 1) uniform sampler2D uLightMaskTexture;
 layout(std140, set = 3, binding = 0) uniform ToneMapUniform
 {
 	// x: tonemapper index, y: exposure, z: saturation, w: vibrance
 	vec4 uToneMapData;
-	// x: gamma, y: shadowBoost, z: highlightBoost
+	// x: gamma, y: shadowBoost, z: highlightBoost, w: vignette
 	vec4 uGradingData;
 	// xyz: lift
 	vec4 uLift;
 	// xyz: gain
 	vec4 uGain;
+	// x: hasCosmeticLightMask
+	vec4 uExtraData;
 };
 
 layout(location = 0) in vec2 inUV;
@@ -57,6 +60,11 @@ float getHighlightBoost()
 float getVignette()
 {
 	return clamp(uGradingData.w, 0.0, 1.0);
+}
+
+float hasCosmeticLightMask()
+{
+	return uExtraData.x;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -433,6 +441,11 @@ void main()
 	hdrColor *= getExposure();
 
 	vec3 linearColor = toLinear(hdrColor);
+	if (hasCosmeticLightMask() > 0.5)
+	{
+		float lightMask = max(texture(uLightMaskTexture, clampedUV).r, 0.0);
+		linearColor *= (1.0 + lightMask);
+	}
 	linearColor = adjustColor(linearColor,
 		getSaturation(),
 		getVibrance(),

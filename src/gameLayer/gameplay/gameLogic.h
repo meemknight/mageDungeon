@@ -22,6 +22,7 @@
 #include <gameplay/trapWaves.h>
 #include <gameplay/minimapSystem.h>
 #include <gameplay/roomLightingSystem.h>
+#include <gameplay/cosmeticDynamicLightSystem.h>
 #include <gameplay/cameraShakeSystem.h>
 
 //this is an instance of the game.
@@ -128,6 +129,7 @@ struct GameLogic
 	BreakableDecorationSystem breakableDecorations;
 	TrapSpikeSystem trapSpikes;
 	RoomLightingSystem roomLightingSystem;
+	CosmeticDynamicLightSystem cosmeticDynamicLightSystem;
 	Wand wands[2];
 	bool hasWand[2] = {};
 	int activeWandIndex = 0;

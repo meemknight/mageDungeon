@@ -442,6 +442,8 @@ bool GameLogic::init()
 
 	particlePostProcessRenderer.init();
 	particlePostProcessRenderer.bloomEnabled = !disableParticleBloom;
+	cosmeticDynamicLightSystem.init();
+	cosmeticDynamicLightSystem.resetForFloor(map);
 	gameHdrPostProcess.init();
 	applyGlobalHdrToneMapSettings(gameHdrPostProcess);
 	if (disableGameHdrTonemap)
@@ -1322,6 +1324,19 @@ bool GameLogic::update(float deltaTime,
 	storeGlobalHdrToneMapSettings(gameHdrPostProcess);
 
 	ImGui::Separator();
+	if (ImGui::CollapsingHeader("Cosmetic Dynamic Light"))
+	{
+		// Cosmetic-only LOS lighting layered on top of gameplay visibility.
+		ImGui::Checkbox("Enable Cosmetic Light", &cosmeticDynamicLightSystem.enabled);
+		ImGui::DragFloat("Global Extra Light", &cosmeticDynamicLightSystem.ambientLight,
+			0.01f, 0.0f, 1.0f, "%.2f");
+		ImGui::DragFloat("Player Light Radius", &cosmeticDynamicLightSystem.playerLightRadius, 0.05f, 0.5f, 32.0f, "%.2f");
+		ImGui::DragFloat("Player Light Intensity", &cosmeticDynamicLightSystem.playerLightIntensity, 0.01f, 0.0f, 4.0f, "%.2f");
+		ImGui::DragFloat("Player Light Falloff", &cosmeticDynamicLightSystem.playerLightFalloffPower,
+			0.01f, 0.1f, 6.0f, "%.2f");
+	}
+
+	ImGui::Separator();
 	if (ImGui::CollapsingHeader("Enemy Projectiles"))
 	{
 		if (ImGui::Button("Shoot Enemy Orb"))
@@ -1758,6 +1773,21 @@ bool GameLogic::update(float deltaTime,
 
 	// Render particles into the post-process FBO early so FBO binds do not force a swapchain submit.
 	particleSystem.render(renderer, particlePostProcessRenderer, {});
+
+	// Build the cosmetic LOS light mask from CPU visibility and keep it separate from gameplay fog.
+	if (gameHdrPostProcess.enabled)
+	{
+		cosmeticDynamicLightSystem.beginFrame(map);
+		cosmeticDynamicLightSystem.addLight(player.physics.transform.getCenter(),
+			cosmeticDynamicLightSystem.playerLightRadius,
+			cosmeticDynamicLightSystem.playerLightIntensity,
+			cosmeticDynamicLightSystem.playerLightFalloffPower,
+			true);
+		cosmeticDynamicLightSystem.buildLightMask(map);
+		cosmeticDynamicLightSystem.updateWindowMetrics(renderer);
+		cosmeticDynamicLightSystem.renderMask(renderer, map);
+		gameHdrPostProcess.setCosmeticLightMaskTexture(cosmeticDynamicLightSystem.getMaskTexture());
+	}
 
 #pragma region rendering
 	bool paletteGame = paletteEffect.enabledGame && paletteEffect.hasPalette();
@@ -2966,6 +2996,11 @@ bool GameLogic::update(float deltaTime,
 
 #pragma endregion
 
+	if (hdrGameTonemap)
+	{
+		gameHdrPostProcess.endScene(renderer);
+	}
+
 	// player life + spell healing + shield
 	{
 		const float uiBaseZoom = 100.0f;
@@ -4025,12 +4060,6 @@ bool GameLogic::update(float deltaTime,
 		renderer.popCamera();
 	}
 
-
-	if (hdrGameTonemap)
-	{
-		gameHdrPostProcess.endScene(renderer);
-	}
-
 	//we want the first frame of the spell to happen in the same frame it was cast
 	spellsHolder.update(simDelta, map, particleSystem,
 		projectiles, rng, player, entityHolder, fireDirection);
@@ -4061,6 +4090,7 @@ void GameLogic::close()
 
 	// Release particle post-process resources before resetting gameplay state.
 	particlePostProcessRenderer.cleanup();
+	cosmeticDynamicLightSystem.cleanup();
 	gameHdrPostProcess.cleanup();
 	gameFbo.cleanup();
 

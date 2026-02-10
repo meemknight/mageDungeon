@@ -82,12 +82,14 @@ namespace
 	{
 		// x: tonemapper index, y: exposure, z: saturation, w: vibrance
 		float toneMapData[4] = {};
-		// x: gamma, y: shadowBoost, z: highlightBoost
+		// x: gamma, y: shadowBoost, z: highlightBoost, w: vignette
 		float gradingData[4] = {};
 		// xyz: lift
 		float lift[4] = {};
 		// xyz: gain
 		float gain[4] = {};
+		// x: hasCosmeticLightMask
+		float extraData[4] = {};
 	};
 }
 #endif
@@ -103,6 +105,15 @@ void GameHdrPostProcess::init()
 
 	// Tone mapped output stays in regular LDR for final sprite compose.
 	toneMappedFbo.gpuTextureFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+	#endif
+}
+
+void GameHdrPostProcess::setCosmeticLightMaskTexture(gl2d::Texture texture)
+{
+	#if GL2D_USE_SDL_GPU
+	cosmeticLightMaskTexture = texture;
+	#else
+	(void)texture;
 	#endif
 }
 
@@ -189,7 +200,8 @@ bool GameHdrPostProcess::beginScene(gl2d::Renderer2D &renderer)
 	}
 
 	hdrFbo.bind();
-	hdrFbo.clear();
+	// Keep out-of-map pixels black so additive cosmetic light cannot turn them white.
+	renderer.clearScreen({0, 0, 0, 1});
 	frameActive = true;
 	return true;
 	#else
@@ -291,7 +303,7 @@ bool GameHdrPostProcess::ensureResources(gl2d::Renderer2D &renderer)
 		fragmentInfo.entrypoint = "main";
 		fragmentInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
 		fragmentInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-		fragmentInfo.num_samplers = 1;
+		fragmentInfo.num_samplers = 2;
 		fragmentInfo.num_storage_textures = 0;
 		fragmentInfo.num_storage_buffers = 0;
 		fragmentInfo.num_uniform_buffers = 1;
@@ -369,10 +381,13 @@ bool GameHdrPostProcess::applyToneMapping(gl2d::Renderer2D &renderer)
 	SDL_Rect scissor = {0, 0, toneMappedFbo.w, toneMappedFbo.h};
 	SDL_SetGPUScissor(renderPass, &scissor);
 
-	SDL_GPUTextureSamplerBinding hdrBinding = {};
-	hdrBinding.texture = hdrFbo.texture.gpuTexture;
-	hdrBinding.sampler = nearestSampler;
-	SDL_BindGPUFragmentSamplers(renderPass, 0, &hdrBinding, 1);
+	SDL_GPUTextureSamplerBinding samplerBindings[2] = {};
+	samplerBindings[0].texture = hdrFbo.texture.gpuTexture;
+	samplerBindings[0].sampler = nearestSampler;
+	samplerBindings[1].texture = cosmeticLightMaskTexture.gpuTexture ?
+		cosmeticLightMaskTexture.gpuTexture : hdrFbo.texture.gpuTexture;
+	samplerBindings[1].sampler = nearestSampler;
+	SDL_BindGPUFragmentSamplers(renderPass, 0, samplerBindings, 2);
 
 	ToneMapUniformData toneMapUniform = {};
 	toneMapUniform.toneMapData[0] = (float)std::clamp(toneMapper, 0, ToneMapper_Count - 1);
@@ -389,6 +404,7 @@ bool GameHdrPostProcess::applyToneMapping(gl2d::Renderer2D &renderer)
 	toneMapUniform.gain[0] = gain.x;
 	toneMapUniform.gain[1] = gain.y;
 	toneMapUniform.gain[2] = gain.z;
+	toneMapUniform.extraData[0] = cosmeticLightMaskTexture.gpuTexture ? 1.0f : 0.0f;
 	SDL_PushGPUFragmentUniformData(commandBuffer, 0, &toneMapUniform, sizeof(toneMapUniform));
 
 	SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);

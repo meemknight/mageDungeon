@@ -37,6 +37,7 @@ struct GameHdrPostProcess
 	void cleanup();
 	void reloadShaders();
 	void updateWindowMetrics(gl2d::Renderer2D &renderer);
+	void setCosmeticLightMaskTexture(gl2d::Texture texture);
 
 	bool beginScene(gl2d::Renderer2D &renderer);
 	void endScene(gl2d::Renderer2D &renderer);
@@ -49,6 +50,7 @@ struct GameHdrPostProcess
 		SDL_GPUShader *fragmentShader = nullptr;
 		SDL_GPUGraphicsPipeline *pipeline = nullptr;
 		SDL_GPUSampler *nearestSampler = nullptr;
+		gl2d::Texture cosmeticLightMaskTexture;
 
 		bool frameActive = false;
 
