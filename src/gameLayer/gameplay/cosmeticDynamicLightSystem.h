@@ -18,17 +18,29 @@ struct CosmeticDynamicLight
 	bool castsShadows = true;
 };
 
+// Shared defaults used by projectile lights unless a projectile overrides behavior.
+struct CosmeticProjectileLightDefaults
+{
+	bool enabled = true;
+	float radius = 4.0f;
+	float intensity = 1.0f;
+	float falloffPower = 1.4f;
+	float colorScale = 0.7f;
+	bool castsShadows = true;
+};
+
 // Cosmetic-only LOS based lighting mask (does not affect gameplay visibility/minimap).
 struct CosmeticDynamicLightSystem
 {
 	bool enabled = true;
 	// Extra global light added on top of the normal world brightness.
 	float ambientLight = 0.0f;
-	float playerLightRadius = 10.0f;
+	float playerLightRadius = 12.0f;
 	float playerLightIntensity = 0.54f; 
 	float playerLightFalloffPower = 0.4f; //lower means stronger light at the edges
-	// Renders mask to half-resolution target to lower CPU and fill cost.
+	// Extra downscale on top of camera pixel-scale mask sizing.
 	bool useHalfResolution = true;
+	CosmeticProjectileLightDefaults projectileLightDefaults;
 
 	gl2d::FrameBuffer maskFbo;
 

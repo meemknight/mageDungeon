@@ -439,9 +439,16 @@ void CosmeticDynamicLightSystem::buildLightMask(Map &map)
 
 void CosmeticDynamicLightSystem::updateWindowMetrics(gl2d::Renderer2D &renderer)
 {
-	int divider = useHalfResolution ? 2 : 1;
-	int width = std::max((renderer.windowW + divider - 1) / divider, 1);
-	int height = std::max((renderer.windowH + divider - 1) / divider, 1);
+	// Match particle post-process sizing so light mask aligns with world pixel grid.
+	int pixelateFactor = (PIXEL_SIZE * renderer.currentCamera.zoom);
+	pixelateFactor = std::max(pixelateFactor, 2);
+	if (useHalfResolution)
+	{
+		pixelateFactor *= 2;
+	}
+
+	int width = std::max((renderer.windowW + pixelateFactor - 1) / pixelateFactor, 1);
+	int height = std::max((renderer.windowH + pixelateFactor - 1) / pixelateFactor, 1);
 	maskFbo.resize(width, height);
 }
 

@@ -15,6 +15,7 @@
 #include <gameplay/entities/entity.h>
 
 struct Player;
+struct CosmeticDynamicLightSystem;
 
 // Breakable decoration helpers (defined in gameLayer.cpp).
 int breakDecorationsAtCollider(const Transform2D &collider);
@@ -77,6 +78,9 @@ struct Projectile
 		std::ranlux24_base &rng, EntityHolder &entityHolder) = 0;
 
 	virtual void render(gl2d::Renderer2D &renderer, AssetsManager &assetManager, ParticlePostProcessRenderer &particlePostProcessRenderer) = 0;
+
+	// Cosmetic dynamic lighting hook. Derived projectiles can override custom behavior.
+	virtual void addCosmeticLight(CosmeticDynamicLightSystem &lightSystem) const;
 
 	virtual void onDestroy(std::ranlux24_base &rng) {}
 
@@ -181,6 +185,21 @@ struct ProjectileHolder
 		}
 	}
 
+	void addCosmeticLights(CosmeticDynamicLightSystem &lightSystem) const
+	{
+		for (auto &p : projectiles)
+		{
+			if (!p) { continue; }
+			p->addCosmeticLight(lightSystem);
+		}
+
+		for (auto &p : pendingProjectiles)
+		{
+			if (!p) { continue; }
+			p->addCosmeticLight(lightSystem);
+		}
+	}
+
 };
 
 // Access the active projectile holder for spawning burst projectiles.
@@ -233,6 +252,7 @@ struct StandbyProjectileSystem
 	bool tryFire(Map &map, ProjectileHolder &projectileHolder,
 		Player &player, EntityHolder &entityHolder, glm::vec2 aimDir);
 	void render(gl2d::Renderer2D &renderer, ParticlePostProcessRenderer &particlePostProcessRenderer);
+	void addCosmeticLights(CosmeticDynamicLightSystem &lightSystem) const;
 };
 
 // Access the active standby projectile system.

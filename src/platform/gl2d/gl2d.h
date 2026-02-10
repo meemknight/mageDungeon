@@ -447,7 +447,7 @@ namespace gl2d
 		FrameBuffer *previousBoundFrameBuffer = nullptr;
 	#endif
 
-		void create(int w, int h, bool nearestFilter = 1);
+		void create(int w, int h, bool nearestFilter = true);
 		void resize(int w, int h);
 
 		//clears resources

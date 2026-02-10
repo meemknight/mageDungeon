@@ -111,6 +111,8 @@ void GameHdrPostProcess::init()
 void GameHdrPostProcess::setCosmeticLightMaskTexture(gl2d::Texture texture)
 {
 	#if GL2D_USE_SDL_GPU
+	// Framebuffer-backed mask should sample with nearest for crisp pixel alignment.
+	texture.pixelated = true;
 	cosmeticLightMaskTexture = texture;
 	#else
 	(void)texture;
@@ -127,13 +129,6 @@ void GameHdrPostProcess::cleanup()
 		auto *device = hdrFbo.texture.gpuDevice;
 		SDL_ReleaseGPUSampler(device, nearestSampler);
 		nearestSampler = nullptr;
-	}
-
-	if (hdrFbo.texture.gpuDevice && linearSampler)
-	{
-		auto *device = hdrFbo.texture.gpuDevice;
-		SDL_ReleaseGPUSampler(device, linearSampler);
-		linearSampler = nullptr;
 	}
 
 	hdrFbo.cleanup();
@@ -268,7 +263,7 @@ bool GameHdrPostProcess::ensureResources(gl2d::Renderer2D &renderer)
 		return false;
 	}
 
-	if (pipeline && vertexShader && fragmentShader && nearestSampler && linearSampler)
+	if (pipeline && vertexShader && fragmentShader && nearestSampler)
 	{
 		return true;
 	}
@@ -329,18 +324,6 @@ bool GameHdrPostProcess::ensureResources(gl2d::Renderer2D &renderer)
 		nearestSampler = SDL_CreateGPUSampler(renderer.gpuDevice, &samplerInfo);
 	}
 
-	if (!linearSampler)
-	{
-		SDL_GPUSamplerCreateInfo samplerInfo = {};
-		samplerInfo.min_filter = SDL_GPU_FILTER_LINEAR;
-		samplerInfo.mag_filter = SDL_GPU_FILTER_LINEAR;
-		samplerInfo.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
-		samplerInfo.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-		samplerInfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-		samplerInfo.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-		linearSampler = SDL_CreateGPUSampler(renderer.gpuDevice, &samplerInfo);
-	}
-
 	if (!pipeline && vertexShader && fragmentShader)
 	{
 		SDL_GPUTextureFormat targetFormat = toneMappedFbo.texture.gpuFormat;
@@ -352,7 +335,7 @@ bool GameHdrPostProcess::ensureResources(gl2d::Renderer2D &renderer)
 		pipeline = createToneMapPipeline(renderer.gpuDevice, vertexShader, fragmentShader, targetFormat);
 	}
 
-	return pipeline && vertexShader && fragmentShader && nearestSampler && linearSampler;
+	return pipeline && vertexShader && fragmentShader && nearestSampler;
 }
 
 bool GameHdrPostProcess::applyToneMapping(gl2d::Renderer2D &renderer)
@@ -405,7 +388,7 @@ bool GameHdrPostProcess::applyToneMapping(gl2d::Renderer2D &renderer)
 	samplerBindings[0].sampler = nearestSampler;
 	samplerBindings[1].texture = cosmeticLightMaskTexture.gpuTexture ?
 		cosmeticLightMaskTexture.gpuTexture : hdrFbo.texture.gpuTexture;
-	samplerBindings[1].sampler = linearSampler ? linearSampler : nearestSampler;
+	samplerBindings[1].sampler = nearestSampler;
 	SDL_BindGPUFragmentSamplers(renderPass, 0, samplerBindings, 2);
 
 	ToneMapUniformData toneMapUniform = {};

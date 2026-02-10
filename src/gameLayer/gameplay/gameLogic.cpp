@@ -1335,6 +1335,18 @@ bool GameLogic::update(float deltaTime,
 		ImGui::DragFloat("Player Light Intensity", &cosmeticDynamicLightSystem.playerLightIntensity, 0.01f, 0.0f, 4.0f, "%.2f");
 		ImGui::DragFloat("Player Light Falloff", &cosmeticDynamicLightSystem.playerLightFalloffPower,
 			0.01f, 0.1f, 6.0f, "%.2f");
+
+		ImGui::Separator();
+		ImGui::Checkbox("Projectile Lights", &cosmeticDynamicLightSystem.projectileLightDefaults.enabled);
+		ImGui::Checkbox("Projectile Cast Shadows", &cosmeticDynamicLightSystem.projectileLightDefaults.castsShadows);
+		ImGui::DragFloat("Projectile Radius", &cosmeticDynamicLightSystem.projectileLightDefaults.radius,
+			0.01f, 0.1f, 8.0f, "%.2f");
+		ImGui::DragFloat("Projectile Intensity", &cosmeticDynamicLightSystem.projectileLightDefaults.intensity,
+			0.01f, 0.0f, 4.0f, "%.2f");
+		ImGui::DragFloat("Projectile Falloff", &cosmeticDynamicLightSystem.projectileLightDefaults.falloffPower,
+			0.01f, 0.05f, 6.0f, "%.2f");
+		ImGui::DragFloat("Projectile Color Scale", &cosmeticDynamicLightSystem.projectileLightDefaults.colorScale,
+			0.01f, 0.0f, 3.0f, "%.2f");
 	}
 
 	ImGui::Separator();
@@ -1784,6 +1796,8 @@ bool GameLogic::update(float deltaTime,
 			cosmeticDynamicLightSystem.playerLightIntensity,
 			cosmeticDynamicLightSystem.playerLightFalloffPower,
 			true);
+		projectiles.addCosmeticLights(cosmeticDynamicLightSystem);
+		standbyProjectiles.addCosmeticLights(cosmeticDynamicLightSystem);
 		cosmeticDynamicLightSystem.buildLightMask(map);
 		cosmeticDynamicLightSystem.updateWindowMetrics(renderer);
 		cosmeticDynamicLightSystem.renderMask(renderer, map);

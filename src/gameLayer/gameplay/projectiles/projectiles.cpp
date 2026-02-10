@@ -4,12 +4,34 @@
 #include <gameplay/statusEffects.h>
 #include <gameplay/assetsManager.h>
 #include <gameplay/aStar.h>
+#include <gameplay/cosmeticDynamicLightSystem.h>
 #include <gameLayer.h>
 #include <gameplay/player.h>
 #include <gameplay/summons.h>
 #include <algorithm>
 #include <cmath>
+#include <glm/glm.hpp>
 
+
+void Projectile::addCosmeticLight(CosmeticDynamicLightSystem &lightSystem) const
+{
+	if (!lightSystem.enabled) { return; }
+
+	auto defaults = lightSystem.projectileLightDefaults;
+	if (!defaults.enabled) { return; }
+
+	int clampedElement = glm::clamp(element, (int)Elements::NoneElement, (int)Elements::Ice);
+	if (clampedElement == Elements::NoneElement) { return; }
+	glm::vec3 lightColor = glm::vec3(elementToColor(clampedElement));
+	lightColor *= std::max(defaults.colorScale, 0.0f);
+
+	lightSystem.addLight(physics.transform.getCenter(),
+		defaults.radius,
+		defaults.intensity,
+		defaults.falloffPower,
+		defaults.castsShadows,
+		lightColor);
+}
 
 
 bool basicProjectileHitEntitiesLogic(PhysicalEntity &physics,
@@ -304,6 +326,15 @@ void StandbyProjectileSystem::render(gl2d::Renderer2D &renderer,
 	{
 		entry.projectile->particleSystem.render(renderer, particlePostProcessRenderer,
 			entry.projectile->physics.getPos());
+	}
+}
+
+void StandbyProjectileSystem::addCosmeticLights(CosmeticDynamicLightSystem &lightSystem) const
+{
+	for (auto &entry : standbyProjectiles)
+	{
+		if (!entry.projectile) { continue; }
+		entry.projectile->addCosmeticLight(lightSystem);
 	}
 }
 
