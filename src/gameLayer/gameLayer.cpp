@@ -5,6 +5,8 @@
 #include "platformInput.h"
 #include <iostream>
 #include <sstream>
+#include <fstream>
+#include <cstdlib>
 #include <platformTools.h>
 #include <logs.h>
 #include <SDL3/SDL.h>
@@ -26,6 +28,46 @@ static GameLogic game;
 static AssetsManager assetsManager;
 static glui::RendererUi uirenderer;
 static SpellPreviewContext *spellPreviewContext = nullptr;
+
+// Rebuilds shader binaries in development and reloads GPU shader objects.
+static void tryHotReloadShaders()
+{
+#if defined(_WIN32) && defined(DEVELOPLEMT_BUILD) && (DEVELOPLEMT_BUILD == 1)
+	std::string scriptPath = std::string(RESOURCES_PATH) + "shaders/compile_all_shaders.bat";
+	for (char &c : scriptPath)
+	{
+		if (c == '/') { c = '\\'; }
+	}
+
+	std::ifstream scriptFile(scriptPath);
+	if (!scriptFile.is_open())
+	{
+		platform::log("Shader reload failed: missing resources\\shaders\\compile_all_shaders.bat",
+			LogManager::logError);
+		return;
+	}
+
+	const std::string command = std::string("cmd.exe /C call \"") + scriptPath + "\"";
+	int result = std::system(command.c_str());
+	if (result != 0)
+	{
+		platform::log("Shader reload failed: compile_all_shaders.bat returned an error",
+			LogManager::logError);
+		return;
+	}
+
+	renderer.reloadGpuShaders();
+	game.particlePostProcessRenderer.bloom.reloadShaders();
+	if (spellPreviewContext)
+	{
+		spellPreviewContext->particleRenderer.bloom.reloadShaders();
+	}
+
+	platform::log("Hot reloaded shaders", LogManager::logNormal);
+#else
+	platform::log("Shader reload is only enabled on Windows development builds", LogManager::logWarning);
+#endif
+}
 
 AssetsManager &getAssetManager()
 {
@@ -264,6 +306,11 @@ bool gameLogic(float deltaTime, platform::Input &input, SDL_Renderer *sdlRendere
 	h = platform::getFrameBufferSizeY(); //window h
 	
 	renderer.updateWindowMetrics(w, h);
+
+	if (input.isButtonPressed(platform::Button::F5))
+	{
+		tryHotReloadShaders();
+	}
 
 	renderer.clearScreen();
 

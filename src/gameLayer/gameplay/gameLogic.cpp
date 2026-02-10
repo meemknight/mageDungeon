@@ -30,6 +30,8 @@
 static const bool disableRandomEnemySpawns = true;
 static bool removeLightSystem = false;
 static bool disableSecondLightLayer = true;
+// Debug toggle: disable particle bloom while investigating visual issues.
+static bool disableParticleBloom = false;
 static const bool skipTutorialFloor = true;
 static const float trapRoomChance = 0.80f;
 static const float trapRoomTriggerMargin = 1.5f;
@@ -408,6 +410,7 @@ bool GameLogic::init()
 	cameraShakeSystem.clear();
 
 	particlePostProcessRenderer.init();
+	particlePostProcessRenderer.bloomEnabled = !disableParticleBloom;
 	minimapSystem.init();
 	gameFbo.create(1, 1, true);
 	paletteEffect.loadPalette();
@@ -3967,6 +3970,11 @@ void GameLogic::close()
 	bool keepForceTrap = forceTrapDifficulty;
 	int keepFloorIndex = currentFloorIndex;
 	bool keepFloor = keepFloorOnClose;
+
+	// Release particle post-process resources before resetting gameplay state.
+	particlePostProcessRenderer.cleanup();
+	gameFbo.cleanup();
+
 	*this = {};
 	worldSeed = keepSeed; // keep current world seed across resets
 	trapDifficulty = keepTrapDifficulty;

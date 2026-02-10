@@ -273,7 +273,21 @@ void ParticleSystem::render(gl2d::Renderer2D &renderer,
 	if (particles.empty()) { return; }
 
 #pragma region post process stuff
-	const bool postProcessEffec = 1;
+	const bool postProcessEffec = true;
+
+	#if GL2D_USE_SDL_GPU
+	// Keep pending main-target quads out of the particle FBO without forcing
+	// a swapchain submit in the middle of the frame.
+	bool restoreMainBatchAfterParticles = false;
+	std::vector<glm::vec4> stashedSpritePositions;
+	std::vector<glm::vec4> stashedSpriteColors;
+	std::vector<glm::vec2> stashedTexturePositions;
+	std::vector<gl2d::Texture> stashedSpriteTextures;
+	std::vector<Uint8> stashedSpriteBlendModes;
+	std::vector<SDL_Rect> stashedSpriteScissorRects;
+	std::vector<Uint8> stashedSpriteScissorEnabled;
+	#endif
+
 	//int pixelateFactor = 5;	
 
 	int pixelateFactor = (PIXEL_SIZE * renderer.currentCamera.zoom);
@@ -290,6 +304,22 @@ void ParticleSystem::render(gl2d::Renderer2D &renderer,
 
 	if (postProcessEffec)
 	{
+		#if GL2D_USE_SDL_GPU
+		if (renderer.gpuDevice && renderer.boundFrameBuffer == nullptr
+			&& !renderer.spritePositions.empty() && !renderer.spriteTextures.empty())
+		{
+			stashedSpritePositions = std::move(renderer.spritePositions);
+			stashedSpriteColors = std::move(renderer.spriteColors);
+			stashedTexturePositions = std::move(renderer.texturePositions);
+			stashedSpriteTextures = std::move(renderer.spriteTextures);
+			stashedSpriteBlendModes = std::move(renderer.spriteBlendModes);
+			stashedSpriteScissorRects = std::move(renderer.spriteScissorRects);
+			stashedSpriteScissorEnabled = std::move(renderer.spriteScissorEnabled);
+			renderer.clearDrawData();
+			restoreMainBatchAfterParticles = true;
+		}
+		#endif
+
 		postProcessRenderer.fbo.bind();
 		renderer.updateWindowMetrics(postProcessRenderer.fbo.w, postProcessRenderer.fbo.h);
 
@@ -344,10 +374,25 @@ void ParticleSystem::render(gl2d::Renderer2D &renderer,
 
 	if (postProcessEffec)
 	{
+		// Make sure all particle quads are written to the particle FBO before we switch back.
+		renderer.flush(true);
 		renderer.currentCamera = cam;
 		renderer.updateWindowMetrics(oldSize.x, oldSize.y);
 		postProcessRenderer.fbo.unbind();
-	};
+
+		#if GL2D_USE_SDL_GPU
+		if (restoreMainBatchAfterParticles)
+		{
+			renderer.spritePositions = std::move(stashedSpritePositions);
+			renderer.spriteColors = std::move(stashedSpriteColors);
+			renderer.texturePositions = std::move(stashedTexturePositions);
+			renderer.spriteTextures = std::move(stashedSpriteTextures);
+			renderer.spriteBlendModes = std::move(stashedSpriteBlendModes);
+			renderer.spriteScissorRects = std::move(stashedSpriteScissorRects);
+			renderer.spriteScissorEnabled = std::move(stashedSpriteScissorEnabled);
+		}
+		#endif
+  	};
 
 
 }
@@ -356,6 +401,14 @@ void ParticlePostProcessRenderer::init()
 {
 
 	fbo.create(1, 1, true);
+	bloom.init();
+
+}
+
+void ParticlePostProcessRenderer::cleanup()
+{
+	bloom.cleanup();
+	fbo.cleanup();
 
 }
 
@@ -382,18 +435,45 @@ void ParticlePostProcessRenderer::updateWindowMetrics(gl2d::Renderer2D &renderer
 
 	fbo.resize(fbW, fbH);
 	fbo.clear();
+	bloom.updateWindowMetrics(renderer, fbW, fbH);
 
 
 }
 
 void ParticlePostProcessRenderer::finalRender(gl2d::Renderer2D &renderer)
 {
+	gl2d::Texture bloomTexture = {};
 
-	//SDL_SetTextureAlphaMod(fbo.texture.tex, 255);
-	//SDL_SetTextureBlendMode(fbo.texture.tex, SDL_BLENDMODE_ADD);
+	// Bloom only runs on the SDL_gpu backend to keep legacy SDL_Renderer path stable.
+	bool useBloom = bloomEnabled;
+	#if GL2D_USE_SDL_GPU
+	useBloom = useBloom && renderer.gpuDevice != nullptr;
+	#else
+	useBloom = false;
+	#endif
+
+	if (useBloom && bloom.apply(renderer, fbo))
+	{
+		bloomTexture = bloom.getOutputTexture(fbo);
+	}
+
+	auto oldBlendMode = renderer.getBlendMode();
 
 	renderer.pushCamera();
-	renderer.renderRectangle({0,0, renderer.windowW, renderer.windowH}, fbo.texture, {1,1,1,2}, {}, {}, {0,0,1,1});
+	renderer.setBlendMode(gl2d::Renderer2D::BlendMode_Alpha);
+	renderer.renderRectangle({0,0, renderer.windowW, renderer.windowH},
+		fbo.texture, compositeColor, {}, {}, {0,0,1,1});
+
+	if (bloomTexture.isValid())
+	{
+		// Additive fullscreen bloom overlay with fixed alpha to avoid alpha-hole artifacts.
+		renderer.setBlendMode(gl2d::Renderer2D::BlendMode_Additive);
+		// Bloom render target comes out Y-flipped in this pass, so we flip UVs here.
+		renderer.renderRectangle({0,0, renderer.windowW, renderer.windowH},
+			bloomTexture, {1,1,1,1}, {}, {}, {0,1,1,0});
+	}
+
+	renderer.setBlendMode(oldBlendMode);
 	renderer.popCamera();
 
 }

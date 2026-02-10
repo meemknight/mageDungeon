@@ -465,6 +465,12 @@ namespace gl2d
 
 	struct Renderer2D
 	{
+		enum BlendMode : Uint8
+		{
+			BlendMode_Alpha = 0,
+			BlendMode_Additive = 1,
+		};
+
 		Renderer2D() {};
 
 		//feel free to delete this lines but you probably don't want to copy the renderer from a place to another
@@ -497,6 +503,8 @@ namespace gl2d
 		std::vector<glm::vec4> spriteColors;
 		std::vector<glm::vec2> texturePositions;
 		std::vector<Texture> spriteTextures;
+		// Per-quad blend mode snapshot (alpha/additive).
+		std::vector<Uint8> spriteBlendModes;
 		// Per-quad scissor snapshot to avoid forcing mid-frame flushes.
 		std::vector<SDL_Rect> spriteScissorRects;
 		std::vector<Uint8> spriteScissorEnabled;
@@ -510,8 +518,12 @@ namespace gl2d
 		SDL_GPUShader *defaultFragmentShader = nullptr;
 		SDL_GPUGraphicsPipeline *pipelineSwapchain = nullptr;
 		SDL_GPUGraphicsPipeline *pipelineOffscreen = nullptr;
+		SDL_GPUGraphicsPipeline *pipelineSwapchainAdditive = nullptr;
+		SDL_GPUGraphicsPipeline *pipelineOffscreenAdditive = nullptr;
 		SDL_GPUTextureFormat pipelineSwapchainFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
 		SDL_GPUTextureFormat pipelineOffscreenFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+		SDL_GPUTextureFormat pipelineSwapchainAdditiveFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+		SDL_GPUTextureFormat pipelineOffscreenAdditiveFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
 		SDL_GPUShaderFormat shaderFormat = SDL_GPU_SHADERFORMAT_INVALID;
 		SDL_GPUSampler *samplerLinear = nullptr;
 		SDL_GPUSampler *samplerNearest = nullptr;
@@ -567,6 +579,16 @@ namespace gl2d
 		// Disables clip rectangle and restores full screen rendering.
 		void stopSchisor();
 
+		void setBlendMode(BlendMode mode)
+		{
+			currentBlendMode = mode;
+		}
+
+		BlendMode getBlendMode() const
+		{
+			return currentBlendMode;
+		}
+
 		//clears the things that are to be drawn when calling flush
 		inline void clearDrawData()
 		{
@@ -575,6 +597,7 @@ namespace gl2d
 			spriteColors.clear();
 			texturePositions.clear();
 			spriteTextures.clear();
+			spriteBlendModes.clear();
 			spriteScissorRects.clear();
 			spriteScissorEnabled.clear();
 		#endif
@@ -688,6 +711,9 @@ namespace gl2d
 		//Usefull if you want to render something twice or render again on top for some reason
 		void flush(bool clearDrawData = true);
 
+		// Recreates backend shader pipelines (used by hot-reload in development).
+		void reloadGpuShaders();
+
 		//Renders to a fbo instead of the screen. The fbo is just a texture.
 		//If clearDrawData is false, the rendering information will be kept.
 		void flushFBO(FrameBuffer frameBuffer, bool clearDrawData = true);
@@ -710,6 +736,8 @@ namespace gl2d
 		void postProcessOverATexture(const std::vector<ShaderProgram> &postProcesses,
 			gl2d::Texture in,
 			FrameBuffer frameBuffer = {});
+
+		BlendMode currentBlendMode = BlendMode_Alpha;
 	};
 
 #pragma endregion

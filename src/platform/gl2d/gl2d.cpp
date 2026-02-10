@@ -494,6 +494,11 @@ namespace gl2d
 
 	}
 
+	void gl2d::Renderer2D::reloadGpuShaders()
+	{
+		// Legacy backend has no GPU shader objects to reload.
+	}
+
 	void Renderer2D::flushFBO(FrameBuffer frameBuffer, bool clearDrawData)
 	{
 

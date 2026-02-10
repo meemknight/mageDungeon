@@ -169,14 +169,9 @@ namespace gl2d
 		{
 			float pos[2] = {};
 			float uv[2] = {};
-			Uint8 color[4] = {};
+			// Keep color in float to preserve overbright (>1) tints in shader math.
+			float color[4] = {};
 		};
-
-		static inline Uint8 floatToU8(float v)
-		{
-			v = std::clamp(v, 0.0f, 1.0f);
-			return static_cast<Uint8>(v * 255.0f + 0.5f);
-		}
 
 		static inline bool rectEquals(const SDL_Rect &a, const SDL_Rect &b)
 		{
@@ -435,8 +430,20 @@ namespace gl2d
 				SDL_ReleaseGPUGraphicsPipeline(renderer.gpuDevice, renderer.pipelineOffscreen);
 				renderer.pipelineOffscreen = nullptr;
 			}
+			if (renderer.pipelineSwapchainAdditive)
+			{
+				SDL_ReleaseGPUGraphicsPipeline(renderer.gpuDevice, renderer.pipelineSwapchainAdditive);
+				renderer.pipelineSwapchainAdditive = nullptr;
+			}
+			if (renderer.pipelineOffscreenAdditive)
+			{
+				SDL_ReleaseGPUGraphicsPipeline(renderer.gpuDevice, renderer.pipelineOffscreenAdditive);
+				renderer.pipelineOffscreenAdditive = nullptr;
+			}
 			renderer.pipelineSwapchainFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
 			renderer.pipelineOffscreenFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+			renderer.pipelineSwapchainAdditiveFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+			renderer.pipelineOffscreenAdditiveFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
 
 			if (renderer.defaultVertexShader)
 			{
@@ -571,7 +578,9 @@ namespace gl2d
 			return true;
 		}
 
-		SDL_GPUGraphicsPipeline *createPipelineForFormat(Renderer2D &renderer, SDL_GPUTextureFormat targetFormat)
+		SDL_GPUGraphicsPipeline *createPipelineForFormat(Renderer2D &renderer,
+			SDL_GPUTextureFormat targetFormat,
+			bool additiveBlend)
 		{
 			if (!renderer.gpuDevice || !renderer.defaultVertexShader || !renderer.defaultFragmentShader)
 			{
@@ -597,7 +606,7 @@ namespace gl2d
 
 			vertexAttributes[2].location = 2;
 			vertexAttributes[2].buffer_slot = 0;
-			vertexAttributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM;
+			vertexAttributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
 			vertexAttributes[2].offset = offsetof(BatchVertex, color);
 
 			SDL_GPUVertexInputState vertexInput = {};
@@ -622,12 +631,25 @@ namespace gl2d
 
 			SDL_GPUColorTargetBlendState blend = {};
 			blend.enable_blend = true;
-			blend.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-			blend.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-			blend.color_blend_op = SDL_GPU_BLENDOP_ADD;
-			blend.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-			blend.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-			blend.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+			if (additiveBlend)
+			{
+				blend.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+				blend.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+				blend.color_blend_op = SDL_GPU_BLENDOP_ADD;
+				// Preserve destination alpha while adding color.
+				blend.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
+				blend.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+				blend.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+			}
+			else
+			{
+				blend.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+				blend.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+				blend.color_blend_op = SDL_GPU_BLENDOP_ADD;
+				blend.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+				blend.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+				blend.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+			}
 			blend.color_write_mask = SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G |
 				SDL_GPU_COLORCOMPONENT_B | SDL_GPU_COLORCOMPONENT_A;
 
@@ -655,12 +677,31 @@ namespace gl2d
 
 		SDL_GPUGraphicsPipeline *ensurePipelineForTarget(Renderer2D &renderer,
 			SDL_GPUTextureFormat targetFormat,
-			bool swapchainTarget)
+			bool swapchainTarget,
+			bool additiveBlend)
 		{
 			if (!ensureDefaultShaders(renderer)) { return nullptr; }
 
 			if (swapchainTarget)
 			{
+				if (additiveBlend)
+				{
+					if (renderer.pipelineSwapchainAdditive && renderer.pipelineSwapchainAdditiveFormat == targetFormat)
+					{
+						return renderer.pipelineSwapchainAdditive;
+					}
+
+					if (renderer.pipelineSwapchainAdditive)
+					{
+						SDL_ReleaseGPUGraphicsPipeline(renderer.gpuDevice, renderer.pipelineSwapchainAdditive);
+						renderer.pipelineSwapchainAdditive = nullptr;
+					}
+
+					renderer.pipelineSwapchainAdditive = createPipelineForFormat(renderer, targetFormat, true);
+					renderer.pipelineSwapchainAdditiveFormat = targetFormat;
+					return renderer.pipelineSwapchainAdditive;
+				}
+
 				if (renderer.pipelineSwapchain && renderer.pipelineSwapchainFormat == targetFormat)
 				{
 					return renderer.pipelineSwapchain;
@@ -672,9 +713,27 @@ namespace gl2d
 					renderer.pipelineSwapchain = nullptr;
 				}
 
-				renderer.pipelineSwapchain = createPipelineForFormat(renderer, targetFormat);
+				renderer.pipelineSwapchain = createPipelineForFormat(renderer, targetFormat, false);
 				renderer.pipelineSwapchainFormat = targetFormat;
 				return renderer.pipelineSwapchain;
+			}
+
+			if (additiveBlend)
+			{
+				if (renderer.pipelineOffscreenAdditive && renderer.pipelineOffscreenAdditiveFormat == targetFormat)
+				{
+					return renderer.pipelineOffscreenAdditive;
+				}
+
+				if (renderer.pipelineOffscreenAdditive)
+				{
+					SDL_ReleaseGPUGraphicsPipeline(renderer.gpuDevice, renderer.pipelineOffscreenAdditive);
+					renderer.pipelineOffscreenAdditive = nullptr;
+				}
+
+				renderer.pipelineOffscreenAdditive = createPipelineForFormat(renderer, targetFormat, true);
+				renderer.pipelineOffscreenAdditiveFormat = targetFormat;
+				return renderer.pipelineOffscreenAdditive;
 			}
 
 			if (renderer.pipelineOffscreen && renderer.pipelineOffscreenFormat == targetFormat)
@@ -688,7 +747,7 @@ namespace gl2d
 				renderer.pipelineOffscreen = nullptr;
 			}
 
-			renderer.pipelineOffscreen = createPipelineForFormat(renderer, targetFormat);
+			renderer.pipelineOffscreen = createPipelineForFormat(renderer, targetFormat, false);
 			renderer.pipelineOffscreenFormat = targetFormat;
 			return renderer.pipelineOffscreen;
 		}
@@ -1183,6 +1242,7 @@ namespace gl2d
 			quadCount = static_cast<uint32_t>(renderer.spriteTextures.size());
 			if (renderer.spritePositions.size() != renderer.spriteColors.size() ||
 				renderer.spritePositions.size() != renderer.texturePositions.size() ||
+				renderer.spriteBlendModes.size() != quadCount ||
 				renderer.spriteScissorRects.size() != quadCount ||
 				renderer.spriteScissorEnabled.size() != quadCount ||
 				renderer.spritePositions.size() != static_cast<size_t>(quadCount) * 6)
@@ -1226,10 +1286,10 @@ namespace gl2d
 				dst.pos[1] = pos.y;
 				dst.uv[0] = uv.x;
 				dst.uv[1] = uv.y;
-				dst.color[0] = floatToU8(col.r);
-				dst.color[1] = floatToU8(col.g);
-				dst.color[2] = floatToU8(col.b);
-				dst.color[3] = floatToU8(col.a);
+				dst.color[0] = col.r;
+				dst.color[1] = col.g;
+				dst.color[2] = col.b;
+				dst.color[3] = col.a;
 			}
 
 			SDL_UnmapGPUTransferBuffer(renderer.gpuDevice, renderer.vertexTransferBuffer);
@@ -1324,19 +1384,6 @@ namespace gl2d
 			renderer.gpuPassCallback(commandBuffer, nullptr, renderer.gpuPassCallbackUserData);
 		}
 
-		SDL_GPUGraphicsPipeline *pipeline = nullptr;
-		if (hasBatchedQuads)
-		{
-			pipeline = ensurePipelineForTarget(renderer, targetFormat, swapchainTarget);
-		}
-		if (hasBatchedQuads && !pipeline)
-		{
-			errorFunc("Failed to create SDL GPU graphics pipeline", userDefinedData);
-			SDL_CancelGPUCommandBuffer(commandBuffer);
-			if (clearDrawData) { renderer.clearDrawData(); }
-			return;
-		}
-
 		SDL_GPUColorTargetInfo colorTarget = {};
 		colorTarget.texture = targetTexture;
 		colorTarget.mip_level = 0;
@@ -1367,8 +1414,6 @@ namespace gl2d
 
 		if (hasBatchedQuads)
 		{
-			SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
-
 			SDL_GPUViewport viewport = {};
 			viewport.x = 0;
 			viewport.y = 0;
@@ -1391,6 +1436,7 @@ namespace gl2d
 
 			uint32_t firstVertex = 0;
 			uint32_t i = 0;
+			SDL_GPUGraphicsPipeline *boundPipeline = nullptr;
 			while (i < quadCount)
 			{
 				Texture t = renderer.spriteTextures[i];
@@ -1403,6 +1449,8 @@ namespace gl2d
 				}
 
 				const bool runNearest = t.pixelated;
+				const Uint8 runBlendMode = renderer.spriteBlendModes[i];
+				const bool runAdditive = runBlendMode == Renderer2D::BlendMode_Additive;
 				const bool runScissorEnabled = renderer.spriteScissorEnabled[i] != 0;
 				const SDL_Rect runScissorRect = runScissorEnabled
 					? renderer.spriteScissorRects[i]
@@ -1412,9 +1460,11 @@ namespace gl2d
 				{
 					Texture next = renderer.spriteTextures[i + runQuads];
 					SDL_GPUTexture *nextTexture = next.gpuTexture ? next.gpuTexture : white1pxSquareTexture.gpuTexture;
+					const Uint8 nextBlendMode = renderer.spriteBlendModes[i + runQuads];
 					const bool nextScissorEnabled = renderer.spriteScissorEnabled[i + runQuads] != 0;
 					if (nextTexture != runTexture || next.pixelated != runNearest ||
-						nextScissorEnabled != runScissorEnabled)
+						nextScissorEnabled != runScissorEnabled ||
+						nextBlendMode != runBlendMode)
 					{
 						break;
 					}
@@ -1424,8 +1474,28 @@ namespace gl2d
 					{
 						break;
 					}
-
+					
 					runQuads++;
+				}
+
+				SDL_GPUGraphicsPipeline *runPipeline = ensurePipelineForTarget(
+					renderer,
+					targetFormat,
+					swapchainTarget,
+					runAdditive);
+				if (!runPipeline)
+				{
+					errorFunc("Failed to create SDL GPU graphics pipeline", userDefinedData);
+					SDL_EndGPURenderPass(renderPass);
+					SDL_CancelGPUCommandBuffer(commandBuffer);
+					if (clearDrawData) { renderer.clearDrawData(); }
+					return;
+				}
+
+				if (runPipeline != boundPipeline)
+				{
+					SDL_BindGPUGraphicsPipeline(renderPass, runPipeline);
+					boundPipeline = runPipeline;
 				}
 
 				SDL_SetGPUScissor(renderPass, &runScissorRect);
@@ -1468,6 +1538,60 @@ namespace gl2d
 	void gl2d::Renderer2D::flush(bool clearDrawData)
 	{
 		internalFlush(*this, clearDrawData);
+	}
+
+	void Renderer2D::reloadGpuShaders()
+	{
+		if (!gpuDevice)
+		{
+			return;
+		}
+
+		if (!spritePositions.empty() && !spriteTextures.empty())
+		{
+			flush(true);
+		}
+
+		if (pipelineSwapchain)
+		{
+			SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipelineSwapchain);
+			pipelineSwapchain = nullptr;
+		}
+
+		if (pipelineOffscreen)
+		{
+			SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipelineOffscreen);
+			pipelineOffscreen = nullptr;
+		}
+
+		if (pipelineSwapchainAdditive)
+		{
+			SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipelineSwapchainAdditive);
+			pipelineSwapchainAdditive = nullptr;
+		}
+
+		if (pipelineOffscreenAdditive)
+		{
+			SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipelineOffscreenAdditive);
+			pipelineOffscreenAdditive = nullptr;
+		}
+
+		pipelineSwapchainFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+		pipelineOffscreenFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+		pipelineSwapchainAdditiveFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+		pipelineOffscreenAdditiveFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+
+		if (defaultVertexShader)
+		{
+			SDL_ReleaseGPUShader(gpuDevice, defaultVertexShader);
+			defaultVertexShader = nullptr;
+		}
+
+		if (defaultFragmentShader)
+		{
+			SDL_ReleaseGPUShader(gpuDevice, defaultFragmentShader);
+			defaultFragmentShader = nullptr;
+		}
 	}
 
 	void Renderer2D::flushFBO(FrameBuffer frameBuffer, bool clearDrawData)
@@ -1773,6 +1897,15 @@ namespace gl2d
 
 		if (!gpuDevice)
 		{
+			SDL_BlendMode blendMode = currentBlendMode == BlendMode_Additive
+				? SDL_BLENDMODE_ADD
+				: SDL_BLENDMODE_BLEND;
+			SDL_SetRenderDrawBlendMode(sdlRenderer, blendMode);
+			if (textureCopy.tex)
+			{
+				SDL_SetTextureBlendMode(textureCopy.tex, blendMode);
+			}
+
 			RenderPreparedQuad(sdlRenderer, v1, v2, v3, v4, colors, textureCopy, textureCoords);
 			return;
 		}
@@ -1814,6 +1947,7 @@ namespace gl2d
 		texturePositions.push_back(glm::vec2{textureCoords.z, textureCoords.y}); //4
 
 		spriteTextures.push_back(textureCopy);
+		spriteBlendModes.push_back(currentBlendMode);
 		spriteScissorRects.push_back(gpuScissorRect);
 		spriteScissorEnabled.push_back(gpuScissorEnabled ? 1 : 0);
 	}
@@ -2243,11 +2377,13 @@ namespace gl2d
 		spriteColors.reserve(quadCount * 6);
 		texturePositions.reserve(quadCount * 6);
 		spriteTextures.reserve(quadCount);
+		spriteBlendModes.reserve(quadCount);
 		spriteScissorRects.reserve(quadCount);
 		spriteScissorEnabled.reserve(quadCount);
 
 		gpuScissorEnabled = false;
 		gpuScissorRect = {};
+		currentBlendMode = BlendMode_Alpha;
 		pendingScreenClear = false;
 		pendingScreenClearColor = {};
 		boundFrameBuffer = nullptr;
@@ -2310,6 +2446,7 @@ namespace gl2d
 		boundFrameBuffer = nullptr;
 		pendingScreenClear = false;
 		gpuScissorEnabled = false;
+		currentBlendMode = BlendMode_Alpha;
 		gpuPassCallback = nullptr;
 		gpuPassCallbackUserData = nullptr;
 

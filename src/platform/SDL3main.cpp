@@ -249,6 +249,7 @@ static void handleSDLEvent(const SDL_Event &e)
 			if (key == SDLK_TAB) platform::internal::setButtonState(platform::Button::Tab, state);
 			if (key == SDLK_LSHIFT) platform::internal::setButtonState(platform::Button::LeftShift, state);
 			if (key == SDLK_LALT) platform::internal::setButtonState(platform::Button::LeftAlt, state);
+			if (key == SDLK_F5) platform::internal::setButtonState(platform::Button::F5, state);
 			if (key == SDLK_F7) platform::internal::setButtonState(platform::Button::F7, state);
 			if (key == SDLK_F8) platform::internal::setButtonState(platform::Button::F8, state);
 			if (key == SDLK_F9) platform::internal::setButtonState(platform::Button::F9, state);

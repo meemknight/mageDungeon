@@ -2,6 +2,7 @@
 #include <gl2d/gl2d.h>
 #include <randomStuff.h>
 #include <vector>
+#include "particleBloom.h"
 
 
 struct ParticleApearence
@@ -126,8 +127,14 @@ struct ParticleInstance
 struct ParticlePostProcessRenderer
 {
 	void init();
+	void cleanup();
 
 	gl2d::FrameBuffer fbo;
+	// Particle bloom is optional and only runs on the SDL_gpu backend.
+	ParticleBloomPostProcess bloom;
+	bool bloomEnabled = true;
+	// Tint used when compositing the particle framebuffer to the screen.
+	gl2d::Color4f compositeColor = {1, 1, 1, 2};
 
 	void updateWindowMetrics(gl2d::Renderer2D &renderer);
 
