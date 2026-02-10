@@ -1330,6 +1330,7 @@ bool GameLogic::update(float deltaTime,
 		ImGui::Checkbox("Enable Cosmetic Light", &cosmeticDynamicLightSystem.enabled);
 		ImGui::DragFloat("Global Extra Light", &cosmeticDynamicLightSystem.ambientLight,
 			0.01f, 0.0f, 1.0f, "%.2f");
+		ImGui::Checkbox("Half Resolution Mask", &cosmeticDynamicLightSystem.useHalfResolution);
 		ImGui::DragFloat("Player Light Radius", &cosmeticDynamicLightSystem.playerLightRadius, 0.05f, 0.5f, 32.0f, "%.2f");
 		ImGui::DragFloat("Player Light Intensity", &cosmeticDynamicLightSystem.playerLightIntensity, 0.01f, 0.0f, 4.0f, "%.2f");
 		ImGui::DragFloat("Player Light Falloff", &cosmeticDynamicLightSystem.playerLightFalloffPower,

@@ -25,6 +25,8 @@ struct CosmeticDynamicLightSystem
 	float playerLightRadius = 10.0f;
 	float playerLightIntensity = 0.54f; 
 	float playerLightFalloffPower = 0.4f; //lower means stronger light at the edges
+	// Renders mask to half-resolution target to lower CPU and fill cost.
+	bool useHalfResolution = true;
 
 	gl2d::FrameBuffer maskFbo;
 
@@ -42,12 +44,18 @@ struct CosmeticDynamicLightSystem
 	gl2d::Texture getMaskTexture() const { return maskFbo.texture; }
 
 	private:
-	glm::ivec2 mapSize = {};
-	std::vector<float> tileLight;
-	std::vector<CosmeticDynamicLight> lights;
+	struct VisibilityPolygon
+	{
+		CosmeticDynamicLight light = {};
+		std::vector<glm::vec2> points;
+	};
 
-	int toIndex(int x, int y) const;
+	glm::ivec2 mapSize = {};
+	std::vector<CosmeticDynamicLight> lights;
+	std::vector<VisibilityPolygon> visibilityPolygons;
+
 	bool inBounds(int x, int y) const;
 	bool hasTileAt(Map &map, int x, int y) const;
 	bool isWallAt(Map &map, int x, int y) const;
+	bool isOccluderAt(Map &map, int x, int y) const;
 };

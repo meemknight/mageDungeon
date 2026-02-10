@@ -50,6 +50,7 @@ struct GameHdrPostProcess
 		SDL_GPUShader *fragmentShader = nullptr;
 		SDL_GPUGraphicsPipeline *pipeline = nullptr;
 		SDL_GPUSampler *nearestSampler = nullptr;
+		SDL_GPUSampler *linearSampler = nullptr;
 		gl2d::Texture cosmeticLightMaskTexture;
 
 		bool frameActive = false;
