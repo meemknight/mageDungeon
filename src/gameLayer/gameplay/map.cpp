@@ -1216,9 +1216,6 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 					renderer.setBlendMode(oldBlend);
 				}
 			}
-
-		}
-
 			else if (isChunkyTile(current.type))
 			{
 				int tileSet = getTileSetIndex(current.type);
