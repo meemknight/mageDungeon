@@ -20,12 +20,15 @@ namespace
 	{
 		glm::vec2 a = {};
 		glm::vec2 b = {};
+		float transmission = 0.0f;
 	};
 
 	struct RayHit
 	{
 		float angle = 0.0f;
 		glm::vec2 point = {};
+		float transmission = 1.0f;
+		float transmissionStartDistance = 100000.0f;
 	};
 
 	float cross2d(const glm::vec2 &a, const glm::vec2 &b)
@@ -97,6 +100,8 @@ namespace
 		float lightRadius = 1.0f;
 		float falloffPower = 1.0f;
 		float lightColor[3] = {1, 1, 1};
+		float transmission = 1.0f;
+		float transmissionStartDistance = 100000.0f;
 		float padding = 0.0f;
 	};
 
@@ -116,7 +121,7 @@ namespace
 		vertexBufferDesc[0].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
 		vertexBufferDesc[0].instance_step_rate = 0;
 
-		SDL_GPUVertexAttribute vertexAttributes[6] = {};
+		SDL_GPUVertexAttribute vertexAttributes[8] = {};
 		vertexAttributes[0].location = 0;
 		vertexAttributes[0].buffer_slot = 0;
 		vertexAttributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
@@ -147,11 +152,21 @@ namespace
 		vertexAttributes[5].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
 		vertexAttributes[5].offset = offsetof(LightMaskVertex, lightColor);
 
+		vertexAttributes[6].location = 6;
+		vertexAttributes[6].buffer_slot = 0;
+		vertexAttributes[6].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT;
+		vertexAttributes[6].offset = offsetof(LightMaskVertex, transmission);
+
+		vertexAttributes[7].location = 7;
+		vertexAttributes[7].buffer_slot = 0;
+		vertexAttributes[7].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT;
+		vertexAttributes[7].offset = offsetof(LightMaskVertex, transmissionStartDistance);
+
 		SDL_GPUVertexInputState vertexInput = {};
 		vertexInput.vertex_buffer_descriptions = vertexBufferDesc;
 		vertexInput.num_vertex_buffers = 1;
 		vertexInput.vertex_attributes = vertexAttributes;
-		vertexInput.num_vertex_attributes = 6;
+		vertexInput.num_vertex_attributes = 8;
 
 		SDL_GPURasterizerState rasterizer = {};
 		rasterizer.fill_mode = SDL_GPU_FILLMODE_FILL;
@@ -237,6 +252,13 @@ bool CosmeticDynamicLightSystem::isOccluderAt(Map &map, int x, int y) const
 	return true;
 }
 
+bool CosmeticDynamicLightSystem::hasBreakableDecorationAt(int x, int y) const
+{
+	if (!inBounds(x, y)) { return false; }
+	if (breakableDecorationMask.empty()) { return false; }
+	return breakableDecorationMask[x + y * mapSize.x] != 0;
+}
+
 void CosmeticDynamicLightSystem::init()
 {
 	*this = {};
@@ -261,6 +283,7 @@ void CosmeticDynamicLightSystem::resetForFloor(Map &map)
 	mapSize = map.size;
 	lights.clear();
 	visibilityPolygons.clear();
+	breakableDecorationMask.assign(std::max(0, mapSize.x * mapSize.y), 0);
 }
 
 void CosmeticDynamicLightSystem::beginFrame(Map &map)
@@ -272,6 +295,23 @@ void CosmeticDynamicLightSystem::beginFrame(Map &map)
 
 	lights.clear();
 	visibilityPolygons.clear();
+}
+
+void CosmeticDynamicLightSystem::setBreakableDecorations(const std::vector<glm::ivec2> &positions)
+{
+	if (mapSize.x <= 0 || mapSize.y <= 0) { return; }
+
+	if (breakableDecorationMask.size() != (size_t)std::max(0, mapSize.x * mapSize.y))
+	{
+		breakableDecorationMask.assign(std::max(0, mapSize.x * mapSize.y), 0);
+	}
+
+	std::fill(breakableDecorationMask.begin(), breakableDecorationMask.end(), 0);
+	for (const auto &pos : positions)
+	{
+		if (!inBounds(pos.x, pos.y)) { continue; }
+		breakableDecorationMask[pos.x + pos.y * mapSize.x] = 1;
+	}
 }
 
 void CosmeticDynamicLightSystem::addLight(glm::vec2 position, float radius, float intensity,
@@ -338,6 +378,8 @@ void CosmeticDynamicLightSystem::buildLightMask(Map &map)
 
 		if (light.castsShadows)
 		{
+			constexpr float breakableDecorationTransmission = 0.5f;
+
 			for (int y = minY; y <= maxY; y++)
 			{
 				for (int x = minX; x <= maxX; x++)
@@ -346,19 +388,48 @@ void CosmeticDynamicLightSystem::buildLightMask(Map &map)
 
 					if (!isOccluderAt(map, x - 1, y))
 					{
-						occluderSegments.push_back({{(float)x, (float)y}, {(float)x, (float)y + 1.0f}});
+						occluderSegments.push_back({{(float)x, (float)y}, {(float)x, (float)y + 1.0f}, 0.0f});
 					}
 					if (!isOccluderAt(map, x + 1, y))
 					{
-						occluderSegments.push_back({{(float)x + 1.0f, (float)y}, {(float)x + 1.0f, (float)y + 1.0f}});
+						occluderSegments.push_back({{(float)x + 1.0f, (float)y}, {(float)x + 1.0f, (float)y + 1.0f}, 0.0f});
 					}
 					if (!isOccluderAt(map, x, y - 1))
 					{
-						occluderSegments.push_back({{(float)x, (float)y}, {(float)x + 1.0f, (float)y}});
+						occluderSegments.push_back({{(float)x, (float)y}, {(float)x + 1.0f, (float)y}, 0.0f});
 					}
 					if (!isOccluderAt(map, x, y + 1))
 					{
-						occluderSegments.push_back({{(float)x, (float)y + 1.0f}, {(float)x + 1.0f, (float)y + 1.0f}});
+						occluderSegments.push_back({{(float)x, (float)y + 1.0f}, {(float)x + 1.0f, (float)y + 1.0f}, 0.0f});
+					}
+				}
+			}
+
+			for (int y = minY; y <= maxY; y++)
+			{
+				for (int x = minX; x <= maxX; x++)
+				{
+					if (!hasBreakableDecorationAt(x, y)) { continue; }
+
+					if (!hasBreakableDecorationAt(x - 1, y))
+					{
+						occluderSegments.push_back({{(float)x, (float)y}, {(float)x, (float)y + 1.0f},
+							breakableDecorationTransmission});
+					}
+					if (!hasBreakableDecorationAt(x + 1, y))
+					{
+						occluderSegments.push_back({{(float)x + 1.0f, (float)y}, {(float)x + 1.0f, (float)y + 1.0f},
+							breakableDecorationTransmission});
+					}
+					if (!hasBreakableDecorationAt(x, y - 1))
+					{
+						occluderSegments.push_back({{(float)x, (float)y}, {(float)x + 1.0f, (float)y},
+							breakableDecorationTransmission});
+					}
+					if (!hasBreakableDecorationAt(x, y + 1))
+					{
+						occluderSegments.push_back({{(float)x, (float)y + 1.0f}, {(float)x + 1.0f, (float)y + 1.0f},
+							breakableDecorationTransmission});
 					}
 				}
 			}
@@ -407,6 +478,8 @@ void CosmeticDynamicLightSystem::buildLightMask(Map &map)
 		{
 			glm::vec2 direction = {std::cos(angle), std::sin(angle)};
 			float nearestDistance = radius;
+			float transmission = 1.0f;
+			float transmissionStartDistance = radius + 1.0f;
 
 			if (light.castsShadows)
 			{
@@ -414,9 +487,22 @@ void CosmeticDynamicLightSystem::buildLightMask(Map &map)
 				{
 					float t = 0.0f;
 					if (!intersectRayWithSegment(light.position, direction, segment, t)) { continue; }
-					if (t < nearestDistance)
+
+					if (segment.transmission <= 0.001f)
 					{
-						nearestDistance = t;
+						if (t < nearestDistance)
+						{
+							nearestDistance = t;
+						}
+					}
+					else
+					{
+						// Breakable decorations are partial occluders: keep at least 50% light.
+						if (t <= nearestDistance + 0.0001f)
+						{
+							transmission = std::min(transmission, segment.transmission);
+							transmissionStartDistance = std::min(transmissionStartDistance, t);
+						}
 					}
 				}
 			}
@@ -424,6 +510,8 @@ void CosmeticDynamicLightSystem::buildLightMask(Map &map)
 			RayHit hit = {};
 			hit.angle = angle;
 			hit.point = light.position + direction * nearestDistance;
+			hit.transmission = transmission;
+			hit.transmissionStartDistance = transmissionStartDistance;
 			hits.push_back(hit);
 		}
 
@@ -441,18 +529,28 @@ void CosmeticDynamicLightSystem::buildLightMask(Map &map)
 		{
 			if (!polygon.points.empty())
 			{
-				glm::vec2 d = hit.point - polygon.points.back();
+				glm::vec2 d = hit.point - polygon.points.back().point;
 				if (glm::dot(d, d) < 0.000001f)
 				{
+					polygon.points.back().transmission = std::min(polygon.points.back().transmission,
+						hit.transmission);
+					polygon.points.back().transmissionStartDistance = std::min(
+						polygon.points.back().transmissionStartDistance,
+						hit.transmissionStartDistance);
 					continue;
 				}
 			}
-			polygon.points.push_back(hit.point);
+
+			VisibilityPoint point = {};
+			point.point = hit.point;
+			point.transmission = hit.transmission;
+			point.transmissionStartDistance = hit.transmissionStartDistance;
+			polygon.points.push_back(point);
 		}
 
 		if (polygon.points.size() < 3) { continue; }
 
-		glm::vec2 d = polygon.points.front() - polygon.points.back();
+		glm::vec2 d = polygon.points.front().point - polygon.points.back().point;
 		if (glm::dot(d, d) < 0.000001f)
 		{
 			polygon.points.pop_back();
@@ -500,7 +598,8 @@ void CosmeticDynamicLightSystem::renderMask(gl2d::Renderer2D &renderer, Map &map
 		auto viewRect = renderer.getViewRect();
 		const float geometryExtension = PIXEL_SIZE * 8.0f;
 
-		auto appendFan = [&](const CosmeticDynamicLight &light, const std::vector<glm::vec2> &points)
+		auto appendFan = [&](const CosmeticDynamicLight &light,
+			const std::vector<VisibilityPoint> &points)
 		{
 			if (points.size() < 3) { return; }
 
@@ -508,11 +607,61 @@ void CosmeticDynamicLightSystem::renderMask(gl2d::Renderer2D &renderer, Map &map
 			float radius = std::max(light.radius, 0.05f);
 			float falloff = std::max(light.falloffPower, 0.05f);
 			float edgeExpand = PIXEL_SIZE * 0.75f;
+			float noTransmissionStart = radius + geometryExtension;
+
+			auto appendTriangle = [&](glm::vec2 a, glm::vec2 b, glm::vec2 c,
+				float transmissionA, float transmissionB, float transmissionC,
+				float startA, float startB, float startC)
+			{
+				LightMaskVertex tri[3] = {};
+
+				glm::vec2 clipA = worldToClip(viewRect, a);
+				tri[0].clipPos[0] = clipA.x;
+				tri[0].clipPos[1] = clipA.y;
+				tri[0].worldPos[0] = a.x;
+				tri[0].worldPos[1] = a.y;
+
+				glm::vec2 clipB = worldToClip(viewRect, b);
+				tri[1].clipPos[0] = clipB.x;
+				tri[1].clipPos[1] = clipB.y;
+				tri[1].worldPos[0] = b.x;
+				tri[1].worldPos[1] = b.y;
+
+				glm::vec2 clipC = worldToClip(viewRect, c);
+				tri[2].clipPos[0] = clipC.x;
+				tri[2].clipPos[1] = clipC.y;
+				tri[2].worldPos[0] = c.x;
+				tri[2].worldPos[1] = c.y;
+
+				for (auto &v : tri)
+				{
+					v.lightCenter[0] = light.position.x;
+					v.lightCenter[1] = light.position.y;
+					v.lightRadius = radius;
+					v.falloffPower = falloff;
+					v.lightColor[0] = lightColor.x;
+					v.lightColor[1] = lightColor.y;
+					v.lightColor[2] = lightColor.z;
+				}
+
+				tri[0].transmission = std::clamp(transmissionA, 0.0f, 1.0f);
+				tri[1].transmission = std::clamp(transmissionB, 0.0f, 1.0f);
+				tri[2].transmission = std::clamp(transmissionC, 0.0f, 1.0f);
+				tri[0].transmissionStartDistance = std::max(startA, 0.0f);
+				tri[1].transmissionStartDistance = std::max(startB, 0.0f);
+				tri[2].transmissionStartDistance = std::max(startC, 0.0f);
+
+				vertices.push_back(tri[0]);
+				vertices.push_back(tri[1]);
+				vertices.push_back(tri[2]);
+			};
 
 			for (size_t i = 0; i < points.size(); i++)
 			{
-				const glm::vec2 &p1raw = points[i];
-				const glm::vec2 &p2raw = points[(i + 1) % points.size()];
+				const VisibilityPoint &p1Info = points[i];
+				const VisibilityPoint &p2Info = points[(i + 1) % points.size()];
+				const glm::vec2 &p1raw = p1Info.point;
+				const glm::vec2 &p2raw = p2Info.point;
 
 				glm::vec2 d1 = p1raw - light.position;
 				glm::vec2 d2 = p2raw - light.position;
@@ -536,40 +685,36 @@ void CosmeticDynamicLightSystem::renderMask(gl2d::Renderer2D &renderer, Map &map
 				glm::vec2 p1 = light.position + d1 * (p1Distance / l1);
 				glm::vec2 p2 = light.position + d2 * (p2Distance / l2);
 
-				LightMaskVertex tri[3] = {};
+				float trans1 = std::clamp(p1Info.transmission, 0.0f, 1.0f);
+				float trans2 = std::clamp(p2Info.transmission, 0.0f, 1.0f);
+				bool hasPartialTransmission = (trans1 < 0.999f) || (trans2 < 0.999f);
 
-				glm::vec2 clipCenter = worldToClip(viewRect, light.position);
-				tri[0].clipPos[0] = clipCenter.x;
-				tri[0].clipPos[1] = clipCenter.y;
-				tri[0].worldPos[0] = light.position.x;
-				tri[0].worldPos[1] = light.position.y;
-
-				glm::vec2 clipP1 = worldToClip(viewRect, p1);
-				tri[1].clipPos[0] = clipP1.x;
-				tri[1].clipPos[1] = clipP1.y;
-				tri[1].worldPos[0] = p1.x;
-				tri[1].worldPos[1] = p1.y;
-
-				glm::vec2 clipP2 = worldToClip(viewRect, p2);
-				tri[2].clipPos[0] = clipP2.x;
-				tri[2].clipPos[1] = clipP2.y;
-				tri[2].worldPos[0] = p2.x;
-				tri[2].worldPos[1] = p2.y;
-
-				for (auto &v : tri)
+				if (!hasPartialTransmission)
 				{
-					v.lightCenter[0] = light.position.x;
-					v.lightCenter[1] = light.position.y;
-					v.lightRadius = radius;
-					v.falloffPower = falloff;
-					v.lightColor[0] = lightColor.x;
-					v.lightColor[1] = lightColor.y;
-					v.lightColor[2] = lightColor.z;
+					appendTriangle(light.position, p1, p2,
+						1.0f, 1.0f, 1.0f,
+						noTransmissionStart, noTransmissionStart, noTransmissionStart);
+					continue;
 				}
 
-				vertices.push_back(tri[0]);
-				vertices.push_back(tri[1]);
-				vertices.push_back(tri[2]);
+				// Split transmitted wedges into an inner full-light section and an outer attenuated section.
+				float start1 = std::clamp(p1Info.transmissionStartDistance, 0.0f, p1Distance);
+				float start2 = std::clamp(p2Info.transmissionStartDistance, 0.0f, p2Distance);
+
+				glm::vec2 n1 = light.position + d1 * (start1 / l1);
+				glm::vec2 n2 = light.position + d2 * (start2 / l2);
+
+				appendTriangle(light.position, n1, n2,
+					1.0f, 1.0f, 1.0f,
+					noTransmissionStart, noTransmissionStart, noTransmissionStart);
+
+				appendTriangle(n1, p1, p2,
+					1.0f, trans1, trans2,
+					start1, start1, start2);
+
+				appendTriangle(n1, p2, n2,
+					1.0f, trans2, 1.0f,
+					start1, start2, start2);
 			}
 		};
 
@@ -583,13 +728,16 @@ void CosmeticDynamicLightSystem::renderMask(gl2d::Renderer2D &renderer, Map &map
 			const int fallbackSegments = useHalfResolution ? 56 : 96;
 			for (const auto &light : lights)
 			{
-				std::vector<glm::vec2> circlePoints;
+				std::vector<VisibilityPoint> circlePoints;
 				circlePoints.reserve(fallbackSegments);
 				for (int i = 0; i < fallbackSegments; i++)
 				{
 					float angle = (glm::two_pi<float>() * (float)i) / (float)fallbackSegments;
 					glm::vec2 dir = {std::cos(angle), std::sin(angle)};
-					circlePoints.push_back(light.position + dir * std::max(light.radius, 0.05f));
+					VisibilityPoint point = {};
+					point.point = light.position + dir * std::max(light.radius, 0.05f);
+					point.transmission = 1.0f;
+					circlePoints.push_back(point);
 				}
 				appendFan(light, circlePoints);
 			}

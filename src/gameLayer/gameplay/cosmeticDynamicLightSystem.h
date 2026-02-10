@@ -50,6 +50,7 @@ struct CosmeticDynamicLightSystem
 	void resetForFloor(Map &map);
 
 	void beginFrame(Map &map);
+	void setBreakableDecorations(const std::vector<glm::ivec2> &positions);
 	void addLight(glm::vec2 position, float radius, float intensity,
 		float falloffPower = 1.6f, bool castsShadows = true,
 		glm::vec3 color = {1.0f, 1.0f, 1.0f}, bool forceShadowCasting = false);
@@ -60,20 +61,29 @@ struct CosmeticDynamicLightSystem
 	gl2d::Texture getMaskTexture() const { return maskFbo.texture; }
 
 	private:
+	struct VisibilityPoint
+	{
+		glm::vec2 point = {};
+		float transmission = 1.0f;
+		float transmissionStartDistance = 100000.0f;
+	};
+
 	struct VisibilityPolygon
 	{
 		CosmeticDynamicLight light = {};
-		std::vector<glm::vec2> points;
+		std::vector<VisibilityPoint> points;
 	};
 
 	glm::ivec2 mapSize = {};
 	std::vector<CosmeticDynamicLight> lights;
 	std::vector<VisibilityPolygon> visibilityPolygons;
+	std::vector<unsigned char> breakableDecorationMask;
 
 	bool inBounds(int x, int y) const;
 	bool hasTileAt(Map &map, int x, int y) const;
 	bool isWallAt(Map &map, int x, int y) const;
 	bool isOccluderAt(Map &map, int x, int y) const;
+	bool hasBreakableDecorationAt(int x, int y) const;
 
 	#if GL2D_USE_SDL_GPU
 		SDL_GPUShader *vertexShader = nullptr;

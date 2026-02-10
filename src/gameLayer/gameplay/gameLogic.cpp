@@ -1800,6 +1800,7 @@ bool GameLogic::update(float deltaTime,
 			true);
 		projectiles.addCosmeticLights(cosmeticDynamicLightSystem);
 		standbyProjectiles.addCosmeticLights(cosmeticDynamicLightSystem);
+		cosmeticDynamicLightSystem.setBreakableDecorations(breakableDecorations.positions);
 		cosmeticDynamicLightSystem.buildLightMask(map);
 		cosmeticDynamicLightSystem.updateWindowMetrics(renderer);
 		cosmeticDynamicLightSystem.renderMask(renderer, map);

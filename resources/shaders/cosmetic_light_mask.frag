@@ -6,6 +6,8 @@ layout(location = 1) in vec2 inLightCenter;
 layout(location = 2) in float inLightRadius;
 layout(location = 3) in float inFalloffPower;
 layout(location = 4) in vec3 inLightColor;
+layout(location = 5) in float inTransmission;
+layout(location = 6) in float inTransmissionStartDistance;
 
 layout(location = 0) out vec4 outColor;
 
@@ -20,5 +22,12 @@ void main()
 	}
 
 	float attenuation = pow(normalized, max(inFalloffPower, 0.05));
-	outColor = vec4(inLightColor * attenuation, 1.0);
+
+	float transmission = clamp(inTransmission, 0.0, 1.0);
+	float transition = max(0.01, inLightRadius * 0.02);
+	float shadowFactor = smoothstep(inTransmissionStartDistance - transition,
+		inTransmissionStartDistance + transition, distanceToCenter);
+	float passThrough = mix(1.0, transmission, shadowFactor);
+
+	outColor = vec4(inLightColor * attenuation * passThrough, 1.0);
 }
