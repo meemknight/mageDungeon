@@ -124,8 +124,8 @@ void Map::create(int sizeX, int sizeY)
 void Map::renderMap(gl2d::Renderer2D &renderer, AssetsManager &assetManager)
 {
 
-	firstLayer.renderMap(renderer, assetManager);
-	secondLayer.renderMap(renderer, assetManager);
+	firstLayer.renderMap(renderer, assetManager, &wallFaceGradientSettings, &secondLayer);
+	secondLayer.renderMap(renderer, assetManager, &wallFaceGradientSettings, &firstLayer);
 
 }
 
@@ -250,9 +250,9 @@ void Map::renderMapAfterEntities(gl2d::Renderer2D &renderer, AssetsManager &asse
 {
 
 	firstLayer.renderMapAfterEntities(renderer, assetManager, doorHolder,
-		nullptr, false, &wallFaceGradientSettings);
+		nullptr, false);
 	secondLayer.renderMapAfterEntities(renderer, assetManager, nullptr,
-		nullptr, false, &wallFaceGradientSettings);
+		nullptr, false);
 
 	if (!textAnnotations.empty())
 	{
@@ -298,8 +298,20 @@ void Map::renderMapAfterEntities(gl2d::Renderer2D &renderer, AssetsManager &asse
 }
 
 void MapLayer::renderMap(gl2d::Renderer2D &renderer,
-	AssetsManager &assetManager)
+	AssetsManager &assetManager,
+	const WallFaceGradientSettings *wallFaceGradientSettings,
+	MapLayer *otherLayer)
 {
+	auto hasWallAt = [&](int tx, int ty)
+	{
+		auto block = getBlockSafe(tx, ty);
+		bool wallInThisLayer = block ? isWall(block->type) : false;
+		if (wallInThisLayer) { return true; }
+		if (!otherLayer) { return false; }
+		auto otherBlock = otherLayer->getBlockSafe(tx, ty);
+		return otherBlock ? isWall(otherBlock->type) : false;
+	};
+
 
 	auto viewRect = renderer.getViewRect();
 	glm::ivec4 viewRectInt = {};
@@ -360,6 +372,40 @@ void MapLayer::renderMap(gl2d::Renderer2D &renderer,
 							0,
 							tile.atlas.get(uv.x, uv.y)
 						);
+					}
+
+					if (wallFaceGradientSettings && wallFaceGradientSettings->enabled && isWall(b.type) && !hasWallAt(x, y + 1))
+					{
+						float topStrength = glm::clamp(wallFaceGradientSettings->topRimStrength, 0.0f, 1.0f);
+						float bottomStrength = glm::clamp(wallFaceGradientSettings->bottomShadeStrength, 0.0f, 1.0f);
+						float span = glm::clamp(wallFaceGradientSettings->gradientSpan, 0.05f, 1.0f);
+
+						// Keep wall polish in the same draw order as the wall base tile.
+						auto oldBlend = renderer.getBlendMode();
+						if (topStrength > 0.0001f)
+						{
+							renderer.setBlendMode(gl2d::Renderer2D::BlendMode_Additive);
+							gl2d::Color4f topColors[4] = {
+								{topStrength, topStrength, topStrength, topStrength},
+								{0.0f, 0.0f, 0.0f, 0.0f},
+								{0.0f, 0.0f, 0.0f, 0.0f},
+								{topStrength, topStrength, topStrength, topStrength},
+							};
+							renderer.renderRectangle({(float)x, (float)y, 1.0f, span}, topColors);
+						}
+
+						if (bottomStrength > 0.0001f)
+						{
+							renderer.setBlendMode(gl2d::Renderer2D::BlendMode_Alpha);
+							gl2d::Color4f bottomColors[4] = {
+								{0.0f, 0.0f, 0.0f, 0.0f},
+								{0.0f, 0.0f, 0.0f, bottomStrength},
+								{0.0f, 0.0f, 0.0f, bottomStrength},
+								{0.0f, 0.0f, 0.0f, 0.0f},
+							};
+							renderer.renderRectangle({(float)x, (float)y + 1.0f - span, 1.0f, span}, bottomColors);
+						}
+						renderer.setBlendMode(oldBlend);
 					}
 				}
 
@@ -865,8 +911,7 @@ void MapLayer::renderMap(gl2d::Renderer2D &renderer,
 
 void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 	AssetsManager &assetManager, const DoorHolder *doorHolder,
-	WorldTextSystem *textSystem, bool usesController,
-	const WallFaceGradientSettings *wallFaceGradientSettings)
+	WorldTextSystem *textSystem, bool usesController)
 {
 	(void)textSystem;
 	(void)usesController;
@@ -1180,41 +1225,6 @@ void MapLayer::renderMapAfterEntities(gl2d::Renderer2D &renderer,
 					);
 				}
 
-				if (wallFaceGradientSettings && wallFaceGradientSettings->enabled && !bottom)
-				{
-					float topStrength = glm::clamp(wallFaceGradientSettings->topRimStrength, 0.0f, 1.0f);
-					float bottomStrength = glm::clamp(wallFaceGradientSettings->bottomShadeStrength, 0.0f, 1.0f);
-					float span = glm::clamp(wallFaceGradientSettings->gradientSpan, 0.05f, 1.0f);
-
-					auto oldBlend = renderer.getBlendMode();
-
-					if (topStrength > 0.0001f)
-					{
-						renderer.setBlendMode(gl2d::Renderer2D::BlendMode_Additive);
-						gl2d::Color4f topColors[4] = {
-							{topStrength, topStrength, topStrength, topStrength},
-							{0.0f, 0.0f, 0.0f, 0.0f},
-							{0.0f, 0.0f, 0.0f, 0.0f},
-							{topStrength, topStrength, topStrength, topStrength},
-						};
-						// Wall faces render at y-1, so gradient overlays the same face tile.
-						renderer.renderRectangle({(float)x, (float)y - 1.0f, 1.0f, span}, topColors);
-					}
-
-					if (bottomStrength > 0.0001f)
-					{
-						renderer.setBlendMode(gl2d::Renderer2D::BlendMode_Alpha);
-						gl2d::Color4f bottomColors[4] = {
-							{0.0f, 0.0f, 0.0f, 0.0f},
-							{0.0f, 0.0f, 0.0f, bottomStrength},
-							{0.0f, 0.0f, 0.0f, bottomStrength},
-							{0.0f, 0.0f, 0.0f, 0.0f},
-						};
-						renderer.renderRectangle({(float)x, (float)y - span, 1.0f, span}, bottomColors);
-					}
-
-					renderer.setBlendMode(oldBlend);
-				}
 			}
 			else if (isChunkyTile(current.type))
 			{

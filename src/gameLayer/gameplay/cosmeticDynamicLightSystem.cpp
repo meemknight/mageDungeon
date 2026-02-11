@@ -2,6 +2,7 @@
 
 #include <gameplay/map.h>
 #include <gameplay/blocks.h>
+#include <gameplay/doors.h>
 #include <gameplay/Physics.h>
 
 #include <glm/geometric.hpp>
@@ -12,6 +13,7 @@
 #include <cstddef>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <vector>
 
 namespace
@@ -21,6 +23,7 @@ namespace
 		glm::vec2 a = {};
 		glm::vec2 b = {};
 		float transmission = 0.0f;
+		glm::ivec2 sourceTile = {-1, -1};
 	};
 
 	struct RayHit
@@ -29,6 +32,8 @@ namespace
 		glm::vec2 point = {};
 		float transmission = 1.0f;
 		float transmissionStartDistance = 100000.0f;
+		bool hitHardOccluder = false;
+		glm::ivec2 wallTile = {-1, -1};
 	};
 
 	float cross2d(const glm::vec2 &a, const glm::vec2 &b)
@@ -60,6 +65,52 @@ namespace
 		if (u < 0.0f || u > 1.0f) { return false; }
 
 		outDistance = t;
+		return true;
+	}
+
+	bool rayTileEntryExit(const glm::vec2 &origin,
+		const glm::vec2 &direction,
+		const glm::ivec2 &tile,
+		float &outEntry,
+		float &outExit)
+	{
+		const float minX = (float)tile.x;
+		const float minY = (float)tile.y;
+		const float maxX = minX + 1.0f;
+		const float maxY = minY + 1.0f;
+
+		float nearX = -std::numeric_limits<float>::infinity();
+		float farX = std::numeric_limits<float>::infinity();
+		if (std::abs(direction.x) < 0.000001f)
+		{
+			if (origin.x < minX || origin.x > maxX) { return false; }
+		}
+		else
+		{
+			float tx1 = (minX - origin.x) / direction.x;
+			float tx2 = (maxX - origin.x) / direction.x;
+			nearX = std::min(tx1, tx2);
+			farX = std::max(tx1, tx2);
+		}
+
+		float nearY = -std::numeric_limits<float>::infinity();
+		float farY = std::numeric_limits<float>::infinity();
+		if (std::abs(direction.y) < 0.000001f)
+		{
+			if (origin.y < minY || origin.y > maxY) { return false; }
+		}
+		else
+		{
+			float ty1 = (minY - origin.y) / direction.y;
+			float ty2 = (maxY - origin.y) / direction.y;
+			nearY = std::min(ty1, ty2);
+			farY = std::max(ty1, ty2);
+		}
+
+		outEntry = std::max(nearX, nearY);
+		outExit = std::min(farX, farY);
+		if (outExit < 0.0f) { return false; }
+		if (outExit < outEntry) { return false; }
 		return true;
 	}
 
@@ -259,6 +310,13 @@ bool CosmeticDynamicLightSystem::hasBreakableDecorationAt(int x, int y) const
 	return breakableDecorationMask[x + y * mapSize.x] != 0;
 }
 
+bool CosmeticDynamicLightSystem::hasVerticalDoorAt(int x, int y) const
+{
+	if (!inBounds(x, y)) { return false; }
+	if (verticalDoorMask.empty()) { return false; }
+	return verticalDoorMask[x + y * mapSize.x] != 0;
+}
+
 void CosmeticDynamicLightSystem::init()
 {
 	*this = {};
@@ -284,6 +342,7 @@ void CosmeticDynamicLightSystem::resetForFloor(Map &map)
 	lights.clear();
 	visibilityPolygons.clear();
 	breakableDecorationMask.assign(std::max(0, mapSize.x * mapSize.y), 0);
+	verticalDoorMask.assign(std::max(0, mapSize.x * mapSize.y), 0);
 }
 
 void CosmeticDynamicLightSystem::beginFrame(Map &map)
@@ -311,6 +370,29 @@ void CosmeticDynamicLightSystem::setBreakableDecorations(const std::vector<glm::
 	{
 		if (!inBounds(pos.x, pos.y)) { continue; }
 		breakableDecorationMask[pos.x + pos.y * mapSize.x] = 1;
+	}
+}
+
+void CosmeticDynamicLightSystem::setDoors(const DoorHolder &doorHolder)
+{
+	if (mapSize.x <= 0 || mapSize.y <= 0) { return; }
+
+	if (verticalDoorMask.size() != (size_t)std::max(0, mapSize.x * mapSize.y))
+	{
+		verticalDoorMask.assign(std::max(0, mapSize.x * mapSize.y), 0);
+	}
+
+	std::fill(verticalDoorMask.begin(), verticalDoorMask.end(), 0);
+	for (const auto &entry : doorHolder.doors)
+	{
+		if (entry.second.orientation != Door::Orientation::Vertical)
+		{
+			continue;
+		}
+
+		const glm::ivec2 &pos = entry.first;
+		if (!inBounds(pos.x, pos.y)) { continue; }
+		verticalDoorMask[pos.x + pos.y * mapSize.x] = 1;
 	}
 }
 
@@ -388,19 +470,19 @@ void CosmeticDynamicLightSystem::buildLightMask(Map &map)
 
 					if (!isOccluderAt(map, x - 1, y))
 					{
-						occluderSegments.push_back({{(float)x, (float)y}, {(float)x, (float)y + 1.0f}, 0.0f});
+						occluderSegments.push_back({{(float)x, (float)y}, {(float)x, (float)y + 1.0f}, 0.0f, {x, y}});
 					}
 					if (!isOccluderAt(map, x + 1, y))
 					{
-						occluderSegments.push_back({{(float)x + 1.0f, (float)y}, {(float)x + 1.0f, (float)y + 1.0f}, 0.0f});
+						occluderSegments.push_back({{(float)x + 1.0f, (float)y}, {(float)x + 1.0f, (float)y + 1.0f}, 0.0f, {x, y}});
 					}
 					if (!isOccluderAt(map, x, y - 1))
 					{
-						occluderSegments.push_back({{(float)x, (float)y}, {(float)x + 1.0f, (float)y}, 0.0f});
+						occluderSegments.push_back({{(float)x, (float)y}, {(float)x + 1.0f, (float)y}, 0.0f, {x, y}});
 					}
 					if (!isOccluderAt(map, x, y + 1))
 					{
-						occluderSegments.push_back({{(float)x, (float)y + 1.0f}, {(float)x + 1.0f, (float)y + 1.0f}, 0.0f});
+						occluderSegments.push_back({{(float)x, (float)y + 1.0f}, {(float)x + 1.0f, (float)y + 1.0f}, 0.0f, {x, y}});
 					}
 				}
 			}
@@ -414,22 +496,22 @@ void CosmeticDynamicLightSystem::buildLightMask(Map &map)
 					if (!hasBreakableDecorationAt(x - 1, y))
 					{
 						occluderSegments.push_back({{(float)x, (float)y}, {(float)x, (float)y + 1.0f},
-							breakableDecorationTransmission});
+							breakableDecorationTransmission, {x, y}});
 					}
 					if (!hasBreakableDecorationAt(x + 1, y))
 					{
 						occluderSegments.push_back({{(float)x + 1.0f, (float)y}, {(float)x + 1.0f, (float)y + 1.0f},
-							breakableDecorationTransmission});
+							breakableDecorationTransmission, {x, y}});
 					}
 					if (!hasBreakableDecorationAt(x, y - 1))
 					{
 						occluderSegments.push_back({{(float)x, (float)y}, {(float)x + 1.0f, (float)y},
-							breakableDecorationTransmission});
+							breakableDecorationTransmission, {x, y}});
 					}
 					if (!hasBreakableDecorationAt(x, y + 1))
 					{
 						occluderSegments.push_back({{(float)x, (float)y + 1.0f}, {(float)x + 1.0f, (float)y + 1.0f},
-							breakableDecorationTransmission});
+							breakableDecorationTransmission, {x, y}});
 					}
 				}
 			}
@@ -480,6 +562,9 @@ void CosmeticDynamicLightSystem::buildLightMask(Map &map)
 			float nearestDistance = radius;
 			float transmission = 1.0f;
 			float transmissionStartDistance = radius + 1.0f;
+			bool hitHardOccluder = false;
+			float hardHitDistance = radius;
+			glm::ivec2 hardOccluderTile = {-1, -1};
 
 			if (light.castsShadows)
 			{
@@ -490,15 +575,17 @@ void CosmeticDynamicLightSystem::buildLightMask(Map &map)
 
 					if (segment.transmission <= 0.001f)
 					{
-						if (t < nearestDistance)
+						if (t < hardHitDistance)
 						{
-							nearestDistance = t;
+							hardHitDistance = t;
+							hitHardOccluder = true;
+							hardOccluderTile = segment.sourceTile;
 						}
 					}
 					else
 					{
 						// Breakable decorations are partial occluders: keep at least 50% light.
-						if (t <= nearestDistance + 0.0001f)
+						if (t <= hardHitDistance + 0.0001f)
 						{
 							transmission = std::min(transmission, segment.transmission);
 							transmissionStartDistance = std::min(transmissionStartDistance, t);
@@ -507,11 +594,68 @@ void CosmeticDynamicLightSystem::buildLightMask(Map &map)
 				}
 			}
 
+			glm::ivec2 wallTile = {-1, -1};
+			if (hitHardOccluder)
+			{
+				nearestDistance = hardHitDistance;
+
+				auto isExposedWall = [&](const glm::ivec2 tile)
+				{
+					return inBounds(tile.x, tile.y)
+						&& isWallAt(map, tile.x, tile.y)
+						&& !isWallAt(map, tile.x, tile.y + 1);
+				};
+
+				if (isExposedWall(hardOccluderTile))
+				{
+					// First wall layer behaves like transparent thickness: extend until
+					// we exit the connected exposed-wall contour (no seams between neighbors).
+					float contourExit = hardHitDistance;
+					glm::ivec2 currentTile = hardOccluderTile;
+					for (int step = 0; step < 64; step++)
+					{
+						float tileEntry = 0.0f;
+						float tileExit = 0.0f;
+						if (!rayTileEntryExit(light.position, direction, currentTile, tileEntry, tileExit))
+						{
+							break;
+						}
+
+						contourExit = std::max(contourExit, tileExit);
+
+						glm::vec2 nextSample = light.position + direction * (contourExit + 0.001f);
+						glm::ivec2 nextTile = {(int)std::floor(nextSample.x), (int)std::floor(nextSample.y)};
+
+						if (nextTile == currentTile)
+						{
+							nextSample = light.position + direction * (contourExit + 0.02f);
+							nextTile = {(int)std::floor(nextSample.x), (int)std::floor(nextSample.y)};
+							if (nextTile == currentTile)
+							{
+								break;
+							}
+						}
+
+						if (!isExposedWall(nextTile))
+						{
+							break;
+						}
+
+						currentTile = nextTile;
+					}
+
+					nearestDistance = std::min(radius, contourExit + 0.001f);
+					wallTile = hardOccluderTile;
+				}
+			}
+
 			RayHit hit = {};
 			hit.angle = angle;
 			hit.point = light.position + direction * nearestDistance;
 			hit.transmission = transmission;
 			hit.transmissionStartDistance = transmissionStartDistance;
+			hit.hitHardOccluder = wallTile.x >= 0;
+			hit.wallTile = wallTile;
 			hits.push_back(hit);
 		}
 
@@ -525,8 +669,25 @@ void CosmeticDynamicLightSystem::buildLightMask(Map &map)
 		VisibilityPolygon polygon = {};
 		polygon.light = light;
 		polygon.points.reserve(hits.size());
+		polygon.litWallTiles.reserve(16);
+
+		auto pushLitWallTile = [&](const RayHit &hit)
+		{
+			if (!hit.hitHardOccluder) { return; }
+			for (const auto &tile : polygon.litWallTiles)
+			{
+				if (tile.x == hit.wallTile.x && tile.y == hit.wallTile.y)
+				{
+					return;
+				}
+			}
+			polygon.litWallTiles.push_back(hit.wallTile);
+		};
+
 		for (const auto &hit : hits)
 		{
+			pushLitWallTile(hit);
+
 			if (!polygon.points.empty())
 			{
 				glm::vec2 d = hit.point - polygon.points.back().point;
@@ -599,8 +760,10 @@ void CosmeticDynamicLightSystem::renderMask(gl2d::Renderer2D &renderer, Map &map
 		const float geometryExtension = PIXEL_SIZE * 8.0f;
 
 		auto appendFan = [&](const CosmeticDynamicLight &light,
-			const std::vector<VisibilityPoint> &points)
+			const std::vector<VisibilityPoint> &points,
+			const std::vector<glm::ivec2> &litWallTiles)
 		{
+			(void)litWallTiles;
 			if (points.size() < 3) { return; }
 
 			glm::vec3 lightColor = glm::max(light.color, glm::vec3(0.0f)) * std::max(light.intensity, 0.0f);
@@ -716,11 +879,12 @@ void CosmeticDynamicLightSystem::renderMask(gl2d::Renderer2D &renderer, Map &map
 					1.0f, trans2, 1.0f,
 					start1, start2, start2);
 			}
+
 		};
 
 		for (const auto &polygon : visibilityPolygons)
 		{
-			appendFan(polygon.light, polygon.points);
+			appendFan(polygon.light, polygon.points, polygon.litWallTiles);
 		}
 
 		if (vertices.empty())
@@ -739,7 +903,7 @@ void CosmeticDynamicLightSystem::renderMask(gl2d::Renderer2D &renderer, Map &map
 					point.transmission = 1.0f;
 					circlePoints.push_back(point);
 				}
-				appendFan(light, circlePoints);
+				appendFan(light, circlePoints, {});
 			}
 		}
 
@@ -837,7 +1001,8 @@ void CosmeticDynamicLightSystem::renderMask(gl2d::Renderer2D &renderer, Map &map
 			maskFbo.unbind();
 		}
 
-		// Keep stacked/interior wall tiles unlit, but allow exposed wall tops to receive light.
+		// Keep stacked/interior wall tiles unlit. For exposed walls, keep light on
+		// the wall tile itself and clear the projected tile above.
 		maskFbo.bind();
 		auto oldBlend = renderer.getBlendMode();
 		renderer.setBlendMode(gl2d::Renderer2D::BlendMode_Alpha);
@@ -852,8 +1017,17 @@ void CosmeticDynamicLightSystem::renderMask(gl2d::Renderer2D &renderer, Map &map
 			for (int x = tileMinX; x < tileMaxX; x++)
 			{
 				if (!isWallAt(map, x, y)) { continue; }
-				if (!isWallAt(map, x, y + 1)) { continue; }
-				renderer.renderRectangle({(float)x, (float)y, 1.0f, 1.0f}, {0, 0, 0, 1});
+
+				if (isWallAt(map, x, y + 1))
+				{
+					// Interior/stacked wall tiles stay excluded from cosmetic light.
+					renderer.renderRectangle({(float)x, (float)y, 1.0f, 1.0f}, {0, 0, 0, 1});
+				}
+				else if (y > 0 && !hasVerticalDoorAt(x, y))
+				{
+					// Exposed wall keeps light on (x,y), but its visual projection row does not.
+					renderer.renderRectangle({(float)x, (float)y - 1.0f, 1.0f, 1.0f}, {0, 0, 0, 1});
+				}
 			}
 		}
 

@@ -54,13 +54,14 @@ struct MapLayer
 	Block *getBlockSafe(int x, int y);
 
 	void renderMap(gl2d::Renderer2D &renderer,
-		AssetsManager &assetManager);
+		AssetsManager &assetManager,
+		const WallFaceGradientSettings *wallFaceGradientSettings = nullptr,
+		MapLayer *otherLayer = nullptr);
 
 	//for rendering tall walls and stuff
 	void renderMapAfterEntities(gl2d::Renderer2D &renderer,
 		AssetsManager &assetManager, const DoorHolder *doorHolder = nullptr,
-		WorldTextSystem *textSystem = nullptr, bool usesController = false,
-		const WallFaceGradientSettings *wallFaceGradientSettings = nullptr);
+		WorldTextSystem *textSystem = nullptr, bool usesController = false);
 };
 
 struct Map

@@ -1814,6 +1814,7 @@ bool GameLogic::update(float deltaTime,
 		projectiles.addCosmeticLights(cosmeticDynamicLightSystem);
 		standbyProjectiles.addCosmeticLights(cosmeticDynamicLightSystem);
 		cosmeticDynamicLightSystem.setBreakableDecorations(breakableDecorations.positions);
+		cosmeticDynamicLightSystem.setDoors(doorHolder);
 		cosmeticDynamicLightSystem.buildLightMask(map);
 		cosmeticDynamicLightSystem.updateWindowMetrics(renderer);
 		cosmeticDynamicLightSystem.renderMask(renderer, map);
@@ -1837,7 +1838,8 @@ bool GameLogic::update(float deltaTime,
 		gameFbo.bind();
 	}
 
-	map.firstLayer.renderMap(renderer, assetsManager);
+	map.firstLayer.renderMap(renderer, assetsManager,
+		&map.wallFaceGradientSettings, &map.secondLayer);
 
 	// Render spike traps after the floor.
 	if (!trapSpikes.spikes.empty())
@@ -1906,7 +1908,8 @@ bool GameLogic::update(float deltaTime,
 		}
 	}
 
-	map.secondLayer.renderMap(renderer, assetsManager);
+	map.secondLayer.renderMap(renderer, assetsManager,
+		&map.wallFaceGradientSettings, &map.firstLayer);
 
 	map.renderWallShadows(renderer, assetsManager);
 
