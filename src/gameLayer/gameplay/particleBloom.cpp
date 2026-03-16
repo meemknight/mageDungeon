@@ -301,8 +301,7 @@ bool ParticleBloomPostProcess::ensureResources(gl2d::Renderer2D &renderer)
 		return true;
 	}
 
-	const char *driver = SDL_GetGPUDeviceDriver(renderer.gpuDevice);
-	if (!driver || strcmp(driver, "vulkan") != 0)
+	if ((SDL_GetGPUShaderFormats(renderer.gpuDevice) & SDL_GPU_SHADERFORMAT_SPIRV) == 0)
 	{
 		return false;
 	}

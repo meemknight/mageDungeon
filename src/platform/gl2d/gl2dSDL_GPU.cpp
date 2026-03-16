@@ -230,15 +230,13 @@ namespace gl2d
 		#endif
 		}
 
-		bool isVulkanGpuDevice(SDL_GPUDevice *device)
+		bool supportsSpirvShaders(SDL_GPUDevice *device)
 		{
 			if (!device)
 			{
 				return false;
 			}
-
-			const char *driver = SDL_GetGPUDeviceDriver(device);
-			return driver && strcmp(driver, "vulkan") == 0;
+			return (SDL_GetGPUShaderFormats(device) & SDL_GPU_SHADERFORMAT_SPIRV) != 0;
 		}
 
 		bool uploadRGBA8Texture(SDL_GPUDevice *device, SDL_GPUTexture *texture,
@@ -514,10 +512,9 @@ namespace gl2d
 			if (!renderer.gpuDevice) { return false; }
 			if (renderer.defaultVertexShader && renderer.defaultFragmentShader) { return true; }
 
-			const char *driver = SDL_GetGPUDeviceDriver(renderer.gpuDevice);
-			if (!driver || strcmp(driver, "vulkan") != 0)
+			if (!supportsSpirvShaders(renderer.gpuDevice))
 			{
-				errorFunc("gl2d SDL GPU backend is configured for Vulkan/SPIR-V only", userDefinedData);
+				errorFunc("gl2d SDL GPU backend requires SPIR-V shader support", userDefinedData);
 				return false;
 			}
 
@@ -810,27 +807,31 @@ namespace gl2d
 			{
 				SDL_GPUDevice *rendererDevice = static_cast<SDL_GPUDevice *>(
 					SDL_GetPointerProperty(rendererProps, SDL_PROP_RENDERER_GPU_DEVICE_POINTER, nullptr));
-				if (isVulkanGpuDevice(rendererDevice))
+				if (supportsSpirvShaders(rendererDevice))
 				{
 					renderer.gpuDevice = rendererDevice;
 				}
 			}
 
 			renderer.ownsGpuDevice = false;
-			if (!renderer.gpuDevice && isVulkanGpuDevice(globalGpuDevice))
+			if (!renderer.gpuDevice && supportsSpirvShaders(globalGpuDevice))
 			{
 				renderer.gpuDevice = globalGpuDevice;
 			}
 			if (!renderer.gpuDevice)
 			{
-				// Vulkan-only backend, shaders are loaded from SPIR-V binaries.
-				renderer.gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, "vulkan");
+				// Backend uses SPIR-V shader binaries and lets SDL pick the platform driver.
+				renderer.gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, nullptr);
 				renderer.ownsGpuDevice = renderer.gpuDevice != nullptr;
 			}
 
 			if (!renderer.gpuDevice)
 			{
-				errorFunc("Failed to initialize Vulkan SDL GPU device, falling back to SDL_Renderer path", userDefinedData);
+				#ifdef __EMSCRIPTEN__
+				errorFunc("Failed to initialize SDL GPU device with SPIR-V support. This SDL version does not ship a web SDL_gpu backend, so browser builds fall back to SDL_Renderer.", userDefinedData);
+				#else
+				errorFunc("Failed to initialize SDL GPU device with SPIR-V support, falling back to SDL_Renderer path", userDefinedData);
+				#endif
 				return false;
 			}
 

@@ -101,7 +101,11 @@ void GameHdrPostProcess::init()
 	*this = {};
 
 	// Main scene target in HDR format for wide luminance range.
+	#ifdef __EMSCRIPTEN__
+	hdrFbo.gpuTextureFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+	#else
 	hdrFbo.gpuTextureFormat = SDL_GPU_TEXTUREFORMAT_R11G11B10_UFLOAT;
+	#endif
 
 	// Tone mapped output stays in regular LDR for final sprite compose.
 	toneMappedFbo.gpuTextureFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
@@ -268,8 +272,7 @@ bool GameHdrPostProcess::ensureResources(gl2d::Renderer2D &renderer)
 		return true;
 	}
 
-	const char *driver = SDL_GetGPUDeviceDriver(renderer.gpuDevice);
-	if (!driver || strcmp(driver, "vulkan") != 0)
+	if ((SDL_GetGPUShaderFormats(renderer.gpuDevice) & SDL_GPU_SHADERFORMAT_SPIRV) == 0)
 	{
 		return false;
 	}

@@ -1,2 +1,8 @@
-cd ..
-python -m http.server
+@echo off
+setlocal
+
+title MageDungeonWebServer
+
+python "%~dp0webServe.py"
+
+endlocal

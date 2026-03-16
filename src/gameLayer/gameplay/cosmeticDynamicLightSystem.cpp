@@ -322,7 +322,11 @@ void CosmeticDynamicLightSystem::init()
 	*this = {};
 	#if GL2D_USE_SDL_GPU
 	// Light mask is HDR so multiple colored lights can overlap additively.
+	#ifdef __EMSCRIPTEN__
+	maskFbo.gpuTextureFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+	#else
 	maskFbo.gpuTextureFormat = SDL_GPU_TEXTUREFORMAT_R11G11B10_UFLOAT;
+	#endif
 	#endif
 	maskFbo.create(1, 1, true);
 }
@@ -1107,8 +1111,7 @@ bool CosmeticDynamicLightSystem::ensureResources(gl2d::Renderer2D &renderer)
 		return true;
 	}
 
-	const char *driver = SDL_GetGPUDeviceDriver(renderer.gpuDevice);
-	if (!driver || strcmp(driver, "vulkan") != 0)
+	if ((SDL_GetGPUShaderFormats(renderer.gpuDevice) & SDL_GPU_SHADERFORMAT_SPIRV) == 0)
 	{
 		return false;
 	}

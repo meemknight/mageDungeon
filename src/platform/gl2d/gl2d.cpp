@@ -685,10 +685,10 @@ namespace gl2d
 
 		if (texture.isValid() && texture.tex != white1pxSquareTexture.tex)
 		{
-			const float u0 = textureCoords.x;
-			const float v0 = textureCoords.y;
-			const float u1 = textureCoords.z;
-			const float v1 = textureCoords.w;
+			const float u0 = std::clamp(textureCoords.x, 0.0f, 1.0f);
+			const float v0 = std::clamp(textureCoords.y, 0.0f, 1.0f);
+			const float u1 = std::clamp(textureCoords.z, 0.0f, 1.0f);
+			const float v1 = std::clamp(textureCoords.w, 0.0f, 1.0f);
 
 			// 1: (u0,v0) top-left
 			// 2: (u0,v1) bottom-left

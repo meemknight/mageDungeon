@@ -286,6 +286,13 @@ bool initGame(SDL_Renderer *sdlRenderer)
 
 
 	renderer.create(sdlRenderer);
+	#if GL2D_USE_SDL_GPU
+	if (!renderer.gpuDevice)
+	{
+		platform::log("SDL_gpu device unavailable on this platform; GPU post-process effects are disabled.",
+			LogManager::logWarning);
+	}
+	#endif
 	//uirenderer.SetAlignModeFixedSizeWidgets({0,150});
 	assetsManager.loadAllAssets();
 
