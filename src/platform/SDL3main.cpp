@@ -4,6 +4,8 @@
 #include <iostream>
 #include <chrono>
 #include <fstream>
+#include <algorithm>
+#include <cmath>
 
 #include "platformTools.h"
 #include "platformInput.h"
@@ -27,6 +29,7 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
 #endif
 
 #undef min
@@ -47,6 +50,48 @@ static std::chrono::high_resolution_clock::time_point gLast;
 static bool gUseImguiGpuRenderer = false;
 #endif
 #pragma endregion
+
+#ifdef __EMSCRIPTEN__
+static void syncEmscriptenCanvasSize()
+{
+	if (!window) { return; }
+
+	double cssW = 0.0;
+	double cssH = 0.0;
+	if (emscripten_get_element_css_size("#canvas", &cssW, &cssH) != EMSCRIPTEN_RESULT_SUCCESS)
+	{
+		return;
+	}
+
+	int targetWindowW = std::max(1, (int)std::lround(cssW));
+	int targetWindowH = std::max(1, (int)std::lround(cssH));
+	double pixelRatio = emscripten_get_device_pixel_ratio();
+	int targetCanvasW = std::max(1, (int)std::lround(cssW * pixelRatio));
+	int targetCanvasH = std::max(1, (int)std::lround(cssH * pixelRatio));
+
+	int windowW = 0;
+	int windowH = 0;
+	SDL_GetWindowSize(window, &windowW, &windowH);
+	if (windowW != targetWindowW || windowH != targetWindowH)
+	{
+		SDL_SetWindowSize(window, targetWindowW, targetWindowH);
+	}
+
+	int canvasW = 0;
+	int canvasH = 0;
+	emscripten_get_canvas_element_size("#canvas", &canvasW, &canvasH);
+	if (canvasW != targetCanvasW || canvasH != targetCanvasH)
+	{
+		emscripten_set_canvas_element_size("#canvas", targetCanvasW, targetCanvasH);
+	}
+}
+
+static EM_BOOL onEmscriptenResize(int, const EmscriptenUiEvent *, void *)
+{
+	syncEmscriptenCanvasSize();
+	return EM_TRUE;
+}
+#endif
 
 static SDL_Renderer *createRendererPreferVulkan(SDL_Window *window)
 {
@@ -249,6 +294,8 @@ static void handleSDLEvent(const SDL_Event &e)
 			if (key == SDLK_TAB) platform::internal::setButtonState(platform::Button::Tab, state);
 			if (key == SDLK_LSHIFT) platform::internal::setButtonState(platform::Button::LeftShift, state);
 			if (key == SDLK_LALT) platform::internal::setButtonState(platform::Button::LeftAlt, state);
+			if (key == SDLK_F1) platform::internal::setButtonState(platform::Button::F1, state);
+			if (key == SDLK_F6) platform::internal::setButtonState(platform::Button::F6, state);
 			if (key == SDLK_F5) platform::internal::setButtonState(platform::Button::F5, state);
 			if (key == SDLK_F7) platform::internal::setButtonState(platform::Button::F7, state);
 			if (key == SDLK_F8) platform::internal::setButtonState(platform::Button::F8, state);
@@ -286,6 +333,9 @@ void updateFullscreen()
 static bool tickOneFrame()
 {
 	updateFullscreen();
+	#ifdef __EMSCRIPTEN__
+	syncEmscriptenCanvasSize();
+	#endif
 
 	SDL_Event e;
 	while (SDL_PollEvent(&e))
@@ -413,13 +463,23 @@ int main(int, char **)
 	permaAssertComment(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD),
 		"SDL init failed");
 
+	#ifdef __EMSCRIPTEN__
+	SDL_SetHint(SDL_HINT_EMSCRIPTEN_CANVAS_SELECTOR, "#canvas");
+	SDL_SetHint(SDL_HINT_EMSCRIPTEN_KEYBOARD_ELEMENT, "#canvas");
+	#endif
+
 	window = SDL_CreateWindow(
 		"Mages Dungeon",
-		1000, 800,
+		1200, 900,
 		SDL_WINDOW_RESIZABLE
 	);
 
 	permaAssertComment(window, "SDL window creation failed");
+
+	#ifdef __EMSCRIPTEN__
+	syncEmscriptenCanvasSize();
+	emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, EM_TRUE, onEmscriptenResize);
+	#endif
 
 	sdlRenderer = createRendererPreferVulkan(window);
 

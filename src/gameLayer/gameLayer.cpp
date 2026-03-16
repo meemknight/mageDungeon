@@ -286,10 +286,10 @@ bool initGame(SDL_Renderer *sdlRenderer)
 
 
 	renderer.create(sdlRenderer);
-	uirenderer.SetAlignModeFixedSizeWidgets({0,150});
+	//uirenderer.SetAlignModeFixedSizeWidgets({0,150});
 	assetsManager.loadAllAssets();
 
-	game.init();
+	//game.init();
 
 
 	return true;
@@ -307,6 +307,11 @@ bool gameLogic(float deltaTime, platform::Input &input, SDL_Renderer *sdlRendere
 	h = platform::getFrameBufferSizeY(); //window h
 	
 	renderer.updateWindowMetrics(w, h);
+
+	if (input.isButtonPressed(platform::Button::F1))
+	{
+		platform::setFullScreen(!platform::isFullScreen());
+	}
 
 	if (input.isButtonPressed(platform::Button::F5))
 	{
@@ -333,6 +338,12 @@ bool gameLogic(float deltaTime, platform::Input &input, SDL_Renderer *sdlRendere
 		uirenderer.Begin(1);
 
 		uirenderer.Text("Mages Dungeon", Colors_White);
+		uirenderer.Text("Work in progress", Colors_White);
+		uirenderer.Text("The game is hard and it has lots of spells!\nI don't want you to miss on the fun.", Colors_Gray);
+		uirenderer.Text("You can press F6 to give yourself\nan OP wand and have fun!", Colors_Gray);
+		uirenderer.Text("You can also press F10 to see the debug menu with all the spells! ", Colors_White);
+		uirenderer.Text("F1 for full screen! ", Colors_White);
+		
 
 		//todo (LLGD): add a nice texture here for the button.
 		if (uirenderer.Button("Play", Colors_White))
@@ -340,14 +351,6 @@ bool gameLogic(float deltaTime, platform::Input &input, SDL_Renderer *sdlRendere
 			game.init();
 
 		}
-
-		uirenderer.BeginMenu("Load game...", Colors_White, {});
-		{
-			uirenderer.Text("Ther's nothing here :((", Colors_White);
-
-
-		}
-		uirenderer.EndMenu();
 
 		uirenderer.End();
 

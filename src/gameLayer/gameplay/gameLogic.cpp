@@ -393,21 +393,21 @@ bool GameLogic::init()
 	}
 
 	//wands[0] = getRandomWand(0, rng); //starter wand
-	//wands[0] = getRandomWand(1, rng); //temporary give tier 1 wand to the player
-	{
-		Wand elderWand;
-		elderWand.up = {WandSlotType::Element, Elements::Fire, 4};
-		elderWand.down = {WandSlotType::Element, Elements::Water, 4};
-		elderWand.left = {WandSlotType::Element, Elements::Earth, 4};
-		elderWand.right = {WandSlotType::Element, Elements::Ice, 4};
-		elderWand.alwaysCast = {WandSlotType::Disabled};
-		elderWand.maxMana = 15;
-		elderWand.manaChargeSpeed = 1.3f;
-		elderWand.maxElementsPerCast = 7;
-		elderWand.wandSprite = Wand::elderWand;
-		elderWand.sanitize();
-		wands[0] = elderWand;
-	}
+	wands[0] = getRandomWand(1, rng); //temporary give tier 1 wand to the player
+	//{
+	//	Wand elderWand;
+	//	elderWand.up = {WandSlotType::Element, Elements::Fire, 4};
+	//	elderWand.down = {WandSlotType::Element, Elements::Water, 4};
+	//	elderWand.left = {WandSlotType::Element, Elements::Earth, 4};
+	//	elderWand.right = {WandSlotType::Element, Elements::Ice, 4};
+	//	elderWand.alwaysCast = {WandSlotType::Disabled};
+	//	elderWand.maxMana = 15;
+	//	elderWand.manaChargeSpeed = 1.3f;
+	//	elderWand.maxElementsPerCast = 7;
+	//	elderWand.wandSprite = Wand::elderWand;
+	//	elderWand.sanitize();
+	//	wands[0] = elderWand;
+	//}
 
 	hasWand[0] = true;
 	hasWand[1] = false;
@@ -1061,6 +1061,23 @@ bool GameLogic::update(float deltaTime,
 	if (input.buttons[platform::Button::F8].pressed)
 	{
 		renderCollidersFlag = !renderCollidersFlag;
+	}
+	if (input.buttons[platform::Button::F6].pressed)
+	{
+		Wand elderWand;
+		elderWand.up = {WandSlotType::Element, Elements::Fire, 4};
+		elderWand.down = {WandSlotType::Element, Elements::Water, 4};
+		elderWand.left = {WandSlotType::Element, Elements::Earth, 4};
+		elderWand.right = {WandSlotType::Element, Elements::Ice, 4};
+		elderWand.alwaysCast = {WandSlotType::Disabled};
+		elderWand.maxMana = 15;
+		elderWand.manaChargeSpeed = 1.3f;
+		elderWand.maxElementsPerCast = 7;
+		elderWand.wandSprite = Wand::elderWand;
+		elderWand.sanitize();
+		wands[0] = elderWand;
+		hasWand[0] = true;
+		spellSelectionLogic[0].resetSelectionForWand(wands[0], spellRecepies[0], true);
 	}
 	if (input.buttons[platform::Button::F9].pressed)
 	{
@@ -2086,8 +2103,8 @@ bool GameLogic::update(float deltaTime,
 	if (player.life <= 0.0f)
 	{
 		close();
-		init();
-		return true;
+		//init();
+		return false; //die, return to main menu
 	}
 
 	#pragma region temp enemy spawner
@@ -2727,6 +2744,7 @@ bool GameLogic::update(float deltaTime,
 		FloorTransitionState state = captureFloorState();
 		currentFloorIndex++;
 		keepFloorOnClose = true;
+		keepSeedOnClose = true;
 		close();
 		init();
 		restoreFloorState(state);
@@ -4115,11 +4133,12 @@ void GameLogic::addCameraShake(CameraShakeType type, float intensity, float dura
 
 void GameLogic::close()
 {
-	int keepSeed = worldSeed;
+	int savedSeed = worldSeed;
 	int keepTrapDifficulty = trapDifficulty;
 	bool keepForceTrap = forceTrapDifficulty;
 	int keepFloorIndex = currentFloorIndex;
 	bool keepFloor = keepFloorOnClose;
+	bool keepSeed = keepSeedOnClose;
 	storeGlobalHdrToneMapSettings(gameHdrPostProcess);
 
 	// Release particle post-process resources before resetting gameplay state.
@@ -4129,10 +4148,14 @@ void GameLogic::close()
 	gameFbo.cleanup();
 
 	*this = {};
-	worldSeed = keepSeed; // keep current world seed across resets
+	if (keepSeed)
+	{
+		worldSeed = savedSeed; // keep current world seed across floor transitions
+	}
 	trapDifficulty = keepTrapDifficulty;
 	forceTrapDifficulty = keepForceTrap;
 	currentFloorIndex = keepFloor ? keepFloorIndex : 0;
 	keepFloorOnClose = false;
+	keepSeedOnClose = false;
 	inGame = 0;
 }

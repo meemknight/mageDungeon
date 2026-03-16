@@ -13,7 +13,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(PRODUCTION_BUILD OFF CACHE BOOL "Make this a production build" FORCE)
 
 # Enables the new SDL_gpu batching path in gl2d.
-set(GL2D_USE_SDL_GPU ON CACHE BOOL "Use SDL_gpu backend for gl2d" FORCE)
+# Web builds currently fall back to the legacy SDL renderer path because the
+# gameplay custom pipelines/shaders are authored for Vulkan/SPIR-V only.
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  set(GL2D_USE_SDL_GPU OFF CACHE BOOL "Use SDL_gpu backend for gl2d" FORCE)
+else()
+  set(GL2D_USE_SDL_GPU ON CACHE BOOL "Use SDL_gpu backend for gl2d" FORCE)
+endif()
 if(GL2D_USE_SDL_GPU)
   set(GL2D_USE_SDL_GPU_VALUE 1)
 else()
@@ -103,6 +109,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 
   target_link_options("${CMAKE_PROJECT_NAME}" PRIVATE
 	"-sALLOW_MEMORY_GROWTH=1"
+	"--shell-file" "${CMAKE_SOURCE_DIR}/web/shell.html"
 	"--preload-file" "${CMAKE_SOURCE_DIR}/resources@resources"
   )
 endif()

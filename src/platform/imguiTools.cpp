@@ -5,7 +5,7 @@
 #include <IconsForkAwesome.h>
 #include <imgui_internal.h>
 
-static bool gImguiWindowOpen = true;
+static bool gImguiWindowOpen = false;
 
 
 bool ImGui::colouredButton(const char *label, glm::vec4 color, const ImVec2 &size_arg)
