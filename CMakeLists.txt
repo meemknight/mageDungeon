@@ -10,7 +10,7 @@ set(CMAKE_CXX_STANDARD 17)
 #basically this will change the RESOURCES_PATH to be the local path
 #! ! ! ! ! ! !
 # These are forced in cache so manual ON/OFF edits in this file always apply.
-set(PRODUCTION_BUILD ON CACHE BOOL "Make this a production build" FORCE)
+set(PRODUCTION_BUILD OFF CACHE BOOL "Make this a production build" FORCE)
 
 # Enables the new SDL_gpu batching path in gl2d.
 set(GL2D_USE_SDL_GPU ON CACHE BOOL "Use SDL_gpu backend for gl2d" FORCE)
